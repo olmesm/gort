@@ -1,0 +1,150 @@
+package core
+
+import (
+	"reflect"
+	"strings"
+	"testing"
+	"time"
+)
+
+func int64Ptr(v int64) *int64        { return &v }
+func intPtr(v int) *int              { return &v }
+func strPtr(v string) *string        { return &v }
+func timePtr(v time.Time) *time.Time { return &v }
+
+// ---- Lifetime invariants ----
+
+func TestLifetimesRejectANonPositiveMaxVisitBudget(t *testing.T) {
+	if _, err := NewLifetime(nil, nil, int64Ptr(0)); err == nil {
+		t.Fatal("expected rejection")
+	} else if !strings.Contains(err.Error(), "greater than zero") {
+		t.Errorf("wrong error: %s", err)
+	}
+	if _, err := NewLifetime(nil, nil, int64Ptr(-5)); err == nil {
+		t.Fatal("expected rejection")
+	}
+}
+
+func TestLifetimesRejectAnInvertedValidityWindow(t *testing.T) {
+	since := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
+	until := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
+	if _, err := NewLifetime(&since, &until, nil); err == nil {
+		t.Fatal("expected rejection")
+	} else if !strings.Contains(err.Error(), "earlier than") {
+		t.Errorf("wrong error: %s", err)
+	}
+}
+
+func TestLifetimeActivityChecksCoverAllThreeExpiryReasons(t *testing.T) {
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+
+	if ok, _ := UnboundedLifetime.CheckActive(now, 0); !ok {
+		t.Error("unbounded lifetime should be active")
+	}
+
+	notYet := Lifetime{ValidSince: timePtr(now.AddDate(0, 0, 1))}
+	if ok, reason := notYet.CheckActive(now, 0); ok || reason != NotYetValid {
+		t.Errorf("got %v %v", ok, reason)
+	}
+
+	expired := Lifetime{ValidUntil: timePtr(now.AddDate(0, 0, -1))}
+	if ok, reason := expired.CheckActive(now, 0); ok || reason != NoLongerValid {
+		t.Errorf("got %v %v", ok, reason)
+	}
+
+	exhausted := Lifetime{MaxVisits: int64Ptr(5)}
+	if ok, reason := exhausted.CheckActive(now, 5); ok || reason != MaxVisitsReached {
+		t.Errorf("got %v %v", ok, reason)
+	}
+}
+
+// ---- ShortUrlSpec: the single validation path ----
+
+func TestSpecsCollectEveryValidatedPiece(t *testing.T) {
+	spec, serr := NewShortUrlSpec(ShortUrlSpecInput{
+		LongUrl:        "https://example.com/x",
+		CustomSlug:     strPtr("My-Slug"),
+		Tags:           []string{" Marketing ", "LAUNCH"},
+		MaxVisits:      int64Ptr(10),
+		RedirectStatus: intPtr(301),
+	})
+	if serr != nil {
+		t.Fatalf("unexpected: %s", serr.Message())
+	}
+	if spec.LongUrl.Value() != "https://example.com/x" {
+		t.Errorf("long url: %q", spec.LongUrl.Value())
+	}
+	if spec.CustomSlug == nil || spec.CustomSlug.Value() != "My-Slug" {
+		t.Errorf("custom slug: %v", spec.CustomSlug)
+	}
+	if !reflect.DeepEqual(TagValues(spec.Tags), []string{"marketing", "launch"}) {
+		t.Errorf("tags: %v", TagValues(spec.Tags))
+	}
+	if spec.RedirectStatus == nil || *spec.RedirectStatus != MovedPermanently {
+		t.Errorf("status: %v", spec.RedirectStatus)
+	}
+}
+
+func TestSpecsRejectAZeroMaxVisitBudget(t *testing.T) {
+	_, serr := NewShortUrlSpec(ShortUrlSpecInput{LongUrl: "https://example.com", MaxVisits: int64Ptr(0)})
+	if serr == nil {
+		t.Fatal("expected rejection")
+	}
+	if serr.Kind != ErrInvalidLifetime {
+		t.Errorf("wrong error kind: %s", serr.Kind)
+	}
+}
+
+func TestSpecsRejectUnsupportedRedirectStatuses(t *testing.T) {
+	_, serr := NewShortUrlSpec(ShortUrlSpecInput{LongUrl: "https://example.com", RedirectStatus: intPtr(418)})
+	if serr == nil {
+		t.Fatal("expected rejection")
+	}
+	if serr.Kind != ErrInvalidRedirectStatus || serr.Status != 418 {
+		t.Errorf("wrong error: %+v", serr)
+	}
+}
+
+func TestSpecsBlankOutWhitespaceTitles(t *testing.T) {
+	spec, serr := NewShortUrlSpec(ShortUrlSpecInput{LongUrl: "https://example.com", Title: strPtr("   ")})
+	if serr != nil {
+		t.Fatal(serr.Message())
+	}
+	if spec.Title != nil {
+		t.Errorf("expected nil title, got %q", *spec.Title)
+	}
+}
+
+// ---- API key roles: unknown stored roles must never default to admin ----
+
+func TestApiKeyRoleParsingIsFailClosed(t *testing.T) {
+	if role, ok := ApiKeyRoleOfStored("admin", nil); !ok || role.Kind != RoleAdmin {
+		t.Error("admin should parse")
+	}
+	if role, ok := ApiKeyRoleOfStored("author", nil); !ok || role.Kind != RoleAuthor {
+		t.Error("author should parse")
+	}
+	if role, ok := ApiKeyRoleOfStored("domain", int64Ptr(7)); !ok || role.Kind != RoleDomain || role.DomainID != DomainID(7) {
+		t.Error("domain should parse with id")
+	}
+	// A domain role without a domain id is corrupt, not admin.
+	if _, ok := ApiKeyRoleOfStored("domain", nil); ok {
+		t.Error("domain without id must not parse")
+	}
+	// Unknown roles are rejected, not defaulted.
+	if _, ok := ApiKeyRoleOfStored("superuser", nil); ok {
+		t.Error("unknown role must not parse")
+	}
+	if _, ok := ApiKeyRoleOfStored("", nil); ok {
+		t.Error("empty role must not parse")
+	}
+}
+
+func TestTypedIdsDoNotCrossAssign(t *testing.T) {
+	// Compile-time guarantee — this test documents the intent.
+	shortUrlId := ShortUrlID(1)
+	domainId := DomainID(1)
+	if shortUrlId.Value() != 1 || domainId.Value() != 1 {
+		t.Error("unexpected values")
+	}
+}

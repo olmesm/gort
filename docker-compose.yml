@@ -1,0 +1,37 @@
+# Default: single container with an embedded SQLite database in a volume.
+# For PostgreSQL, start with the "postgres" profile:
+#   docker compose --profile postgres up
+# and point GORT_DB_* at the db service as shown below.
+services:
+  gort:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      GORT_DEFAULT_DOMAIN: "localhost:8080"
+      GORT_INITIAL_ADMIN_USERNAME: "admin"
+      # Set a real password before first start; otherwise one is generated
+      # and printed to the container log.
+      # GORT_INITIAL_ADMIN_PASSWORD: "change-me"
+      # GORT_GEOLITE_LICENSE_KEY: ""     # enables visit geolocation
+      # --- PostgreSQL instead of SQLite ---
+      # GORT_DB_DRIVER: "postgres"
+      # GORT_DB_CONNECTION: "host=db dbname=gort user=gort password=gort"
+    volumes:
+      - gort-data:/data
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    profiles: [postgres]
+    environment:
+      POSTGRES_DB: gort
+      POSTGRES_USER: gort
+      POSTGRES_PASSWORD: gort
+    volumes:
+      - gort-pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  gort-data:
+  gort-pgdata:

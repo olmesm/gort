@@ -1,0 +1,15 @@
+{
+  "name": "gort-e2e",
+  "version": "1.0.0",
+  "description": "Browser end-to-end tests for the Gort dashboard",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
+  },
+  "private": true
+}
