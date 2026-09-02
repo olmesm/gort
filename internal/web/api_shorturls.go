@@ -17,6 +17,7 @@ type CreateShortUrlBody struct {
 	Domain          *string    `json:"domain"`
 	Title           *string    `json:"title"`
 	Tags            []string   `json:"tags"`
+	Group           *string    `json:"group"`
 	MaxVisits       *int64     `json:"maxVisits"`
 	ValidSince      *time.Time `json:"validSince"`
 	ValidUntil      *time.Time `json:"validUntil"`
@@ -32,6 +33,7 @@ type EditShortUrlBody struct {
 	LongUrl        Field[string]    `json:"longUrl"`
 	Title          Field[string]    `json:"title"`
 	Tags           Field[[]string]  `json:"tags"`
+	Group          Field[string]    `json:"group"`
 	MaxVisits      Field[int64]     `json:"maxVisits"`
 	ValidSince     Field[time.Time] `json:"validSince"`
 	ValidUntil     Field[time.Time] `json:"validUntil"`
@@ -164,9 +166,16 @@ func (a *App) apiListShortUrls(key *AuthenticatedKey, w http.ResponseWriter, r *
 		descending = dir == "DESC"
 	}
 
+	var groupFilter *string
+	if q.Has("group") {
+		group := core.NormalizeGroup(q.Get("group"))
+		groupFilter = &group
+	}
+
 	filters := data.ShortUrlFilters{
 		SearchTerm:              q.Get("searchTerm"),
 		Tags:                    queryStringList(q, "tags"),
+		Group:                   groupFilter,
 		TagsMatchAll:            strings.ToLower(q.Get("tagsMode")) == "all",
 		StartDate:               queryDate(q, "startDate"),
 		EndDate:                 queryDate(q, "endDate"),
@@ -231,6 +240,7 @@ func (a *App) apiCreateShortUrl(key *AuthenticatedKey, w http.ResponseWriter, r 
 		Domain:         body.Domain,
 		Title:          body.Title,
 		Tags:           body.Tags,
+		Group:          body.Group,
 		ValidSince:     body.ValidSince,
 		ValidUntil:     body.ValidUntil,
 		MaxVisits:      body.MaxVisits,
@@ -284,6 +294,7 @@ func (a *App) apiEditShortUrl(key *AuthenticatedKey, w http.ResponseWriter, r *h
 	input := core.ShortUrlEditInput{
 		LongUrl:        body.LongUrl.PickValue(detail.LongUrl),
 		Title:          body.Title.Pick(detail.Title),
+		Group:          body.Group.Pick(detail.GroupName),
 		ValidSince:     body.ValidSince.Pick(detail.ValidSince),
 		ValidUntil:     body.ValidUntil.Pick(detail.ValidUntil),
 		MaxVisits:      body.MaxVisits.Pick(detail.MaxVisits),

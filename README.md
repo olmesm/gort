@@ -34,6 +34,11 @@ same dashboard UI, same behavior — different runtime.
 - **Admin dashboard** — served at `/admin`; multi-user (admin/user roles),
   cookie sessions, htmx-driven live search and pagination, server-rendered SVG
   charts, QR previews, redirect-rule builder. No JS build step.
+- **OIDC single sign-on & link groups** — plug in Keycloak (or any compliant
+  IdP): users are auto-provisioned on first login, the token's groups claim
+  both scopes what each user can see (non-admins see ungrouped links plus
+  links in their groups) and grants the admin role via a configurable admin
+  group.
 - **QR codes** — public `GET /{code}/qr-code` in PNG or SVG with size, margin
   and error-correction options.
 - **Webhooks** — signed JSON POSTs (HMAC-SHA256) on `url.created`,
@@ -79,8 +84,8 @@ go test ./...
 ```
 
 Run the browser end-to-end tests (Playwright driving the real dashboard in
-Chromium — 22 tests covering login, short URL lifecycle, htmx live search,
-redirect rules, analytics, tags, domains, API keys, webhooks, users and
+Chromium — 25 tests covering login, short URL lifecycle, htmx live search,
+redirect rules, analytics, tags, domains, API keys, webhooks, users, link groups and
 orphan visits; requires Node.js and Go):
 
 ```sh
@@ -120,6 +125,15 @@ Everything is configured through environment variables.
 | `GORT_INITIAL_ADMIN_USERNAME` | `admin` | First-run dashboard admin |
 | `GORT_INITIAL_ADMIN_PASSWORD` | *(generated)* | First-run admin password |
 | `GORT_RATE_LIMIT_PER_MINUTE` | `120` | Mutating REST calls per minute per IP (0 disables) |
+| `GORT_OIDC_ISSUER` | *(unset)* | Enables SSO; the IdP's issuer URL (e.g. `https://kc.example.com/realms/main`) |
+| `GORT_OIDC_CLIENT_ID` | *(unset)* | OIDC client id (required with issuer) |
+| `GORT_OIDC_CLIENT_SECRET` | *(unset)* | OIDC client secret (confidential clients) |
+| `GORT_OIDC_REDIRECT_URL` | *(derived)* | Callback override; default `{scheme}://{host}/admin/oidc/callback` |
+| `GORT_OIDC_SCOPES` | `profile email` | Extra scopes besides `openid` (space/comma separated) |
+| `GORT_OIDC_GROUPS_CLAIM` | `groups` | Token claim carrying the user's groups |
+| `GORT_OIDC_ADMIN_GROUP` | `gort-admins` | Members of this group become dashboard admins |
+| `GORT_OIDC_PROVIDER_NAME` | `SSO` | Label on the login button |
+| `GORT_OIDC_ONLY` | `false` | Hide local password login |
 
 Per-domain not-found redirects (configured in the dashboard or via
 `PATCH /rest/v1/domains/redirects`) take precedence over the global ones.
@@ -143,10 +157,10 @@ Errors are `application/problem+json` (RFC 7807). List endpoints support
 
 | Method & path | Notes |
 |---|---|
-| `GET /rest/v1/short-urls` | `searchTerm`, `tags`, `tagsMode=any\|all`, `startDate`, `endDate`, `domain`, `orderBy=dateCreated\|shortCode\|longUrl\|title\|visits` + `-ASC/-DESC`, `excludeMaxVisitsReached`, `excludePastValidUntil` |
-| `POST /rest/v1/short-urls` | body: `longUrl` (required), `customSlug`, `shortCodeLength`, `domain`, `title`, `tags`, `maxVisits`, `validSince`, `validUntil`, `forwardQuery`, `crawlable`, `redirectStatus`, `findIfExists` |
+| `GET /rest/v1/short-urls` | `searchTerm`, `tags`, `tagsMode=any\|all`, `group` (`group=` alone filters to ungrouped), `startDate`, `endDate`, `domain`, `orderBy=dateCreated\|shortCode\|longUrl\|title\|visits` + `-ASC/-DESC`, `excludeMaxVisitsReached`, `excludePastValidUntil` |
+| `POST /rest/v1/short-urls` | body: `longUrl` (required), `customSlug`, `shortCodeLength`, `domain`, `title`, `tags`, `group`, `maxVisits`, `validSince`, `validUntil`, `forwardQuery`, `crawlable`, `redirectStatus`, `findIfExists` |
 | `GET /rest/v1/short-urls/{code}` | optional `?domain=` on all `{code}` routes |
-| `PATCH /rest/v1/short-urls/{code}` | partial update; send `null` to clear `title`, `maxVisits`, `validSince`, `validUntil` |
+| `PATCH /rest/v1/short-urls/{code}` | partial update; send `null` to clear `title`, `group`, `maxVisits`, `validSince`, `validUntil` |
 | `DELETE /rest/v1/short-urls/{code}` | |
 | `GET/POST /rest/v1/short-urls/{code}/redirect-rules` | POST replaces all rules; conditions: `device`, `language`, `query-param`, `ip-address` |
 | `GET /rest/v1/short-urls/{code}/visits` | `startDate`, `endDate`, `excludeBots` |
@@ -199,6 +213,49 @@ retried with exponential backoff (up to 6 attempts) and survive restarts.
 - `GET /rest/health` — unauthenticated health check.
 - `GET /{code}/qr-code?size=300&format=png|svg&margin=1&errorCorrection=L|M|Q|H`
 - `GET /robots.txt`
+
+## Single sign-on & link groups (Keycloak / OIDC)
+
+Setting `GORT_OIDC_ISSUER` + `GORT_OIDC_CLIENT_ID` (+ secret) adds a
+"Continue with SSO" button to `/admin/login`. The flow is standard
+authorization-code with PKCE and nonce; any compliant IdP works.
+
+**Semantics**
+
+- Users are auto-provisioned on first SSO login (matched by the stable OIDC
+  `sub`; no password login for these accounts). Local accounts keep working
+  unless `GORT_OIDC_ONLY=true` — keeping the initial local admin as a
+  break-glass account is recommended.
+- The token's groups claim (default claim name `groups`) becomes the user's
+  **link groups**. Group names are normalized: Keycloak's `/marketing` and
+  plain `marketing` are the same group.
+- Every short URL can carry one group (`group` in the API, a picker in the
+  dashboard). **Non-admin users see and manage only ungrouped links plus
+  links in their own groups**, and can only assign groups they belong to.
+  Admins see everything and can assign any group. This applies to the
+  dashboard; API keys keep their own scoping model (admin/author/domain).
+- Members of `GORT_OIDC_ADMIN_GROUP` (default `gort-admins`) get the
+  dashboard admin role; everyone else signs in as a regular user.
+
+**Keycloak setup**
+
+1. Create a confidential client (e.g. `gort-dashboard`) with *Standard flow*
+   enabled and valid redirect URI `https://your-gort/admin/oidc/callback`.
+2. Add a *Group Membership* mapper to the client (or a client scope it uses)
+   with token claim name `groups`, added to the ID token. "Full group path"
+   on or off both work — paths are normalized.
+3. Create a `gort-admins` group (or set `GORT_OIDC_ADMIN_GROUP`) and add your
+   admins.
+4. Configure Gort:
+
+```sh
+GORT_OIDC_ISSUER=https://keycloak.example.com/realms/main
+GORT_OIDC_CLIENT_ID=gort-dashboard
+GORT_OIDC_CLIENT_SECRET=…
+```
+
+Groups from Keycloak now double as link groupings: a link created in group
+`marketing` is visible only to members of `/marketing` (and admins).
 
 ## Architecture
 

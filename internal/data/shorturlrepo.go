@@ -24,6 +24,8 @@ type NewShortUrl struct {
 	Lifetime       core.Lifetime
 	AuthorUserId   *core.UserID
 	AuthorApiKeyId *core.ApiKeyID
+	// GroupName scopes who can see and manage the link; nil = ungrouped.
+	GroupName *string
 }
 
 // ShortUrlUpdate carries the final values for every editable field of a
@@ -36,6 +38,7 @@ type ShortUrlUpdate struct {
 	ForwardQuery         bool
 	Crawlable            bool
 	Lifetime             core.Lifetime
+	GroupName            *string
 }
 
 type ShortUrlOrder int
@@ -49,13 +52,19 @@ const (
 )
 
 type ShortUrlFilters struct {
-	SearchTerm              string
-	Tags                    []string
-	TagsMatchAll            bool
-	StartDate               *time.Time
-	EndDate                 *time.Time
-	DomainId                *core.DomainID
-	AuthorApiKeyId          *core.ApiKeyID
+	SearchTerm     string
+	Tags           []string
+	TagsMatchAll   bool
+	StartDate      *time.Time
+	EndDate        *time.Time
+	DomainId       *core.DomainID
+	AuthorApiKeyId *core.ApiKeyID
+	// Group filters to one exact group when non-nil ("" = ungrouped only).
+	Group *string
+	// VisibleGroups, when non-nil, restricts results to ungrouped links plus
+	// links in one of these groups — the authorization scope for non-admin
+	// dashboard users. nil = unrestricted.
+	VisibleGroups           []string
 	ExcludeMaxVisitsReached bool
 	ExcludePastValidUntil   bool
 	OrderBy                 ShortUrlOrder
@@ -89,7 +98,7 @@ func detailSelect(db *Db) string {
 	return fmt.Sprintf(`SELECT su.id, su.short_code, su.domain_id, d.authority, su.long_url, su.title,
 	         su.title_was_auto_resolved, su.redirect_status, su.forward_query, su.crawlable,
 	         su.max_visits, su.valid_since, su.valid_until, su.author_user_id, su.author_api_key_id,
-	         su.created_at,
+	         su.group_name, su.created_at,
 	         %s AS visit_count,
 	         %s AS bot_visit_count
 	  FROM short_urls su
@@ -100,17 +109,18 @@ type rowScanner interface{ Scan(dest ...any) error }
 
 func scanShortUrlDetail(r rowScanner) (*ShortUrlDetail, error) {
 	var d ShortUrlDetail
-	var title sql.NullString
+	var title, groupName sql.NullString
 	var maxVisits, authorUserId, authorApiKeyId sql.NullInt64
 	var validSince, validUntil, createdAt NullTime
 	err := r.Scan(&d.Id, &d.ShortCode, &d.DomainId, &d.Authority, &d.LongUrl, &title,
 		&d.TitleWasAutoResolved, &d.RedirectStatus, &d.ForwardQuery, &d.Crawlable,
 		&maxVisits, &validSince, &validUntil, &authorUserId, &authorApiKeyId,
-		&createdAt, &d.VisitCount, &d.BotVisitCount)
+		&groupName, &createdAt, &d.VisitCount, &d.BotVisitCount)
 	if err != nil {
 		return nil, err
 	}
 	d.Title = strPtr(title)
+	d.GroupName = strPtr(groupName)
 	d.MaxVisits = int64Ptr(maxVisits)
 	d.ValidSince = validSince.Ptr()
 	d.ValidUntil = validUntil.Ptr()
@@ -122,16 +132,17 @@ func scanShortUrlDetail(r rowScanner) (*ShortUrlDetail, error) {
 
 func scanShortUrlRow(r rowScanner) (*ShortUrlRow, error) {
 	var s ShortUrlRow
-	var title sql.NullString
+	var title, groupName sql.NullString
 	var maxVisits, authorUserId, authorApiKeyId sql.NullInt64
 	var validSince, validUntil, createdAt NullTime
 	err := r.Scan(&s.Id, &s.ShortCode, &s.DomainId, &s.LongUrl, &title, &s.TitleWasAutoResolved,
 		&s.RedirectStatus, &s.ForwardQuery, &s.Crawlable, &maxVisits, &validSince,
-		&validUntil, &authorUserId, &authorApiKeyId, &createdAt)
+		&validUntil, &authorUserId, &authorApiKeyId, &groupName, &createdAt)
 	if err != nil {
 		return nil, err
 	}
 	s.Title = strPtr(title)
+	s.GroupName = strPtr(groupName)
 	s.MaxVisits = int64Ptr(maxVisits)
 	s.ValidSince = validSince.Ptr()
 	s.ValidUntil = validUntil.Ptr()
@@ -177,13 +188,13 @@ func CreateShortUrl(db *Db, nu NewShortUrl, tags []core.TagName) (core.ShortUrlI
 			`INSERT INTO short_urls
 			   (short_code, domain_id, long_url, title, title_was_auto_resolved,
 			    redirect_status, forward_query, crawlable, max_visits,
-			    valid_since, valid_until, author_user_id, author_api_key_id, created_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			    valid_since, valid_until, author_user_id, author_api_key_id, group_name, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			 RETURNING id`,
 			nu.ShortCode.Value(), nu.DomainId.Value(), nu.LongUrl.Value(), nu.Title, false,
 			nu.RedirectStatus.Code(), nu.ForwardQuery, nu.Crawlable, nu.Lifetime.MaxVisits,
 			db.BindTimePtr(nu.Lifetime.ValidSince), db.BindTimePtr(nu.Lifetime.ValidUntil),
-			authorUserId, authorApiKeyId, db.BindTime(time.Now())).Scan(&id)
+			authorUserId, authorApiKeyId, nu.GroupName, db.BindTime(time.Now())).Scan(&id)
 		if err != nil {
 			return err
 		}
@@ -205,7 +216,7 @@ func TryGetByCode(db *Db, domainId core.DomainID, code string) (*ShortUrlRow, er
 	row := db.QueryRow(
 		`SELECT id, short_code, domain_id, long_url, title, title_was_auto_resolved,
 		        redirect_status, forward_query, crawlable, max_visits, valid_since,
-		        valid_until, author_user_id, author_api_key_id, created_at
+		        valid_until, author_user_id, author_api_key_id, group_name, created_at
 		 FROM short_urls WHERE domain_id = ? AND short_code = ?`,
 		domainId.Value(), code)
 	s, err := scanShortUrlRow(row)
@@ -250,11 +261,12 @@ func UpdateShortUrl(db *Db, id core.ShortUrlID, u ShortUrlUpdate) (bool, error) 
 		   long_url = ?, title = ?, title_was_auto_resolved = ?,
 		   redirect_status = ?, forward_query = ?,
 		   crawlable = ?, max_visits = ?,
-		   valid_since = ?, valid_until = ?
+		   valid_since = ?, valid_until = ?, group_name = ?
 		 WHERE id = ?`,
 		u.LongUrl.Value(), u.Title, u.TitleWasAutoResolved,
 		u.RedirectStatus.Code(), u.ForwardQuery, u.Crawlable, u.Lifetime.MaxVisits,
-		db.BindTimePtr(u.Lifetime.ValidSince), db.BindTimePtr(u.Lifetime.ValidUntil), id.Value())
+		db.BindTimePtr(u.Lifetime.ValidSince), db.BindTimePtr(u.Lifetime.ValidUntil),
+		u.GroupName, id.Value())
 	if err != nil {
 		return false, err
 	}
@@ -339,6 +351,26 @@ func ListCrawlable(db *Db) ([]string, error) {
 	return out, rows.Err()
 }
 
+// ListGroupNames lists the distinct groups referenced by short URLs, for
+// group pickers and filters.
+func ListGroupNames(db *Db) ([]string, error) {
+	rows, err := db.Query(
+		"SELECT DISTINCT group_name FROM short_urls WHERE group_name IS NOT NULL ORDER BY group_name")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		out = append(out, name)
+	}
+	return out, rows.Err()
+}
+
 func CountValidVisits(db *Db, id core.ShortUrlID) (int64, error) {
 	var count int64
 	err := db.QueryRow(
@@ -397,6 +429,23 @@ func ListShortUrls(db *Db, filters ShortUrlFilters) (core.Page[ShortUrlDetail], 
 	if filters.AuthorApiKeyId != nil {
 		conditions = append(conditions, "su.author_api_key_id = ?")
 		args = append(args, filters.AuthorApiKeyId.Value())
+	}
+	if filters.Group != nil {
+		if *filters.Group == "" {
+			conditions = append(conditions, "su.group_name IS NULL")
+		} else {
+			conditions = append(conditions, "su.group_name = ?")
+			args = append(args, *filters.Group)
+		}
+	}
+	if filters.VisibleGroups != nil {
+		if len(filters.VisibleGroups) == 0 {
+			conditions = append(conditions, "su.group_name IS NULL")
+		} else {
+			groupsIn, groupArgs := InList("su.group_name", filters.VisibleGroups)
+			conditions = append(conditions, fmt.Sprintf("(su.group_name IS NULL OR %s)", groupsIn))
+			args = append(args, groupArgs...)
+		}
 	}
 	if filters.ExcludeMaxVisitsReached {
 		conditions = append(conditions,

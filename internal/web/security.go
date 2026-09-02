@@ -132,15 +132,40 @@ type CurrentUser struct {
 	Id       core.UserID
 	Username string
 	Role     core.UserRole
+	// Groups are the normalized OIDC groups from the login token; empty for
+	// local users.
+	Groups []string
 }
 
 func (u *CurrentUser) IsAdmin() bool { return u.Role == core.UserAdmin }
 
+// CanSeeGroup says whether this user may see and manage links carrying the
+// given group (nil = ungrouped, visible to everyone signed in).
+func (u *CurrentUser) CanSeeGroup(group *string) bool {
+	if u.IsAdmin() || group == nil {
+		return true
+	}
+	return core.GroupsContain(u.Groups, *group)
+}
+
+// VisibleGroups returns the group scope for list queries: nil means
+// unrestricted (admin); otherwise ungrouped links plus these groups.
+func (u *CurrentUser) VisibleGroups() []string {
+	if u.IsAdmin() {
+		return nil
+	}
+	if u.Groups == nil {
+		return []string{}
+	}
+	return u.Groups
+}
+
 type sessionPayload struct {
-	Uid      int64  `json:"uid"`
-	Username string `json:"u"`
-	Role     string `json:"r"`
-	Expires  int64  `json:"exp"`
+	Uid      int64    `json:"uid"`
+	Username string   `json:"u"`
+	Role     string   `json:"r"`
+	Groups   []string `json:"g,omitempty"`
+	Expires  int64    `json:"exp"`
 }
 
 // loadOrCreateSessionKey persists the signing key under the data dir so
@@ -172,7 +197,9 @@ func (a *App) signSession(payload []byte) string {
 		base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
-func (a *App) verifySession(cookie string) *sessionPayload {
+// verifyRaw checks a signed cookie value and returns its payload bytes, or
+// nil when the signature does not verify.
+func (a *App) verifyRaw(cookie string) []byte {
 	parts := strings.SplitN(cookie, ".", 2)
 	if len(parts) != 2 {
 		return nil
@@ -190,6 +217,14 @@ func (a *App) verifySession(cookie string) *sessionPayload {
 	if !hmac.Equal(sig, mac.Sum(nil)) {
 		return nil
 	}
+	return payload
+}
+
+func (a *App) verifySession(cookie string) *sessionPayload {
+	payload := a.verifyRaw(cookie)
+	if payload == nil {
+		return nil
+	}
 	var session sessionPayload
 	if err := json.Unmarshal(payload, &session); err != nil {
 		return nil
@@ -200,12 +235,18 @@ func (a *App) verifySession(cookie string) *sessionPayload {
 	return &session
 }
 
-// SignIn issues the session cookie for a user.
+// SignIn issues the session cookie for a local user.
 func (a *App) SignIn(w http.ResponseWriter, user *data.UserRow) {
+	a.SignInWithGroups(w, user, nil)
+}
+
+// SignInWithGroups issues the session cookie carrying the user's OIDC groups.
+func (a *App) SignInWithGroups(w http.ResponseWriter, user *data.UserRow, groups []string) {
 	payload, _ := json.Marshal(sessionPayload{
 		Uid:      user.Id,
 		Username: user.Username,
 		Role:     user.Role,
+		Groups:   groups,
 		Expires:  time.Now().Add(sessionLifetime).Unix(),
 	})
 	http.SetCookie(w, &http.Cookie{
@@ -248,6 +289,7 @@ func (a *App) currentUser(r *http.Request) *CurrentUser {
 		Id:       core.UserID(session.Uid),
 		Username: session.Username,
 		Role:     role,
+		Groups:   core.NormalizeGroups(session.Groups),
 	}
 }
 

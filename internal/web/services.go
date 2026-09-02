@@ -165,6 +165,10 @@ func (a *App) CreateShortUrl(author *Author, spec *core.ShortUrlSpec) (*ShortUrl
 			Crawlable:      crawlable,
 			Lifetime:       spec.Lifetime,
 		}
+		if spec.Group != nil {
+			group := spec.Group.Value()
+			nu.GroupName = &group
+		}
 		if author != nil {
 			nu.AuthorUserId = author.UserId
 			nu.AuthorApiKeyId = author.ApiKeyId
@@ -204,6 +208,10 @@ func (a *App) EditShortUrl(id core.ShortUrlID, current *data.ShortUrlDetail, edi
 		ForwardQuery:         edit.ForwardQuery,
 		Crawlable:            edit.Crawlable,
 		Lifetime:             edit.Lifetime,
+	}
+	if edit.Group != nil {
+		group := edit.Group.Value()
+		update.GroupName = &group
 	}
 
 	if _, err := data.UpdateShortUrl(a.Db, id, update); err != nil {

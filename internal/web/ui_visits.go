@@ -198,7 +198,7 @@ func (a *App) uiShortUrlVisits(user *CurrentUser, w http.ResponseWriter, r *http
 		a.serverError(w, err)
 		return
 	}
-	if detail == nil {
+	if detail == nil || !user.CanSeeGroup(detail.GroupName) {
 		respondPlainNotFound(w)
 		return
 	}

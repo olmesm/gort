@@ -30,6 +30,7 @@ type App struct {
 	Logger *slog.Logger
 
 	sessionKey    []byte
+	oidc          *oidcClient
 	titleClient   *http.Client
 	webhookClient *http.Client
 	geoClient     *http.Client
@@ -70,6 +71,12 @@ func NewApp(cfg *AppConfig, logger *slog.Logger) (*App, error) {
 		limiter:       newRateLimiter(cfg.RateLimitPerMinute),
 	}
 	a.Geo = NewGeoIpService(cfg, logger)
+	if cfg.OidcEnabled() {
+		if cfg.OidcClientID == "" {
+			return nil, fmt.Errorf("GORT_OIDC_ISSUER is set but GORT_OIDC_CLIENT_ID is empty")
+		}
+		a.oidc = newOidcClient(cfg)
+	}
 
 	if err := a.initialize(); err != nil {
 		return nil, err
@@ -238,6 +245,8 @@ func (a *App) buildRouter() *http.ServeMux {
 	mux.HandleFunc("GET /admin/login", a.uiLoginForm)
 	mux.HandleFunc("POST /admin/login", a.uiLogin)
 	mux.HandleFunc("POST /admin/logout", a.uiLogout)
+	mux.HandleFunc("GET /admin/oidc/login", a.uiOidcLogin)
+	mux.HandleFunc("GET /admin/oidc/callback", a.uiOidcCallback)
 
 	mux.Handle("GET /admin/short-urls", a.requireUser(a.uiListShortUrls))
 	mux.Handle("GET /admin/short-urls/new", a.requireUser(a.uiCreateShortUrlForm))

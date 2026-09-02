@@ -48,12 +48,14 @@ func (l Lifetime) CheckActive(now time.Time, validVisitCount int64) (bool, Expir
 // any future entry point all go through NewShortUrlSpec, so every invariant
 // is enforced exactly once.
 type ShortUrlSpec struct {
-	LongUrl        LongUrl
-	CustomSlug     *ShortCode
-	CodeLength     *int
-	Domain         *DomainAuthority
-	Title          *string
-	Tags           []TagName
+	LongUrl    LongUrl
+	CustomSlug *ShortCode
+	CodeLength *int
+	Domain     *DomainAuthority
+	Title      *string
+	Tags       []TagName
+	// Group scopes who can see and manage the link; nil = ungrouped.
+	Group          *GroupName
 	Lifetime       Lifetime
 	RedirectStatus *RedirectStatus
 	ForwardQuery   *bool
@@ -70,6 +72,7 @@ type ShortUrlSpecInput struct {
 	Domain         *string
 	Title          *string
 	Tags           []string
+	Group          *string
 	ValidSince     *time.Time
 	ValidUntil     *time.Time
 	MaxVisits      *int64
@@ -131,6 +134,11 @@ func NewShortUrlSpec(input ShortUrlSpecInput) (*ShortUrlSpec, *ShortUrlError) {
 		return nil, NewShortUrlError(ErrInvalidTag, err.Error())
 	}
 
+	group, serr := parseGroup(input.Group)
+	if serr != nil {
+		return nil, serr
+	}
+
 	lifetime, err := NewLifetime(input.ValidSince, input.ValidUntil, input.MaxVisits)
 	if err != nil {
 		return nil, NewShortUrlError(ErrInvalidLifetime, err.Error())
@@ -148,6 +156,7 @@ func NewShortUrlSpec(input ShortUrlSpecInput) (*ShortUrlSpec, *ShortUrlError) {
 		Domain:         domain,
 		Title:          normalizeTitle(input.Title),
 		Tags:           tags,
+		Group:          group,
 		Lifetime:       lifetime,
 		RedirectStatus: status,
 		ForwardQuery:   input.ForwardQuery,
@@ -156,12 +165,27 @@ func NewShortUrlSpec(input ShortUrlSpecInput) (*ShortUrlSpec, *ShortUrlError) {
 	}, nil
 }
 
+// parseGroup validates an optional group field; an empty value means "no
+// group".
+func parseGroup(raw *string) (*GroupName, *ShortUrlError) {
+	if raw == nil || NormalizeGroup(*raw) == "" {
+		return nil, nil
+	}
+	group, err := NewGroupName(*raw)
+	if err != nil {
+		return nil, NewShortUrlError(ErrInvalidGroup, err.Error())
+	}
+	return &group, nil
+}
+
 // ShortUrlEdit is a fully validated edit: the final values every mutable
 // field should take. PATCH-merging (absent = keep current) happens *before*
 // validation, so the resulting state is checked as a whole.
 type ShortUrlEdit struct {
-	LongUrl        LongUrl
-	Title          *string
+	LongUrl LongUrl
+	Title   *string
+	// Group is the final group of the link; nil = ungrouped.
+	Group          *GroupName
 	Lifetime       Lifetime
 	RedirectStatus RedirectStatus
 	ForwardQuery   bool
@@ -174,6 +198,7 @@ type ShortUrlEdit struct {
 type ShortUrlEditInput struct {
 	LongUrl        string
 	Title          *string
+	Group          *string
 	ValidSince     *time.Time
 	ValidUntil     *time.Time
 	MaxVisits      *int64
@@ -189,6 +214,11 @@ func NewShortUrlEdit(input ShortUrlEditInput) (*ShortUrlEdit, *ShortUrlError) {
 	longUrl, err := NewLongUrl(input.LongUrl)
 	if err != nil {
 		return nil, NewShortUrlError(ErrInvalidLongUrl, err.Error())
+	}
+
+	group, gerr := parseGroup(input.Group)
+	if gerr != nil {
+		return nil, gerr
 	}
 
 	lifetime, err := NewLifetime(input.ValidSince, input.ValidUntil, input.MaxVisits)
@@ -215,6 +245,7 @@ func NewShortUrlEdit(input ShortUrlEditInput) (*ShortUrlEdit, *ShortUrlError) {
 	return &ShortUrlEdit{
 		LongUrl:        longUrl,
 		Title:          normalizeTitle(input.Title),
+		Group:          group,
 		Lifetime:       lifetime,
 		RedirectStatus: status,
 		ForwardQuery:   input.ForwardQuery,

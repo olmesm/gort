@@ -80,7 +80,7 @@ test.describe('short URL lifecycle', () => {
   test('the visit shows up in the analytics page', async ({ page }) => {
     await page.goto('/admin/short-urls');
     const row = page.locator('tr', { hasText: SLUG });
-    await row.locator('td:nth-child(5) a').click();
+    await row.locator('td:nth-child(6) a').click();
 
     await expect(page.locator('h1')).toContainText('Visits');
     await expect(page.locator('.chart-card svg')).toBeVisible();

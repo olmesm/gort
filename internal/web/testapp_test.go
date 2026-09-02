@@ -100,6 +100,23 @@ func (c *testClient) post(target, body string) *httptest.ResponseRecorder {
 	return c.do(http.MethodPost, target, body)
 }
 
+// postForm submits an application/x-www-form-urlencoded body, like a browser
+// form.
+func (c *testClient) postForm(target, form string) *httptest.ResponseRecorder {
+	c.t.Helper()
+	if !strings.Contains(target, "://") {
+		target = "http://example.test" + target
+	}
+	req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(form))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	for k, v := range c.headers {
+		req.Header.Set(k, v)
+	}
+	rec := httptest.NewRecorder()
+	c.app.Handler().ServeHTTP(rec, req)
+	return rec
+}
+
 func (c *testClient) patch(target, body string) *httptest.ResponseRecorder {
 	return c.do(http.MethodPatch, target, body)
 }

@@ -29,6 +29,7 @@ type ShortUrlDto struct {
 	Title          *string          `json:"title,omitempty"`
 	DateCreated    time.Time        `json:"dateCreated"`
 	Tags           []string         `json:"tags"`
+	Group          *string          `json:"group,omitempty"`
 	Meta           ShortUrlMetaDto  `json:"meta"`
 	VisitsSummary  VisitsSummaryDto `json:"visitsSummary"`
 	ForwardQuery   bool             `json:"forwardQuery"`
@@ -52,6 +53,7 @@ func NewShortUrlDto(cfg *AppConfig, tags []string, d *data.ShortUrlDetail) Short
 		Title:       d.Title,
 		DateCreated: d.CreatedAt,
 		Tags:        tags,
+		Group:       d.GroupName,
 		Meta: ShortUrlMetaDto{
 			ValidSince: d.ValidSince,
 			ValidUntil: d.ValidUntil,

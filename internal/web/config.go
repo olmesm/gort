@@ -52,7 +52,32 @@ type AppConfig struct {
 	// endpoints, per client IP.
 	RateLimitPerMinute int
 	Port               int
+
+	// ---- OIDC single sign-on (Keycloak or any compliant IdP) ----
+
+	// OidcIssuer enables SSO when set (e.g.
+	// https://keycloak.example.com/realms/myrealm).
+	OidcIssuer       string
+	OidcClientID     string
+	OidcClientSecret string
+	// OidcRedirectURL overrides the callback URL; when empty it is derived
+	// from the incoming request as {scheme}://{host}/admin/oidc/callback.
+	OidcRedirectURL string
+	// OidcScopes are the scopes requested besides the mandatory "openid".
+	OidcScopes []string
+	// OidcGroupsClaim is the token claim carrying the user's groups.
+	OidcGroupsClaim string
+	// OidcAdminGroup grants the dashboard admin role to members of this group.
+	OidcAdminGroup string
+	// OidcProviderName is the label on the SSO login button.
+	OidcProviderName string
+	// OidcOnly hides local password login (the initial admin remains as a
+	// break-glass account for direct API/database recovery).
+	OidcOnly bool
 }
+
+// OidcEnabled reports whether SSO is configured.
+func (cfg *AppConfig) OidcEnabled() bool { return cfg.OidcIssuer != "" }
 
 func (cfg *AppConfig) GeoDbPath() string {
 	return filepath.Join(cfg.DataDir, "GeoLite2-City.mmdb")
@@ -161,7 +186,38 @@ func ConfigFromLookup(get ConfigLookup) (*AppConfig, error) {
 		InitialAdminPassword:    strVar(get, "INITIAL_ADMIN_PASSWORD"),
 		RateLimitPerMinute:      intVar(get, "RATE_LIMIT_PER_MINUTE", 120),
 		Port:                    port,
+		OidcIssuer:              strVar(get, "OIDC_ISSUER"),
+		OidcClientID:            strVar(get, "OIDC_CLIENT_ID"),
+		OidcClientSecret:        strVar(get, "OIDC_CLIENT_SECRET"),
+		OidcRedirectURL:         strVar(get, "OIDC_REDIRECT_URL"),
+		OidcScopes:              splitList(strVar(get, "OIDC_SCOPES"), "profile", "email"),
+		OidcGroupsClaim:         strVarDefault(get, "OIDC_GROUPS_CLAIM", "groups"),
+		OidcAdminGroup:          strVarDefault(get, "OIDC_ADMIN_GROUP", "gort-admins"),
+		OidcProviderName:        strVarDefault(get, "OIDC_PROVIDER_NAME", "SSO"),
+		OidcOnly:                boolVar(get, "OIDC_ONLY", false),
 	}, nil
+}
+
+func strVarDefault(get ConfigLookup, name, defaultVal string) string {
+	if v := strVar(get, name); v != "" {
+		return v
+	}
+	return defaultVal
+}
+
+// splitList parses a space- or comma-separated list, falling back to the
+// defaults when unset.
+func splitList(raw string, defaults ...string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return defaults
+	}
+	var out []string
+	for _, part := range strings.FieldsFunc(raw, func(r rune) bool { return r == ' ' || r == ',' }) {
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 func ConfigFromEnv() (*AppConfig, error) {

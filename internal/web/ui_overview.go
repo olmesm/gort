@@ -35,6 +35,7 @@ func (a *App) uiOverview(user *CurrentUser, w http.ResponseWriter, r *http.Reque
 	}
 	recentFilters := data.EmptyShortUrlFilters()
 	recentFilters.ItemsPerPage = 5
+	recentFilters.VisibleGroups = user.VisibleGroups()
 	recent, err := data.ListShortUrls(a.Db, recentFilters)
 	if err != nil {
 		a.serverError(w, err)

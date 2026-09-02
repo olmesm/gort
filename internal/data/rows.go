@@ -8,6 +8,10 @@ type UserRow struct {
 	PasswordHash string
 	Role         string
 	CreatedAt    time.Time
+	// AuthSource is "local" for password accounts, "oidc" for SSO-provisioned
+	// ones.
+	AuthSource  string
+	OidcSubject *string
 }
 
 type DomainRow struct {
@@ -35,6 +39,7 @@ type ShortUrlRow struct {
 	ValidUntil           *time.Time
 	AuthorUserId         *int64
 	AuthorApiKeyId       *int64
+	GroupName            *string
 	CreatedAt            time.Time
 }
 
@@ -56,6 +61,7 @@ type ShortUrlDetail struct {
 	ValidUntil           *time.Time
 	AuthorUserId         *int64
 	AuthorApiKeyId       *int64
+	GroupName            *string
 	CreatedAt            time.Time
 	VisitCount           int64
 	BotVisitCount        int64

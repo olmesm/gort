@@ -29,6 +29,7 @@ func dateLocalValue(d *time.Time) string {
 type suListQuery struct {
 	Search  string
 	Tag     string
+	Group   string
 	Domain  string
 	OrderBy string
 	Dir     string
@@ -47,6 +48,7 @@ func readSuListQuery(q url.Values) suListQuery {
 	return suListQuery{
 		Search:  q.Get("search"),
 		Tag:     q.Get("tag"),
+		Group:   q.Get("group"),
 		Domain:  q.Get("domain"),
 		OrderBy: orderBy,
 		Dir:     dir,
@@ -61,6 +63,9 @@ func suListUrl(lq suListQuery, page int) string {
 	}
 	if lq.Tag != "" {
 		parts = append(parts, "tag="+url.QueryEscape(lq.Tag))
+	}
+	if lq.Group != "" {
+		parts = append(parts, "group="+url.QueryEscape(lq.Group))
 	}
 	if lq.Domain != "" {
 		parts = append(parts, "domain="+url.QueryEscape(lq.Domain))
@@ -80,12 +85,16 @@ func suListUrl(lq suListQuery, page int) string {
 	return "/admin/short-urls?" + strings.Join(parts, "&")
 }
 
-func suFiltersOf(lq suListQuery) data.ShortUrlFilters {
+func suFiltersOf(lq suListQuery, user *CurrentUser) data.ShortUrlFilters {
 	filters := data.EmptyShortUrlFilters()
 	filters.SearchTerm = lq.Search
 	if lq.Tag != "" {
 		filters.Tags = []string{lq.Tag}
 	}
+	if group := core.NormalizeGroup(lq.Group); group != "" {
+		filters.Group = &group
+	}
+	filters.VisibleGroups = user.VisibleGroups()
 	switch lq.OrderBy {
 	case "shortCode":
 		filters.OrderBy = data.OrderShortCode
@@ -145,6 +154,10 @@ func (a *App) suTable(lq suListQuery, page core.Page[data.ShortUrlDetail], tagsB
 		for _, tag := range tagsByUrl[d.Id] {
 			badges = append(badges, h.E("span", []h.Attr{h.A("class", "badge")}, h.Text(tag)))
 		}
+		groupCell := h.Node(h.Text("—"))
+		if d.GroupName != nil {
+			groupCell = h.E("span", []h.Attr{h.A("class", "badge gray")}, h.Text(*d.GroupName))
+		}
 		rows = append(rows, h.E("tr", nil,
 			h.E("td", nil,
 				h.E("a", []h.Attr{
@@ -159,6 +172,7 @@ func (a *App) suTable(lq suListQuery, page core.Page[data.ShortUrlDetail], tagsB
 					h.A("target", "_blank"), h.A("rel", "noreferrer"),
 				}, h.Text(d.LongUrl))),
 			h.E("td", nil, badges...),
+			h.E("td", nil, groupCell),
 			h.E("td", nil,
 				h.E("a", []h.Attr{h.A("href", fmt.Sprintf("/admin/short-urls/%d/visits", d.Id))},
 					h.Text(formatCount(d.VisitCount)))),
@@ -179,6 +193,7 @@ func (a *App) suTable(lq suListQuery, page core.Page[data.ShortUrlDetail], tagsB
 						sortHeader(lq, "title", "Title"),
 						sortHeader(lq, "longUrl", "Long URL"),
 						h.E("th", nil, h.Text("Tags")),
+						h.E("th", nil, h.Text("Group")),
 						sortHeader(lq, "visits", "Visits"),
 						sortHeader(lq, "dateCreated", "Created"),
 						h.E("th", nil))),
@@ -190,7 +205,7 @@ func (a *App) suTable(lq suListQuery, page core.Page[data.ShortUrlDetail], tagsB
 func (a *App) uiListShortUrls(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	lq := readSuListQuery(q)
-	page, err := data.ListShortUrls(a.Db, suFiltersOf(lq))
+	page, err := data.ListShortUrls(a.Db, suFiltersOf(lq, user))
 	if err != nil {
 		a.serverError(w, err)
 		return
@@ -224,6 +239,19 @@ func (a *App) uiListShortUrls(user *CurrentUser, w http.ResponseWriter, r *http.
 		}, h.Text(tag)))
 	}
 
+	filterGroups, err := a.groupChoices(user)
+	if err != nil {
+		a.serverError(w, err)
+		return
+	}
+	groupOptions := []h.Node{h.E("option", []h.Attr{h.A("value", "")}, h.Text("All groups"))}
+	for _, group := range filterGroups {
+		groupOptions = append(groupOptions, h.E("option", []h.Attr{
+			h.A("value", group),
+			h.If(group == core.NormalizeGroup(lq.Group), h.Flag("selected")),
+		}, h.Text(group)))
+	}
+
 	content := []h.Node{
 		h.E("h1", nil, h.Text("Short URLs")),
 		h.E("div", []h.Attr{h.A("class", "toolbar")},
@@ -241,6 +269,7 @@ func (a *App) uiListShortUrls(user *CurrentUser, w http.ResponseWriter, r *http.
 					h.A("placeholder", "Search code, URL, title or tag…"),
 				}),
 				h.E("select", []h.Attr{h.A("name", "tag")}, tagOptions...),
+				h.E("select", []h.Attr{h.A("name", "group")}, groupOptions...),
 				h.E("button", []h.Attr{h.A("class", "secondary")}, h.Text("Filter"))),
 			h.E("a", []h.Attr{h.A("class", "btn"), h.A("href", "/admin/short-urls/new")},
 				h.Text("+ New short URL"))),
@@ -279,6 +308,7 @@ type suCreateForm struct {
 	Domain         string
 	Title          string
 	Tags           string
+	Group          string
 	ValidSince     string
 	ValidUntil     string
 	MaxVisits      string
@@ -302,6 +332,7 @@ func readSuCreateForm(r *http.Request) suCreateForm {
 		Domain:         r.PostFormValue("domain"),
 		Title:          r.PostFormValue("title"),
 		Tags:           r.PostFormValue("tags"),
+		Group:          r.PostFormValue("group"),
 		ValidSince:     r.PostFormValue("validSince"),
 		ValidUntil:     r.PostFormValue("validUntil"),
 		MaxVisits:      r.PostFormValue("maxVisits"),
@@ -311,7 +342,32 @@ func readSuCreateForm(r *http.Request) suCreateForm {
 	}
 }
 
-func (a *App) suCreateFormContent(errorMessage string, form suCreateForm) []h.Node {
+// groupChoices lists the groups a user may pick from: admins see every group
+// referenced so far, others their own token groups.
+func (a *App) groupChoices(user *CurrentUser) ([]string, error) {
+	if user.IsAdmin() {
+		return data.ListGroupNames(a.Db)
+	}
+	return user.Groups, nil
+}
+
+// groupInput renders the group picker: a free text input for admins (any
+// group, existing or new), a fixed choice of the user's own groups otherwise.
+func groupInput(user *CurrentUser, current string) h.Node {
+	if user.IsAdmin() {
+		return textInput("group", current, "team-a (optional)")
+	}
+	options := []h.Node{h.E("option", []h.Attr{h.A("value", "")}, h.Text("No group"))}
+	for _, group := range user.Groups {
+		options = append(options, h.E("option", []h.Attr{
+			h.A("value", group),
+			h.If(group == current, h.Flag("selected")),
+		}, h.Text(group)))
+	}
+	return h.E("select", []h.Attr{h.A("name", "group")}, options...)
+}
+
+func (a *App) suCreateFormContent(user *CurrentUser, errorMessage string, form suCreateForm) []h.Node {
 	errorNode := h.Empty()
 	if errorMessage != "" {
 		errorNode = alertError(errorMessage)
@@ -331,6 +387,7 @@ func (a *App) suCreateFormContent(errorMessage string, form suCreateForm) []h.No
 					formField("Domain (optional)", textInput("domain", form.Domain, a.Cfg.DefaultDomain.Value()))),
 				formField("Title (optional; auto-resolved when empty)", textInput("title", form.Title, "")),
 				formField("Tags (comma separated)", textInput("tags", form.Tags, "marketing, launch")),
+				formField("Group (limits visibility to its members)", groupInput(user, form.Group)),
 				h.E("div", []h.Attr{h.A("class", "row")},
 					formField("Valid since (UTC)",
 						h.E("input", []h.Attr{h.A("type", "datetime-local"), h.A("name", "validSince"), h.A("value", form.ValidSince)})),
@@ -348,7 +405,14 @@ func (a *App) suCreateFormContent(errorMessage string, form suCreateForm) []h.No
 // GET /admin/short-urls/new
 func (a *App) uiCreateShortUrlForm(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
 	respondPage(w, user, "/admin/short-urls", "New short URL",
-		a.suCreateFormContent("", emptySuCreateForm()))
+		a.suCreateFormContent(user, "", emptySuCreateForm()))
+}
+
+func valueOrEmpty(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }
 
 func optionalStr(v string) *string {
@@ -404,6 +468,7 @@ func (a *App) uiCreateShortUrl(user *CurrentUser, w http.ResponseWriter, r *http
 		Domain:         optionalStr(form.Domain),
 		Title:          optionalStr(form.Title),
 		Tags:           splitTagsField(form.Tags),
+		Group:          optionalStr(form.Group),
 		ValidSince:     validSince,
 		ValidUntil:     validUntil,
 		MaxVisits:      parseOptionalInt64(form.MaxVisits),
@@ -412,6 +477,10 @@ func (a *App) uiCreateShortUrl(user *CurrentUser, w http.ResponseWriter, r *http
 		Crawlable:      &crawlable,
 	})
 
+	if serr == nil && !userMayAssignGroup(user, spec.Group) {
+		serr = core.NewShortUrlError(core.ErrInvalidGroup,
+			"You can only assign groups you are a member of.")
+	}
 	if serr == nil {
 		_, serr = a.CreateShortUrl(UserAuthor(user.Id), spec)
 	}
@@ -421,7 +490,16 @@ func (a *App) uiCreateShortUrl(user *CurrentUser, w http.ResponseWriter, r *http
 	}
 	respondHtml(w, http.StatusBadRequest,
 		layoutPage(user, "/admin/short-urls", "New short URL",
-			a.suCreateFormContent(serr.Message(), form)))
+			a.suCreateFormContent(user, serr.Message(), form)))
+}
+
+// userMayAssignGroup: admins may assign any group; other users only groups
+// they belong to (or no group).
+func userMayAssignGroup(user *CurrentUser, group *core.GroupName) bool {
+	if group == nil || user.IsAdmin() {
+		return true
+	}
+	return core.GroupsContain(user.Groups, group.Value())
 }
 
 // ---- edit ----
@@ -441,7 +519,7 @@ func conditionLabel(c core.RuleCondition) string {
 	}
 }
 
-func (a *App) suEditPage(detail *data.ShortUrlDetail, tags []string, rules []core.RedirectRule, banner h.Node) []h.Node {
+func (a *App) suEditPage(user *CurrentUser, detail *data.ShortUrlDetail, tags []string, rules []core.RedirectRule, banner h.Node) []h.Node {
 	shortUrl := ShortUrlFor(a.Cfg, detail.Authority, detail.ShortCode)
 	title := ""
 	if detail.Title != nil {
@@ -504,6 +582,7 @@ func (a *App) suEditPage(detail *data.ShortUrlDetail, tags []string, rules []cor
 					h.E("input", []h.Attr{h.A("type", "url"), h.A("name", "longUrl"), h.A("value", detail.LongUrl), h.Flag("required")})),
 				formField("Title", textInput("title", title, "")),
 				formField("Tags (comma separated)", textInput("tags", strings.Join(tags, ", "), "")),
+				formField("Group (limits visibility to its members)", groupInput(user, valueOrEmpty(detail.GroupName))),
 				h.E("div", []h.Attr{h.A("class", "row")},
 					formField("Valid since (UTC)",
 						h.E("input", []h.Attr{h.A("type", "datetime-local"), h.A("name", "validSince"), h.A("value", dateLocalValue(detail.ValidSince))})),
@@ -559,7 +638,10 @@ func (a *App) suEditPage(detail *data.ShortUrlDetail, tags []string, rules []cor
 	}
 }
 
-func (a *App) loadDetailFromPath(w http.ResponseWriter, r *http.Request) *data.ShortUrlDetail {
+// loadDetailFromPath resolves the {id} route parameter and enforces the
+// user's group scope: a link outside the scope is indistinguishable from a
+// missing one.
+func (a *App) loadDetailFromPath(user *CurrentUser, w http.ResponseWriter, r *http.Request) *data.ShortUrlDetail {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		respondPlainNotFound(w)
@@ -570,7 +652,7 @@ func (a *App) loadDetailFromPath(w http.ResponseWriter, r *http.Request) *data.S
 		a.serverError(w, err)
 		return nil
 	}
-	if detail == nil {
+	if detail == nil || !user.CanSeeGroup(detail.GroupName) {
 		respondPlainNotFound(w)
 		return nil
 	}
@@ -595,12 +677,12 @@ func (a *App) respondEditPage(w http.ResponseWriter, status int, user *CurrentUs
 		return
 	}
 	respondHtml(w, status,
-		layoutPage(user, "/admin/short-urls", "Edit short URL", a.suEditPage(detail, tags, rules, banner)))
+		layoutPage(user, "/admin/short-urls", "Edit short URL", a.suEditPage(user, detail, tags, rules, banner)))
 }
 
 // GET /admin/short-urls/{id}/edit
 func (a *App) uiEditShortUrlForm(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
-	detail := a.loadDetailFromPath(w, r)
+	detail := a.loadDetailFromPath(user, w, r)
 	if detail == nil {
 		return
 	}
@@ -609,7 +691,7 @@ func (a *App) uiEditShortUrlForm(user *CurrentUser, w http.ResponseWriter, r *ht
 
 // POST /admin/short-urls/{id}/edit
 func (a *App) uiEditShortUrl(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
-	detail := a.loadDetailFromPath(w, r)
+	detail := a.loadDetailFromPath(user, w, r)
 	if detail == nil {
 		return
 	}
@@ -635,6 +717,7 @@ func (a *App) uiEditShortUrl(user *CurrentUser, w http.ResponseWriter, r *http.R
 	edit, serr := core.NewShortUrlEdit(core.ShortUrlEditInput{
 		LongUrl:        get("longUrl"),
 		Title:          optionalStr(get("title")),
+		Group:          optionalStr(get("group")),
 		ValidSince:     validSince,
 		ValidUntil:     validUntil,
 		MaxVisits:      parseOptionalInt64(get("maxVisits")),
@@ -644,6 +727,10 @@ func (a *App) uiEditShortUrl(user *CurrentUser, w http.ResponseWriter, r *http.R
 		Tags:           splitTagsField(get("tags")),
 		ChangeTags:     true,
 	})
+	if serr == nil && !userMayAssignGroup(user, edit.Group) {
+		serr = core.NewShortUrlError(core.ErrInvalidGroup,
+			"You can only assign groups you are a member of.")
+	}
 	if serr != nil {
 		a.respondEditPage(w, http.StatusBadRequest, user, detail, alertError(serr.Message()))
 		return
@@ -657,7 +744,7 @@ func (a *App) uiEditShortUrl(user *CurrentUser, w http.ResponseWriter, r *http.R
 
 // POST /admin/short-urls/{id}/rules/add
 func (a *App) uiAddRule(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
-	detail := a.loadDetailFromPath(w, r)
+	detail := a.loadDetailFromPath(user, w, r)
 	if detail == nil {
 		return
 	}
@@ -711,8 +798,8 @@ func (a *App) uiAddRule(user *CurrentUser, w http.ResponseWriter, r *http.Reques
 }
 
 // POST /admin/short-urls/{id}/rules/delete
-func (a *App) uiDeleteRule(_ *CurrentUser, w http.ResponseWriter, r *http.Request) {
-	detail := a.loadDetailFromPath(w, r)
+func (a *App) uiDeleteRule(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
+	detail := a.loadDetailFromPath(user, w, r)
 	if detail == nil {
 		return
 	}
@@ -743,19 +830,21 @@ func (a *App) uiDeleteRule(_ *CurrentUser, w http.ResponseWriter, r *http.Reques
 }
 
 // POST /admin/short-urls/{id}/delete
-func (a *App) uiDeleteShortUrl(_ *CurrentUser, w http.ResponseWriter, r *http.Request) {
-	if id, err := strconv.ParseInt(r.PathValue("id"), 10, 64); err == nil {
-		if _, err := data.DeleteShortUrl(a.Db, core.ShortUrlID(id)); err != nil {
-			a.serverError(w, err)
-			return
-		}
+func (a *App) uiDeleteShortUrl(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
+	detail := a.loadDetailFromPath(user, w, r)
+	if detail == nil {
+		return
+	}
+	if _, err := data.DeleteShortUrl(a.Db, core.ShortUrlID(detail.Id)); err != nil {
+		a.serverError(w, err)
+		return
 	}
 	http.Redirect(w, r, "/admin/short-urls", http.StatusFound)
 }
 
 // POST /admin/short-urls/{id}/visits/delete
-func (a *App) uiDeleteShortUrlVisits(_ *CurrentUser, w http.ResponseWriter, r *http.Request) {
-	detail := a.loadDetailFromPath(w, r)
+func (a *App) uiDeleteShortUrlVisits(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
+	detail := a.loadDetailFromPath(user, w, r)
 	if detail == nil {
 		return
 	}

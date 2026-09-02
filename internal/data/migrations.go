@@ -255,6 +255,24 @@ CREATE TABLE webhook_deliveries (
 CREATE INDEX idx_webhook_deliveries_due ON webhook_deliveries(status, next_attempt_at);
 `
 
+const sqlite002 = `
+ALTER TABLE users ADD COLUMN auth_source TEXT NOT NULL DEFAULT 'local';
+ALTER TABLE users ADD COLUMN oidc_subject TEXT NULL;
+CREATE UNIQUE INDEX idx_users_oidc_subject ON users(oidc_subject) WHERE oidc_subject IS NOT NULL;
+
+ALTER TABLE short_urls ADD COLUMN group_name TEXT NULL;
+CREATE INDEX idx_short_urls_group ON short_urls(group_name);
+`
+
+const postgres002 = `
+ALTER TABLE users ADD COLUMN auth_source TEXT NOT NULL DEFAULT 'local';
+ALTER TABLE users ADD COLUMN oidc_subject TEXT NULL;
+CREATE UNIQUE INDEX idx_users_oidc_subject ON users(oidc_subject) WHERE oidc_subject IS NOT NULL;
+
+ALTER TABLE short_urls ADD COLUMN group_name TEXT NULL;
+CREATE INDEX idx_short_urls_group ON short_urls(group_name);
+`
+
 func migrationScripts(dialect Dialect) []struct {
 	Version int
 	Script  string
@@ -264,12 +282,12 @@ func migrationScripts(dialect Dialect) []struct {
 		return []struct {
 			Version int
 			Script  string
-		}{{1, sqlite001}}
+		}{{1, sqlite001}, {2, sqlite002}}
 	default:
 		return []struct {
 			Version int
 			Script  string
-		}{{1, postgres001}}
+		}{{1, postgres001}, {2, postgres002}}
 	}
 }
 

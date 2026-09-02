@@ -248,6 +248,7 @@ const (
 	ErrInvalidLongUrl          ShortUrlErrorKind = "invalid-long-url"
 	ErrInvalidSlug             ShortUrlErrorKind = "invalid-slug"
 	ErrInvalidTag              ShortUrlErrorKind = "invalid-tag"
+	ErrInvalidGroup            ShortUrlErrorKind = "invalid-group"
 	ErrInvalidLifetime         ShortUrlErrorKind = "invalid-lifetime"
 	ErrInvalidRedirectStatus   ShortUrlErrorKind = "invalid-redirect-status"
 	ErrSlugInUse               ShortUrlErrorKind = "slug-in-use"
