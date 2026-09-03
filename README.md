@@ -257,6 +257,10 @@ GORT_OIDC_CLIENT_SECRET=…
 Groups from Keycloak now double as link groupings: a link created in group
 `marketing` is visible only to members of `/marketing` (and admins).
 
+To verify the whole flow against a real Keycloak container (real browser
+through the actual Keycloak login form), see
+[`e2e/keycloak-smoke/`](e2e/keycloak-smoke/README.md).
+
 ## Architecture
 
 ```
