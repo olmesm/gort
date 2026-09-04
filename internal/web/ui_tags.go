@@ -5,65 +5,54 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 
 	"github.com/olmesm/gort/internal/core"
 	"github.com/olmesm/gort/internal/data"
-	"github.com/olmesm/gort/internal/h"
 )
 
-func tagTable(page core.Page[data.TagStatsRow]) h.Node {
-	var rows []h.Node
-	for _, t := range page.Items {
-		rows = append(rows, h.E("tr", nil,
-			h.E("td", nil, h.E("span", []h.Attr{h.A("class", "badge")}, h.Text(t.Name))),
-			h.E("td", nil,
-				h.E("a", []h.Attr{h.A("href", "/admin/short-urls?tag="+url.QueryEscape(t.Name))},
-					h.Text(strconv.FormatInt(t.ShortUrlCount, 10)))),
-			h.E("td", nil, h.Text(strconv.FormatInt(t.VisitCount, 10))),
-			h.E("td", nil,
-				h.E("form", []h.Attr{h.A("class", "inline"), h.A("method", "post"), h.A("action", "/admin/tags/rename")},
-					h.E("input", []h.Attr{h.A("type", "hidden"), h.A("name", "oldName"), h.A("value", t.Name)}),
-					h.E("input", []h.Attr{
-						h.A("type", "text"), h.A("name", "newName"), h.A("value", t.Name),
-						h.A("style", "width:10rem"),
-					}),
-					h.Text(" "),
-					h.E("button", []h.Attr{h.A("class", "secondary small")}, h.Text("Rename")))),
-			h.E("td", []h.Attr{h.A("class", "actions")},
-				h.E("form", []h.Attr{
-					h.A("class", "inline"), h.A("method", "post"), h.A("action", "/admin/tags/delete"),
-					h.A("onsubmit", "return confirm('Delete this tag? Short URLs keep working.')"),
-				},
-					h.E("input", []h.Attr{h.A("type", "hidden"), h.A("name", "name"), h.A("value", t.Name)}),
-					h.E("button", []h.Attr{h.A("class", "danger small")}, h.Text("Delete"))))))
-	}
+type tagTableView struct {
+	Rows  []tagRowView
+	Pager pagerView
+}
 
-	return h.E("div", []h.Attr{h.A("id", "tag-table")},
-		h.E("div", []h.Attr{h.A("class", "table-wrap")},
-			h.E("table", nil,
-				h.E("thead", nil,
-					h.E("tr", nil,
-						h.E("th", nil, h.Text("Tag")),
-						h.E("th", nil, h.Text("Short URLs")),
-						h.E("th", nil, h.Text("Visits")),
-						h.E("th", nil, h.Text("Rename")),
-						h.E("th", nil))),
-				h.E("tbody", nil, rows...))),
-		pager(func(p int) string {
+type tagRowView struct {
+	Name          string
+	FilterUrl     string
+	ShortUrlCount int64
+	VisitCount    int64
+}
+
+func tagTable(page core.Page[data.TagStatsRow]) tagTableView {
+	table := tagTableView{
+		Pager: newPager(page, func(p int) string {
 			if p == 1 {
 				return "/admin/tags"
 			}
 			return fmt.Sprintf("/admin/tags?page=%d", p)
-		}, page))
+		}),
+	}
+	for _, t := range page.Items {
+		table.Rows = append(table.Rows, tagRowView{
+			Name:          t.Name,
+			FilterUrl:     "/admin/short-urls?tag=" + url.QueryEscape(t.Name),
+			ShortUrlCount: t.ShortUrlCount,
+			VisitCount:    t.VisitCount,
+		})
+	}
+	return table
+}
+
+type tagsView struct {
+	Error  string
+	Search string
+	Table  tagTableView
 }
 
 // GET /admin/tags
 func (a *App) uiListTags(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	search := q.Get("search")
-	page := queryIntDefault(q, "page", 1)
-	result, err := data.ListTags(a.Db, search, page, 25)
+	result, err := data.ListTags(a.Db, search, queryIntDefault(q, "page", 1), 25)
 	if err != nil {
 		a.serverError(w, err)
 		return
@@ -71,29 +60,13 @@ func (a *App) uiListTags(user *CurrentUser, w http.ResponseWriter, r *http.Reque
 	table := tagTable(result)
 
 	if isHtmx(r) {
-		respondFragment(w, table)
+		a.renderShared(w, http.StatusOK, "tag-table", table)
 		return
 	}
-
-	content := []h.Node{
-		h.E("h1", nil, h.Text("Tags")),
-		h.E("div", []h.Attr{h.A("class", "toolbar")},
-			h.E("form", []h.Attr{
-				hxGet("/admin/tags"),
-				hxTarget("#tag-table"),
-				hxSwap("outerHTML"),
-				hxTrigger("submit, input delay:400ms from:input[name='search']"),
-				h.A("method", "get"),
-				h.A("action", "/admin/tags"),
-			},
-				h.E("input", []h.Attr{
-					h.A("type", "search"), h.A("name", "search"), h.A("value", search),
-					h.A("placeholder", "Search tags…"),
-				}),
-				h.E("button", []h.Attr{h.A("class", "secondary")}, h.Text("Search")))),
-		table,
-	}
-	respondPage(w, user, "/admin/tags", "Tags", content)
+	a.renderPage(w, http.StatusOK, "tags", user, "/admin/tags", "Tags", tagsView{
+		Search: search,
+		Table:  table,
+	})
 }
 
 // POST /admin/tags/rename
@@ -128,12 +101,10 @@ func (a *App) uiRenameTag(user *CurrentUser, w http.ResponseWriter, r *http.Requ
 		a.serverError(w, err)
 		return
 	}
-	content := []h.Node{
-		h.E("h1", nil, h.Text("Tags")),
-		alertError(message),
-		tagTable(result),
-	}
-	respondHtml(w, http.StatusBadRequest, layoutPage(user, "/admin/tags", "Tags", content))
+	a.renderPage(w, http.StatusBadRequest, "tags", user, "/admin/tags", "Tags", tagsView{
+		Error: message,
+		Table: tagTable(result),
+	})
 }
 
 // POST /admin/tags/delete

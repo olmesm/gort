@@ -1,0 +1,68 @@
+{{define "content"}}{{with .Data}}
+<h1>API keys</h1>
+<p class="muted">Keys authenticate REST API calls via the X-Api-Key header. Admin keys can do everything; author keys only see short URLs they created; domain keys are limited to one domain.</p>
+{{- if .Error}}
+<div class="alert error">{{.Error}}</div>
+{{- end}}
+{{- if .PlainKey}}
+<div class="alert success">API key created — copy it now, it will not be shown again: <br><strong class="mono">{{.PlainKey}}</strong></div>
+{{- end}}
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Name</th><th>Role</th><th>Domain</th><th>Status</th><th>Expires (UTC)</th><th>Created (UTC)</th><th></th></tr>
+    </thead>
+    <tbody>
+      {{- range .Rows}}
+      <tr>
+        <td>{{.Name}}</td>
+        <td><span class="badge gray">{{.Role}}</span></td>
+        <td>{{.Domain}}</td>
+        <td>{{if .Expired}}<span class="badge red">expired</span>{{else if .Enabled}}<span class="badge green">enabled</span>{{else}}<span class="badge red">disabled</span>{{end}}</td>
+        <td class="muted">{{.Expires}}</td>
+        <td class="muted">{{.Created}}</td>
+        <td class="actions">
+          <form class="inline" method="post" action="{{.ToggleAction}}">
+            <button class="secondary small">{{if .Enabled}}Disable{{else}}Enable{{end}}</button>
+          </form>
+          <form class="inline" method="post" action="{{.DeleteAction}}" onsubmit="return confirm('Delete this API key?')">
+            <button class="danger small">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {{- end}}
+    </tbody>
+  </table>
+</div>
+<h2>Create API key</h2>
+<div class="card">
+  <form class="row" method="post" action="/admin/api-keys">
+    <div>
+      <label>Name</label>
+      <input type="text" name="name" value="" placeholder="ci-deploy">
+    </div>
+    <div>
+      <label>Role</label>
+      <select name="role">
+        <option value="admin">admin</option>
+        <option value="author">author</option>
+        <option value="domain">domain</option>
+      </select>
+    </div>
+    <div>
+      <label>Domain (for domain role)</label>
+      <select name="domain">
+        <option value="">—</option>
+        {{- range .Domains}}
+        <option value="{{.}}">{{.}}</option>
+        {{- end}}
+      </select>
+    </div>
+    <div>
+      <label>Expires (UTC, optional)</label>
+      <input type="datetime-local" name="expiresAt">
+    </div>
+    <div><button>Create</button></div>
+  </form>
+</div>
+{{end}}{{end}}

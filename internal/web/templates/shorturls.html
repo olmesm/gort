@@ -1,0 +1,23 @@
+{{define "content"}}{{with .Data}}
+<h1>Short URLs</h1>
+<div class="toolbar">
+  <form hx-get="/admin/short-urls" hx-target="#su-table" hx-swap="outerHTML" hx-trigger="submit, input delay:400ms from:input[name='search'], change from:select" hx-push-url="true" method="get" action="/admin/short-urls">
+    <input type="search" name="search" value="{{.Search}}" placeholder="Search code, URL, title or tag…">
+    <select name="tag">
+      <option value="">All tags</option>
+      {{- range .TagOptions}}
+      <option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Value}}</option>
+      {{- end}}
+    </select>
+    <select name="group">
+      <option value="">All groups</option>
+      {{- range .GroupOptions}}
+      <option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Value}}</option>
+      {{- end}}
+    </select>
+    <button class="secondary">Filter</button>
+  </form>
+  <a class="btn" href="/admin/short-urls/new">+ New short URL</a>
+</div>
+{{template "su-table" .Table}}
+{{end}}{{end}}

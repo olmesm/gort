@@ -1,0 +1,14 @@
+{{define "content"}}{{with .Data}}
+<h1>Tags</h1>
+{{- if .Error}}
+<div class="alert error">{{.Error}}</div>
+{{- else}}
+<div class="toolbar">
+  <form hx-get="/admin/tags" hx-target="#tag-table" hx-swap="outerHTML" hx-trigger="submit, input delay:400ms from:input[name='search']" method="get" action="/admin/tags">
+    <input type="search" name="search" value="{{.Search}}" placeholder="Search tags…">
+    <button class="secondary">Search</button>
+  </form>
+</div>
+{{- end}}
+{{template "tag-table" .Table}}
+{{end}}{{end}}

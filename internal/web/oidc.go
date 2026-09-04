@@ -111,8 +111,8 @@ func (a *App) uiOidcLogin(w http.ResponseWriter, r *http.Request) {
 	provider, _, err := a.oidc.get(r.Context())
 	if err != nil {
 		a.Logger.Error("OIDC login failed", "error", err)
-		respondHtml(w, http.StatusBadGateway,
-			loginPageFor(a.Cfg, "Single sign-on is unavailable: the identity provider could not be reached.", "/admin"))
+		a.renderLogin(w, http.StatusBadGateway,
+			"Single sign-on is unavailable: the identity provider could not be reached.", "/admin")
 		return
 	}
 
@@ -172,7 +172,7 @@ func (a *App) clearOidcState(w http.ResponseWriter) {
 }
 
 func (a *App) oidcLoginError(w http.ResponseWriter, message string) {
-	respondHtml(w, http.StatusUnauthorized, loginPageFor(a.Cfg, message, "/admin"))
+	a.renderLogin(w, http.StatusUnauthorized, message, "/admin")
 }
 
 // GET /admin/oidc/callback — exchange the code, verify the ID token, map

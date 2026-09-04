@@ -10,7 +10,6 @@ import (
 
 	"github.com/olmesm/gort/internal/core"
 	"github.com/olmesm/gort/internal/data"
-	"github.com/olmesm/gort/internal/h"
 )
 
 // ---- helpers ----
@@ -115,14 +114,18 @@ func suFiltersOf(lq suListQuery, user *CurrentUser) data.ShortUrlFilters {
 
 // ---- list ----
 
-func sortHeader(lq suListQuery, field, label string) h.Node {
+type sortHeaderView struct {
+	Url   string
+	Label string
+}
+
+func sortHeader(lq suListQuery, field, label string) sortHeaderView {
 	nextDir := "desc"
 	if lq.OrderBy == field && lq.Dir == "desc" {
 		nextDir = "asc"
 	}
 	next := lq
 	next.OrderBy, next.Dir, next.Page = field, nextDir, 1
-	sortUrl := suListUrl(next, 1)
 
 	marker := ""
 	if lq.OrderBy == field {
@@ -132,73 +135,63 @@ func sortHeader(lq suListQuery, field, label string) h.Node {
 			marker = " ↓"
 		}
 	}
-	return h.E("th", nil,
-		h.E("a", []h.Attr{
-			h.A("href", sortUrl),
-			hxGet(sortUrl),
-			hxTarget("#su-table"),
-			hxSwap("outerHTML"),
-			hxPushUrl(),
-		}, h.Text(label+marker)))
+	return sortHeaderView{Url: suListUrl(next, 1), Label: label + marker}
 }
 
-func (a *App) suTable(lq suListQuery, page core.Page[data.ShortUrlDetail], tagsByUrl map[int64][]string) h.Node {
-	var rows []h.Node
-	for _, d := range page.Items {
-		shortUrl := ShortUrlFor(a.Cfg, d.Authority, d.ShortCode)
-		title := "—"
-		if d.Title != nil {
-			title = *d.Title
-		}
-		var badges []h.Node
-		for _, tag := range tagsByUrl[d.Id] {
-			badges = append(badges, h.E("span", []h.Attr{h.A("class", "badge")}, h.Text(tag)))
-		}
-		groupCell := h.Node(h.Text("—"))
-		if d.GroupName != nil {
-			groupCell = h.E("span", []h.Attr{h.A("class", "badge gray")}, h.Text(*d.GroupName))
-		}
-		rows = append(rows, h.E("tr", nil,
-			h.E("td", nil,
-				h.E("a", []h.Attr{
-					h.A("class", "mono"), h.A("href", shortUrl),
-					h.A("target", "_blank"), h.A("rel", "noreferrer"),
-				}, h.Text(d.Authority+"/"+d.ShortCode))),
-			h.E("td", nil,
-				h.E("span", []h.Attr{h.A("class", "truncate"), h.A("style", "max-width:200px")}, h.Text(title))),
-			h.E("td", nil,
-				h.E("a", []h.Attr{
-					h.A("class", "truncate"), h.A("href", d.LongUrl),
-					h.A("target", "_blank"), h.A("rel", "noreferrer"),
-				}, h.Text(d.LongUrl))),
-			h.E("td", nil, badges...),
-			h.E("td", nil, groupCell),
-			h.E("td", nil,
-				h.E("a", []h.Attr{h.A("href", fmt.Sprintf("/admin/short-urls/%d/visits", d.Id))},
-					h.Text(formatCount(d.VisitCount)))),
-			h.E("td", []h.Attr{h.A("class", "muted")}, h.Text(formatDateTime(d.CreatedAt))),
-			h.E("td", []h.Attr{h.A("class", "actions")},
-				h.E("a", []h.Attr{
-					h.A("class", "btn secondary small"),
-					h.A("href", fmt.Sprintf("/admin/short-urls/%d/edit", d.Id)),
-				}, h.Text("Edit")))))
-	}
+type suTableView struct {
+	HeadShortCode sortHeaderView
+	HeadTitle     sortHeaderView
+	HeadLongUrl   sortHeaderView
+	HeadVisits    sortHeaderView
+	HeadCreated   sortHeaderView
+	Rows          []suRowView
+	Pager         pagerView
+}
 
-	return h.E("div", []h.Attr{h.A("id", "su-table")},
-		h.E("div", []h.Attr{h.A("class", "table-wrap")},
-			h.E("table", nil,
-				h.E("thead", nil,
-					h.E("tr", nil,
-						sortHeader(lq, "shortCode", "Short URL"),
-						sortHeader(lq, "title", "Title"),
-						sortHeader(lq, "longUrl", "Long URL"),
-						h.E("th", nil, h.Text("Tags")),
-						h.E("th", nil, h.Text("Group")),
-						sortHeader(lq, "visits", "Visits"),
-						sortHeader(lq, "dateCreated", "Created"),
-						h.E("th", nil))),
-				h.E("tbody", nil, rows...))),
-		pager(func(p int) string { return suListUrl(lq, p) }, page))
+type suRowView struct {
+	ShortUrl    string
+	Display     string
+	Title       string
+	LongUrl     string
+	Tags        []string
+	Group       *string
+	VisitsUrl   string
+	VisitsLabel string
+	Created     string
+	EditUrl     string
+}
+
+func (a *App) suTable(lq suListQuery, page core.Page[data.ShortUrlDetail], tagsByUrl map[int64][]string) suTableView {
+	table := suTableView{
+		HeadShortCode: sortHeader(lq, "shortCode", "Short URL"),
+		HeadTitle:     sortHeader(lq, "title", "Title"),
+		HeadLongUrl:   sortHeader(lq, "longUrl", "Long URL"),
+		HeadVisits:    sortHeader(lq, "visits", "Visits"),
+		HeadCreated:   sortHeader(lq, "dateCreated", "Created"),
+		Pager:         newPager(page, func(p int) string { return suListUrl(lq, p) }),
+	}
+	for _, d := range page.Items {
+		table.Rows = append(table.Rows, suRowView{
+			ShortUrl:    ShortUrlFor(a.Cfg, d.Authority, d.ShortCode),
+			Display:     d.Authority + "/" + d.ShortCode,
+			Title:       orDash(d.Title),
+			LongUrl:     d.LongUrl,
+			Tags:        tagsByUrl[d.Id],
+			Group:       d.GroupName,
+			VisitsUrl:   fmt.Sprintf("/admin/short-urls/%d/visits", d.Id),
+			VisitsLabel: formatCount(d.VisitCount),
+			Created:     formatDateTime(d.CreatedAt),
+			EditUrl:     fmt.Sprintf("/admin/short-urls/%d/edit", d.Id),
+		})
+	}
+	return table
+}
+
+type suListView struct {
+	Search       string
+	TagOptions   []optionView
+	GroupOptions []optionView
+	Table        suTableView
 }
 
 // GET /admin/short-urls (full page or htmx fragment)
@@ -222,7 +215,7 @@ func (a *App) uiListShortUrls(user *CurrentUser, w http.ResponseWriter, r *http.
 	table := a.suTable(lq, page, tagsByUrl)
 
 	if isHtmx(r) {
-		respondFragment(w, table)
+		a.renderShared(w, http.StatusOK, "su-table", table)
 		return
 	}
 
@@ -231,74 +224,21 @@ func (a *App) uiListShortUrls(user *CurrentUser, w http.ResponseWriter, r *http.
 		a.serverError(w, err)
 		return
 	}
-	tagOptions := []h.Node{h.E("option", []h.Attr{h.A("value", "")}, h.Text("All tags"))}
-	for _, tag := range allTags {
-		tagOptions = append(tagOptions, h.E("option", []h.Attr{
-			h.A("value", tag),
-			h.If(tag == lq.Tag, h.Flag("selected")),
-		}, h.Text(tag)))
-	}
-
 	filterGroups, err := a.groupChoices(user)
 	if err != nil {
 		a.serverError(w, err)
 		return
 	}
-	groupOptions := []h.Node{h.E("option", []h.Attr{h.A("value", "")}, h.Text("All groups"))}
-	for _, group := range filterGroups {
-		groupOptions = append(groupOptions, h.E("option", []h.Attr{
-			h.A("value", group),
-			h.If(group == core.NormalizeGroup(lq.Group), h.Flag("selected")),
-		}, h.Text(group)))
-	}
 
-	content := []h.Node{
-		h.E("h1", nil, h.Text("Short URLs")),
-		h.E("div", []h.Attr{h.A("class", "toolbar")},
-			h.E("form", []h.Attr{
-				hxGet("/admin/short-urls"),
-				hxTarget("#su-table"),
-				hxSwap("outerHTML"),
-				hxTrigger("submit, input delay:400ms from:input[name='search'], change from:select"),
-				hxPushUrl(),
-				h.A("method", "get"),
-				h.A("action", "/admin/short-urls"),
-			},
-				h.E("input", []h.Attr{
-					h.A("type", "search"), h.A("name", "search"), h.A("value", lq.Search),
-					h.A("placeholder", "Search code, URL, title or tag…"),
-				}),
-				h.E("select", []h.Attr{h.A("name", "tag")}, tagOptions...),
-				h.E("select", []h.Attr{h.A("name", "group")}, groupOptions...),
-				h.E("button", []h.Attr{h.A("class", "secondary")}, h.Text("Filter"))),
-			h.E("a", []h.Attr{h.A("class", "btn"), h.A("href", "/admin/short-urls/new")},
-				h.Text("+ New short URL"))),
-		table,
-	}
-	respondPage(w, user, "/admin/short-urls", "Short URLs", content)
+	a.renderPage(w, http.StatusOK, "shorturls", user, "/admin/short-urls", "Short URLs", suListView{
+		Search:       lq.Search,
+		TagOptions:   optionsOf(allTags, lq.Tag),
+		GroupOptions: optionsOf(filterGroups, core.NormalizeGroup(lq.Group)),
+		Table:        table,
+	})
 }
 
 // ---- create ----
-
-func redirectStatusSelect(current int) h.Node {
-	options := []struct {
-		status int
-		label  string
-	}{
-		{301, "301 — permanent"},
-		{302, "302 — found (default)"},
-		{307, "307 — temporary, keep method"},
-		{308, "308 — permanent, keep method"},
-	}
-	var nodes []h.Node
-	for _, opt := range options {
-		nodes = append(nodes, h.E("option", []h.Attr{
-			h.A("value", strconv.Itoa(opt.status)),
-			h.If(opt.status == current, h.Flag("selected")),
-		}, h.Text(opt.label)))
-	}
-	return h.E("select", []h.Attr{h.A("name", "redirectStatus")}, nodes...)
-}
 
 // suCreateForm is everything the create form posted, echoed back verbatim on
 // errors so the visitor never loses their input.
@@ -351,68 +291,27 @@ func (a *App) groupChoices(user *CurrentUser) ([]string, error) {
 	return user.Groups, nil
 }
 
-// groupInput renders the group picker: a free text input for admins (any
-// group, existing or new), a fixed choice of the user's own groups otherwise.
-func groupInput(user *CurrentUser, current string) h.Node {
-	if user.IsAdmin() {
-		return textInput("group", current, "team-a (optional)")
-	}
-	options := []h.Node{h.E("option", []h.Attr{h.A("value", "")}, h.Text("No group"))}
-	for _, group := range user.Groups {
-		options = append(options, h.E("option", []h.Attr{
-			h.A("value", group),
-			h.If(group == current, h.Flag("selected")),
-		}, h.Text(group)))
-	}
-	return h.E("select", []h.Attr{h.A("name", "group")}, options...)
+type suCreateView struct {
+	Error         string
+	Form          suCreateForm
+	DefaultDomain string
+	Group         groupPickerView
+	StatusOptions []statusOptionView
 }
 
-func (a *App) suCreateFormContent(user *CurrentUser, errorMessage string, form suCreateForm) []h.Node {
-	errorNode := h.Empty()
-	if errorMessage != "" {
-		errorNode = alertError(errorMessage)
-	}
-	return []h.Node{
-		h.E("h1", nil, h.Text("New short URL")),
-		errorNode,
-		h.E("div", []h.Attr{h.A("class", "card")},
-			h.E("form", []h.Attr{h.A("class", "stack"), h.A("method", "post"), h.A("action", "/admin/short-urls/new")},
-				formField("Long URL *",
-					h.E("input", []h.Attr{
-						h.A("type", "url"), h.A("name", "longUrl"), h.A("value", form.LongUrl), h.Flag("required"),
-						h.A("placeholder", "https://example.com/some/very/long/path"),
-					})),
-				h.E("div", []h.Attr{h.A("class", "row")},
-					formField("Custom slug (optional)", textInput("customSlug", form.CustomSlug, "my-campaign")),
-					formField("Domain (optional)", textInput("domain", form.Domain, a.Cfg.DefaultDomain.Value()))),
-				formField("Title (optional; auto-resolved when empty)", textInput("title", form.Title, "")),
-				formField("Tags (comma separated)", textInput("tags", form.Tags, "marketing, launch")),
-				formField("Group (limits visibility to its members)", groupInput(user, form.Group)),
-				h.E("div", []h.Attr{h.A("class", "row")},
-					formField("Valid since (UTC)",
-						h.E("input", []h.Attr{h.A("type", "datetime-local"), h.A("name", "validSince"), h.A("value", form.ValidSince)})),
-					formField("Valid until (UTC)",
-						h.E("input", []h.Attr{h.A("type", "datetime-local"), h.A("name", "validUntil"), h.A("value", form.ValidUntil)})),
-					formField("Max visits",
-						h.E("input", []h.Attr{h.A("type", "number"), h.A("name", "maxVisits"), h.A("value", form.MaxVisits), h.A("min", "1")}))),
-				formField("Redirect status", redirectStatusSelect(form.RedirectStatus)),
-				checkbox("forwardQuery", form.ForwardQuery, "Forward query params to the long URL"),
-				checkbox("crawlable", form.Crawlable, "Allow search engines to crawl this short URL"),
-				h.E("div", nil, h.E("button", nil, h.Text("Create short URL"))))),
-	}
+func (a *App) renderCreateForm(w http.ResponseWriter, status int, user *CurrentUser, errorMessage string, form suCreateForm) {
+	a.renderPage(w, status, "shorturl_new", user, "/admin/short-urls", "New short URL", suCreateView{
+		Error:         errorMessage,
+		Form:          form,
+		DefaultDomain: a.Cfg.DefaultDomain.Value(),
+		Group:         newGroupPicker(user, form.Group),
+		StatusOptions: statusOptions(form.RedirectStatus),
+	})
 }
 
 // GET /admin/short-urls/new
 func (a *App) uiCreateShortUrlForm(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
-	respondPage(w, user, "/admin/short-urls", "New short URL",
-		a.suCreateFormContent(user, "", emptySuCreateForm()))
-}
-
-func valueOrEmpty(p *string) string {
-	if p == nil {
-		return ""
-	}
-	return *p
+	a.renderCreateForm(w, http.StatusOK, user, "", emptySuCreateForm())
 }
 
 func optionalStr(v string) *string {
@@ -488,9 +387,7 @@ func (a *App) uiCreateShortUrl(user *CurrentUser, w http.ResponseWriter, r *http
 		http.Redirect(w, r, "/admin/short-urls", http.StatusFound)
 		return
 	}
-	respondHtml(w, http.StatusBadRequest,
-		layoutPage(user, "/admin/short-urls", "New short URL",
-			a.suCreateFormContent(user, serr.Message(), form)))
+	a.renderCreateForm(w, http.StatusBadRequest, user, serr.Message(), form)
 }
 
 // userMayAssignGroup: admins may assign any group; other users only groups
@@ -519,123 +416,34 @@ func conditionLabel(c core.RuleCondition) string {
 	}
 }
 
-func (a *App) suEditPage(user *CurrentUser, detail *data.ShortUrlDetail, tags []string, rules []core.RedirectRule, banner h.Node) []h.Node {
-	shortUrl := ShortUrlFor(a.Cfg, detail.Authority, detail.ShortCode)
-	title := ""
-	if detail.Title != nil {
-		title = *detail.Title
-	}
-	maxVisits := ""
-	if detail.MaxVisits != nil {
-		maxVisits = strconv.FormatInt(*detail.MaxVisits, 10)
-	}
+type suEditView struct {
+	Error              string
+	ShortUrl           string
+	QrUrl              string
+	VisitsUrl          string
+	VisitCount         int64
+	EditAction         string
+	LongUrl            string
+	Title              string
+	Tags               string
+	Group              groupPickerView
+	ValidSince         string
+	ValidUntil         string
+	MaxVisits          string
+	StatusOptions      []statusOptionView
+	ForwardQuery       bool
+	Crawlable          bool
+	Rules              []suRuleView
+	RuleAddAction      string
+	RuleDeleteAction   string
+	DeleteAction       string
+	VisitsDeleteAction string
+}
 
-	rulesSection := h.E("p", []h.Attr{h.A("class", "muted")}, h.Text("No rules configured."))
-	if len(rules) > 0 {
-		var ruleRows []h.Node
-		for _, rule := range rules {
-			var conditionItems []h.Node
-			for _, c := range rule.Conditions {
-				conditionItems = append(conditionItems, h.E("li", nil, h.Text(conditionLabel(c))))
-			}
-			ruleRows = append(ruleRows, h.E("tr", nil,
-				h.E("td", nil, h.Text(strconv.Itoa(rule.Priority))),
-				h.E("td", nil, h.E("ul", []h.Attr{h.A("class", "rule-conditions")}, conditionItems...)),
-				h.E("td", nil, h.E("span", []h.Attr{h.A("class", "truncate")}, h.Text(rule.LongUrl))),
-				h.E("td", []h.Attr{h.A("class", "actions")},
-					h.E("form", []h.Attr{
-						h.A("class", "inline"), h.A("method", "post"),
-						h.A("action", fmt.Sprintf("/admin/short-urls/%d/rules/delete", detail.Id)),
-					},
-						h.E("input", []h.Attr{h.A("type", "hidden"), h.A("name", "priority"), h.A("value", strconv.Itoa(rule.Priority))}),
-						h.E("button", []h.Attr{h.A("class", "danger small")}, h.Text("Remove"))))))
-		}
-		rulesSection = h.E("div", []h.Attr{h.A("class", "table-wrap")},
-			h.E("table", nil,
-				h.E("thead", nil,
-					h.E("tr", nil,
-						h.E("th", nil, h.Text("#")),
-						h.E("th", nil, h.Text("Conditions")),
-						h.E("th", nil, h.Text("Target URL")),
-						h.E("th", nil))),
-				h.E("tbody", nil, ruleRows...)))
-	}
-
-	return []h.Node{
-		h.E("h1", nil, h.Text("Edit short URL")),
-		banner,
-		h.E("div", []h.Attr{h.A("class", "card")},
-			h.E("p", nil,
-				h.E("a", []h.Attr{h.A("class", "mono"), h.A("href", shortUrl), h.A("target", "_blank"), h.A("rel", "noreferrer")},
-					h.Text(shortUrl)),
-				h.Text(" · "),
-				h.E("a", []h.Attr{h.A("href", "/"+detail.ShortCode+"/qr-code?size=300"), h.A("target", "_blank")},
-					h.Text("QR code")),
-				h.Text(" · "),
-				h.E("a", []h.Attr{h.A("href", fmt.Sprintf("/admin/short-urls/%d/visits", detail.Id))},
-					h.Text(fmt.Sprintf("%d visits", detail.VisitCount)))),
-			h.E("form", []h.Attr{
-				h.A("class", "stack"), h.A("method", "post"),
-				h.A("action", fmt.Sprintf("/admin/short-urls/%d/edit", detail.Id)),
-			},
-				formField("Long URL *",
-					h.E("input", []h.Attr{h.A("type", "url"), h.A("name", "longUrl"), h.A("value", detail.LongUrl), h.Flag("required")})),
-				formField("Title", textInput("title", title, "")),
-				formField("Tags (comma separated)", textInput("tags", strings.Join(tags, ", "), "")),
-				formField("Group (limits visibility to its members)", groupInput(user, valueOrEmpty(detail.GroupName))),
-				h.E("div", []h.Attr{h.A("class", "row")},
-					formField("Valid since (UTC)",
-						h.E("input", []h.Attr{h.A("type", "datetime-local"), h.A("name", "validSince"), h.A("value", dateLocalValue(detail.ValidSince))})),
-					formField("Valid until (UTC)",
-						h.E("input", []h.Attr{h.A("type", "datetime-local"), h.A("name", "validUntil"), h.A("value", dateLocalValue(detail.ValidUntil))})),
-					formField("Max visits",
-						h.E("input", []h.Attr{h.A("type", "number"), h.A("name", "maxVisits"), h.A("value", maxVisits), h.A("min", "1")}))),
-				formField("Redirect status", redirectStatusSelect(detail.RedirectStatus)),
-				checkbox("forwardQuery", detail.ForwardQuery, "Forward query params to the long URL"),
-				checkbox("crawlable", detail.Crawlable, "Allow search engines to crawl this short URL"),
-				h.E("div", nil, h.E("button", nil, h.Text("Save changes"))))),
-		h.E("h2", nil, h.Text("Conditional redirect rules")),
-		h.E("div", []h.Attr{h.A("class", "card")},
-			h.E("p", []h.Attr{h.A("class", "muted")},
-				h.Text("Rules are evaluated top-down; the first rule whose conditions all match overrides the long URL.")),
-			rulesSection,
-			h.E("h2", nil, h.Text("Add rule")),
-			h.E("form", []h.Attr{
-				h.A("class", "stack"), h.A("method", "post"),
-				h.A("action", fmt.Sprintf("/admin/short-urls/%d/rules/add", detail.Id)),
-			},
-				formField("Target long URL *",
-					h.E("input", []h.Attr{h.A("type", "url"), h.A("name", "ruleLongUrl"), h.Flag("required")})),
-				h.E("div", []h.Attr{h.A("class", "row")},
-					formField("Device",
-						h.E("select", []h.Attr{h.A("name", "device")},
-							h.E("option", []h.Attr{h.A("value", "")}, h.Text("Any device")),
-							h.E("option", []h.Attr{h.A("value", "android")}, h.Text("Android")),
-							h.E("option", []h.Attr{h.A("value", "ios")}, h.Text("iOS")),
-							h.E("option", []h.Attr{h.A("value", "mobile")}, h.Text("Any mobile")),
-							h.E("option", []h.Attr{h.A("value", "desktop")}, h.Text("Desktop")))),
-					formField("Language (e.g. en or en-GB)", textInput("language", "", "")),
-					formField("IP address / CIDR", textInput("ipAddress", "", "10.0.0.0/8"))),
-				h.E("div", []h.Attr{h.A("class", "row")},
-					formField("Query param name", textInput("queryKey", "", "utm_source")),
-					formField("Query param value", textInput("queryValue", "", "newsletter"))),
-				h.E("div", nil, h.E("button", []h.Attr{h.A("class", "secondary")}, h.Text("Add rule"))))),
-		h.E("h2", nil, h.Text("Danger zone")),
-		h.E("div", []h.Attr{h.A("class", "card")},
-			h.E("form", []h.Attr{
-				h.A("class", "inline"), h.A("method", "post"),
-				h.A("action", fmt.Sprintf("/admin/short-urls/%d/delete", detail.Id)),
-				h.A("onsubmit", "return confirm('Delete this short URL and all its visits?')"),
-			},
-				h.E("button", []h.Attr{h.A("class", "danger")}, h.Text("Delete short URL"))),
-			h.Text(" "),
-			h.E("form", []h.Attr{
-				h.A("class", "inline"), h.A("method", "post"),
-				h.A("action", fmt.Sprintf("/admin/short-urls/%d/visits/delete", detail.Id)),
-				h.A("onsubmit", "return confirm('Delete all visits of this short URL?')"),
-			},
-				h.E("button", []h.Attr{h.A("class", "danger")}, h.Text("Delete its visits")))),
-	}
+type suRuleView struct {
+	Priority   int
+	Conditions []string
+	LongUrl    string
 }
 
 // loadDetailFromPath resolves the {id} route parameter and enforces the
@@ -659,13 +467,7 @@ func (a *App) loadDetailFromPath(user *CurrentUser, w http.ResponseWriter, r *ht
 	return detail
 }
 
-func respondPlainNotFound(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.WriteHeader(http.StatusNotFound)
-	_, _ = w.Write([]byte("Not found"))
-}
-
-func (a *App) respondEditPage(w http.ResponseWriter, status int, user *CurrentUser, detail *data.ShortUrlDetail, banner h.Node) {
+func (a *App) respondEditPage(w http.ResponseWriter, status int, user *CurrentUser, detail *data.ShortUrlDetail, errorMessage string) {
 	tags, err := data.TagsForShortUrl(a.Db, core.ShortUrlID(detail.Id))
 	if err != nil {
 		a.serverError(w, err)
@@ -676,8 +478,41 @@ func (a *App) respondEditPage(w http.ResponseWriter, status int, user *CurrentUs
 		a.serverError(w, err)
 		return
 	}
-	respondHtml(w, status,
-		layoutPage(user, "/admin/short-urls", "Edit short URL", a.suEditPage(user, detail, tags, rules, banner)))
+
+	maxVisits := ""
+	if detail.MaxVisits != nil {
+		maxVisits = strconv.FormatInt(*detail.MaxVisits, 10)
+	}
+	model := suEditView{
+		Error:              errorMessage,
+		ShortUrl:           ShortUrlFor(a.Cfg, detail.Authority, detail.ShortCode),
+		QrUrl:              "/" + detail.ShortCode + "/qr-code?size=300",
+		VisitsUrl:          fmt.Sprintf("/admin/short-urls/%d/visits", detail.Id),
+		VisitCount:         detail.VisitCount,
+		EditAction:         fmt.Sprintf("/admin/short-urls/%d/edit", detail.Id),
+		LongUrl:            detail.LongUrl,
+		Title:              valueOrEmpty(detail.Title),
+		Tags:               strings.Join(tags, ", "),
+		Group:              newGroupPicker(user, valueOrEmpty(detail.GroupName)),
+		ValidSince:         dateLocalValue(detail.ValidSince),
+		ValidUntil:         dateLocalValue(detail.ValidUntil),
+		MaxVisits:          maxVisits,
+		StatusOptions:      statusOptions(detail.RedirectStatus),
+		ForwardQuery:       detail.ForwardQuery,
+		Crawlable:          detail.Crawlable,
+		RuleAddAction:      fmt.Sprintf("/admin/short-urls/%d/rules/add", detail.Id),
+		RuleDeleteAction:   fmt.Sprintf("/admin/short-urls/%d/rules/delete", detail.Id),
+		DeleteAction:       fmt.Sprintf("/admin/short-urls/%d/delete", detail.Id),
+		VisitsDeleteAction: fmt.Sprintf("/admin/short-urls/%d/visits/delete", detail.Id),
+	}
+	for _, rule := range rules {
+		rv := suRuleView{Priority: rule.Priority, LongUrl: rule.LongUrl}
+		for _, c := range rule.Conditions {
+			rv.Conditions = append(rv.Conditions, conditionLabel(c))
+		}
+		model.Rules = append(model.Rules, rv)
+	}
+	a.renderPage(w, status, "shorturl_edit", user, "/admin/short-urls", "Edit short URL", model)
 }
 
 // GET /admin/short-urls/{id}/edit
@@ -686,7 +521,7 @@ func (a *App) uiEditShortUrlForm(user *CurrentUser, w http.ResponseWriter, r *ht
 	if detail == nil {
 		return
 	}
-	a.respondEditPage(w, http.StatusOK, user, detail, h.Empty())
+	a.respondEditPage(w, http.StatusOK, user, detail, "")
 }
 
 // POST /admin/short-urls/{id}/edit
@@ -732,7 +567,7 @@ func (a *App) uiEditShortUrl(user *CurrentUser, w http.ResponseWriter, r *http.R
 			"You can only assign groups you are a member of.")
 	}
 	if serr != nil {
-		a.respondEditPage(w, http.StatusBadRequest, user, detail, alertError(serr.Message()))
+		a.respondEditPage(w, http.StatusBadRequest, user, detail, serr.Message())
 		return
 	}
 	if _, err := a.EditShortUrl(core.ShortUrlID(detail.Id), detail, edit); err != nil {
@@ -770,13 +605,12 @@ func (a *App) uiAddRule(user *CurrentUser, w http.ResponseWriter, r *http.Reques
 
 	target, err := core.NewLongUrl(get("ruleLongUrl"))
 	if err != nil {
-		a.respondEditPage(w, http.StatusBadRequest, user, detail,
-			alertError("Could not add rule: "+err.Error()))
+		a.respondEditPage(w, http.StatusBadRequest, user, detail, "Could not add rule: "+err.Error())
 		return
 	}
 	if len(conditions) == 0 {
 		a.respondEditPage(w, http.StatusBadRequest, user, detail,
-			alertError("A rule needs at least one condition (device, language, query param or IP)."))
+			"A rule needs at least one condition (device, language, query param or IP).")
 		return
 	}
 

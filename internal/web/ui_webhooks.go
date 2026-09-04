@@ -8,7 +8,6 @@ import (
 
 	"github.com/olmesm/gort/internal/core"
 	"github.com/olmesm/gort/internal/data"
-	"github.com/olmesm/gort/internal/h"
 )
 
 // Dots in form field names would be read as nested keys elsewhere; keep the
@@ -17,98 +16,70 @@ func webhookEventFieldName(e core.WebhookEvent) string {
 	return "event_" + strings.ReplaceAll(e.Slug(), ".", "_")
 }
 
-func (a *App) webhooksPageContent(banner h.Node) ([]h.Node, error) {
-	hooks, err := data.ListWebhooks(a.Db)
-	if err != nil {
-		return nil, err
-	}
-
-	var rows []h.Node
-	for _, hook := range hooks {
-		var eventBadges []h.Node
-		for _, e := range strings.Split(hook.Events, ",") {
-			eventBadges = append(eventBadges,
-				h.E("span", []h.Attr{h.A("class", "badge gray")}, h.Text(strings.TrimSpace(e))))
-		}
-		statusBadge := h.E("span", []h.Attr{h.A("class", "badge red")}, h.Text("disabled"))
-		if hook.Enabled {
-			statusBadge = h.E("span", []h.Attr{h.A("class", "badge green")}, h.Text("enabled"))
-		}
-		toggleLabel := "Enable"
-		if hook.Enabled {
-			toggleLabel = "Disable"
-		}
-
-		rows = append(rows, h.E("tr", nil,
-			h.E("td", nil, h.Text(hook.Name)),
-			h.E("td", nil,
-				h.E("span", []h.Attr{h.A("class", "truncate mono")}, h.Text(hook.Url))),
-			h.E("td", nil, eventBadges...),
-			h.E("td", nil, statusBadge),
-			h.E("td", []h.Attr{h.A("class", "actions")},
-				h.E("form", []h.Attr{
-					h.A("class", "inline"), h.A("method", "post"),
-					h.A("action", fmt.Sprintf("/admin/webhooks/%d/toggle", hook.Id)),
-				},
-					h.E("button", []h.Attr{h.A("class", "secondary small")}, h.Text(toggleLabel))),
-				h.Text(" "),
-				h.E("form", []h.Attr{
-					h.A("class", "inline"), h.A("method", "post"),
-					h.A("action", fmt.Sprintf("/admin/webhooks/%d/delete", hook.Id)),
-					h.A("onsubmit", "return confirm('Delete this webhook?')"),
-				},
-					h.E("button", []h.Attr{h.A("class", "danger small")}, h.Text("Delete"))))))
-	}
-
-	var eventChecks []h.Node
-	eventChecks = append(eventChecks, h.E("label", nil, h.Text("Events")))
-	for _, e := range core.AllWebhookEvents {
-		eventChecks = append(eventChecks,
-			checkbox(webhookEventFieldName(e), e == core.EventUrlCreated, e.Slug()))
-	}
-
-	return []h.Node{
-		h.E("h1", nil, h.Text("Webhooks")),
-		h.E("p", []h.Attr{h.A("class", "muted")},
-			h.Text("Webhooks receive signed JSON POSTs when events happen. Payloads carry an X-Gort-Signature header (HMAC-SHA256 of the body with the webhook secret).")),
-		banner,
-		h.E("div", []h.Attr{h.A("class", "table-wrap")},
-			h.E("table", nil,
-				h.E("thead", nil,
-					h.E("tr", nil,
-						h.E("th", nil, h.Text("Name")),
-						h.E("th", nil, h.Text("URL")),
-						h.E("th", nil, h.Text("Events")),
-						h.E("th", nil, h.Text("Status")),
-						h.E("th", nil))),
-				h.E("tbody", nil, rows...))),
-		h.E("h2", nil, h.Text("Create webhook")),
-		h.E("div", []h.Attr{h.A("class", "card")},
-			h.E("form", []h.Attr{h.A("class", "stack"), h.A("method", "post"), h.A("action", "/admin/webhooks")},
-				h.E("div", []h.Attr{h.A("class", "row")},
-					formField("Name", textInput("name", "", "notify-slack")),
-					formField("URL",
-						h.E("input", []h.Attr{
-							h.A("type", "url"), h.A("name", "url"), h.Flag("required"),
-							h.A("placeholder", "https://example.com/hooks/gort"),
-						}))),
-				h.E("div", nil, eventChecks...),
-				h.E("div", nil, h.E("button", nil, h.Text("Create webhook"))))),
-	}, nil
+type webhooksView struct {
+	Error       string
+	Secret      string
+	Rows        []webhookRowView
+	EventChecks []eventCheckView
 }
 
-func (a *App) respondWebhooksPage(w http.ResponseWriter, user *CurrentUser, banner h.Node) {
-	content, err := a.webhooksPageContent(banner)
+type webhookRowView struct {
+	Name         string
+	Url          string
+	Events       []string
+	Enabled      bool
+	ToggleAction string
+	DeleteAction string
+}
+
+type eventCheckView struct {
+	Field   string
+	Label   string
+	Checked bool
+}
+
+func (a *App) webhooksViewModel(errorMessage, secret string) (webhooksView, error) {
+	hooks, err := data.ListWebhooks(a.Db)
+	if err != nil {
+		return webhooksView{}, err
+	}
+	model := webhooksView{Error: errorMessage, Secret: secret}
+	for _, hook := range hooks {
+		var events []string
+		for _, e := range strings.Split(hook.Events, ",") {
+			events = append(events, strings.TrimSpace(e))
+		}
+		model.Rows = append(model.Rows, webhookRowView{
+			Name:         hook.Name,
+			Url:          hook.Url,
+			Events:       events,
+			Enabled:      hook.Enabled,
+			ToggleAction: fmt.Sprintf("/admin/webhooks/%d/toggle", hook.Id),
+			DeleteAction: fmt.Sprintf("/admin/webhooks/%d/delete", hook.Id),
+		})
+	}
+	for _, e := range core.AllWebhookEvents {
+		model.EventChecks = append(model.EventChecks, eventCheckView{
+			Field:   webhookEventFieldName(e),
+			Label:   e.Slug(),
+			Checked: e == core.EventUrlCreated,
+		})
+	}
+	return model, nil
+}
+
+func (a *App) renderWebhooksPage(w http.ResponseWriter, user *CurrentUser, errorMessage, secret string) {
+	model, err := a.webhooksViewModel(errorMessage, secret)
 	if err != nil {
 		a.serverError(w, err)
 		return
 	}
-	respondPage(w, user, "/admin/webhooks", "Webhooks", content)
+	a.renderPage(w, http.StatusOK, "webhooks", user, "/admin/webhooks", "Webhooks", model)
 }
 
 // GET /admin/webhooks (admin)
 func (a *App) uiListWebhooks(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
-	a.respondWebhooksPage(w, user, h.Empty())
+	a.renderWebhooksPage(w, user, "", "")
 }
 
 // POST /admin/webhooks (admin) — shows the signing secret once.
@@ -126,8 +97,7 @@ func (a *App) uiCreateWebhook(user *CurrentUser, w http.ResponseWriter, r *http.
 		}
 	}
 	if name == "" || !isHttpUrl(hookUrl) || len(events) == 0 {
-		a.respondWebhooksPage(w, user,
-			alertError("Name, a valid http(s) URL and at least one event are required."))
+		a.renderWebhooksPage(w, user, "Name, a valid http(s) URL and at least one event are required.", "")
 		return
 	}
 	secret := generateWebhookSecret()
@@ -135,11 +105,7 @@ func (a *App) uiCreateWebhook(user *CurrentUser, w http.ResponseWriter, r *http.
 		a.serverError(w, err)
 		return
 	}
-	banner := alertSuccess(
-		h.Text("Webhook created — its signing secret (copy it now, it will not be shown again): "),
-		h.E("br", nil),
-		h.E("strong", []h.Attr{h.A("class", "mono")}, h.Text(secret)))
-	a.respondWebhooksPage(w, user, banner)
+	a.renderWebhooksPage(w, user, "", secret)
 }
 
 // POST /admin/webhooks/{id}/toggle (admin)

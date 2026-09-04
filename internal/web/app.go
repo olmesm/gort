@@ -6,6 +6,7 @@ import (
 	"embed"
 	"encoding/base64"
 	"fmt"
+	"html/template"
 	"log/slog"
 	"net/http"
 	"os"
@@ -31,6 +32,8 @@ type App struct {
 
 	sessionKey    []byte
 	oidc          *oidcClient
+	baseTemplates *template.Template
+	pages         map[string]*template.Template
 	titleClient   *http.Client
 	webhookClient *http.Client
 	geoClient     *http.Client
@@ -71,6 +74,7 @@ func NewApp(cfg *AppConfig, logger *slog.Logger) (*App, error) {
 		limiter:       newRateLimiter(cfg.RateLimitPerMinute),
 	}
 	a.Geo = NewGeoIpService(cfg, logger)
+	a.baseTemplates, a.pages = parseTemplates()
 	if cfg.OidcEnabled() {
 		if cfg.OidcClientID == "" {
 			return nil, fmt.Errorf("GORT_OIDC_ISSUER is set but GORT_OIDC_CLIENT_ID is empty")

@@ -3,12 +3,12 @@ package web
 import (
 	"fmt"
 	"html"
+	"html/template"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/olmesm/gort/internal/data"
-	gh "github.com/olmesm/gort/internal/h"
 )
 
 // Server-rendered SVG charts (no client-side JS needed).
@@ -19,12 +19,12 @@ func inv(v float64) string {
 
 // chartVisitsPerDay renders daily visit counts as a filled line chart.
 // Fills gaps between days with zeroes.
-func chartVisitsPerDay(series []data.DayCount) gh.Node {
+func chartVisitsPerDay(series []data.DayCount) template.HTML {
 	const width, height = 720.0, 200.0
 	const padL, padR, padT, padB = 40.0, 10.0, 10.0, 22.0
 
 	if len(series) == 0 {
-		return gh.E("div", []gh.Attr{gh.A("class", "muted")}, gh.Text("No visits recorded in this period yet."))
+		return `<div class="muted">No visits recorded in this period yet.</div>`
 	}
 
 	// Expand to a contiguous day range so gaps show as zero.
@@ -130,36 +130,35 @@ func chartVisitsPerDay(series []data.DayCount) gh.Node {
 	}
 
 	sb.WriteString("</svg>")
-	return gh.Raw(sb.String())
+	return template.HTML(sb.String())
 }
 
-// chartBarList renders a horizontal bar list (label + count), scaled to the
-// max value.
-func chartBarList(rows []data.LabelCount) gh.Node {
-	if len(rows) == 0 {
-		return gh.E("div", []gh.Attr{gh.A("class", "muted")}, gh.Text("No data yet."))
-	}
+// barRowView is one bar in the "bar-list" template partial.
+type barRowView struct {
+	Label string
+	Pct   template.CSS
+	Count int64
+}
+
+// barRows scales counts against the max value for the bar-list partial.
+func barRows(rows []data.LabelCount) []barRowView {
 	maxV := int64(1)
 	for _, row := range rows {
 		if row.Count > maxV {
 			maxV = row.Count
 		}
 	}
-	var trs []gh.Node
-	for _, row := range rows {
+	out := make([]barRowView, len(rows))
+	for i, row := range rows {
 		label := "Unknown"
 		if row.Label != nil {
 			label = *row.Label
 		}
-		pct := float64(row.Count) / float64(maxV) * 100.0
-		trs = append(trs, gh.E("tr", nil,
-			gh.E("td", []gh.Attr{gh.A("style", "width:35%")}, gh.Text(label)),
-			gh.E("td", nil,
-				gh.E("div", []gh.Attr{gh.A("style", fmt.Sprintf(
-					"background:rgba(129,140,248,0.35);border-radius:4px;height:1.1rem;width:%s%%;min-width:2px",
-					inv(pct)))})),
-			gh.E("td", []gh.Attr{gh.A("style", "width:4rem;text-align:right")},
-				gh.Text(strconv.FormatInt(row.Count, 10)))))
+		out[i] = barRowView{
+			Label: label,
+			Pct:   template.CSS(inv(float64(row.Count) / float64(maxV) * 100.0)),
+			Count: row.Count,
+		}
 	}
-	return gh.E("table", nil, gh.E("tbody", nil, trs...))
+	return out
 }

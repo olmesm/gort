@@ -1,0 +1,177 @@
+{{define "pager"}}
+<div class="pager">
+  {{- if .PrevUrl}}<a class="btn secondary small" href="{{.PrevUrl}}">← Prev</a>{{end}}
+  <span class="info">Page {{.CurrentPage}} of {{.TotalPages}} · {{.TotalItems}} items</span>
+  {{- if .NextUrl}}<a class="btn secondary small" href="{{.NextUrl}}">Next →</a>{{end}}
+</div>
+{{end}}
+
+{{define "sort-header"}}<th><a href="{{.Url}}" hx-get="{{.Url}}" hx-target="#su-table" hx-swap="outerHTML" hx-push-url="true">{{.Label}}</a></th>{{end}}
+
+{{define "su-table"}}
+<div id="su-table">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          {{template "sort-header" .HeadShortCode}}
+          {{template "sort-header" .HeadTitle}}
+          {{template "sort-header" .HeadLongUrl}}
+          <th>Tags</th>
+          <th>Group</th>
+          {{template "sort-header" .HeadVisits}}
+          {{template "sort-header" .HeadCreated}}
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{- range .Rows}}
+        <tr>
+          <td><a class="mono" href="{{.ShortUrl}}" target="_blank" rel="noreferrer">{{.Display}}</a></td>
+          <td><span class="truncate" style="max-width:200px">{{.Title}}</span></td>
+          <td><a class="truncate" href="{{.LongUrl}}" target="_blank" rel="noreferrer">{{.LongUrl}}</a></td>
+          <td>{{range .Tags}}<span class="badge">{{.}}</span>{{end}}</td>
+          <td>{{if .Group}}<span class="badge gray">{{.Group}}</span>{{else}}—{{end}}</td>
+          <td><a href="{{.VisitsUrl}}">{{.VisitsLabel}}</a></td>
+          <td class="muted">{{.Created}}</td>
+          <td class="actions"><a class="btn secondary small" href="{{.EditUrl}}">Edit</a></td>
+        </tr>
+        {{- end}}
+      </tbody>
+    </table>
+  </div>
+  {{template "pager" .Pager}}
+</div>
+{{end}}
+
+{{define "tag-table"}}
+<div id="tag-table">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Tag</th><th>Short URLs</th><th>Visits</th><th>Rename</th><th></th></tr>
+      </thead>
+      <tbody>
+        {{- range .Rows}}
+        <tr>
+          <td><span class="badge">{{.Name}}</span></td>
+          <td><a href="{{.FilterUrl}}">{{.ShortUrlCount}}</a></td>
+          <td>{{.VisitCount}}</td>
+          <td>
+            <form class="inline" method="post" action="/admin/tags/rename">
+              <input type="hidden" name="oldName" value="{{.Name}}">
+              <input type="text" name="newName" value="{{.Name}}" style="width:10rem">
+              <button class="secondary small">Rename</button>
+            </form>
+          </td>
+          <td class="actions">
+            <form class="inline" method="post" action="/admin/tags/delete" onsubmit="return confirm('Delete this tag? Short URLs keep working.')">
+              <input type="hidden" name="name" value="{{.Name}}">
+              <button class="danger small">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {{- end}}
+      </tbody>
+    </table>
+  </div>
+  {{template "pager" .Pager}}
+</div>
+{{end}}
+
+{{define "group-picker"}}
+{{- if .IsAdmin -}}
+<input type="text" name="group" value="{{.Current}}" placeholder="team-a (optional)">
+{{- else -}}
+<select name="group">
+  <option value="">No group</option>
+  {{- range .Options}}
+  <option value="{{.}}"{{if eq . $.Current}} selected{{end}}>{{.}}</option>
+  {{- end}}
+</select>
+{{- end}}
+{{end}}
+
+{{define "status-select"}}
+<select name="redirectStatus">
+  {{- range .}}
+  <option value="{{.Code}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>
+  {{- end}}
+</select>
+{{end}}
+
+{{define "bar-list"}}
+{{- if .}}
+<table>
+  <tbody>
+    {{- range .}}
+    <tr>
+      <td style="width:35%">{{.Label}}</td>
+      <td><div style="background:rgba(129,140,248,0.35);border-radius:4px;height:1.1rem;width:{{.Pct}}%;min-width:2px"></div></td>
+      <td style="width:4rem;text-align:right">{{.Count}}</td>
+    </tr>
+    {{- end}}
+  </tbody>
+</table>
+{{- else}}
+<div class="muted">No data yet.</div>
+{{- end}}
+{{end}}
+
+{{define "analytics"}}
+<form class="toolbar" method="get" action="{{.BasePath}}">
+  <div>
+    <label>From (UTC)</label>
+    <input type="datetime-local" name="startDate" value="{{.StartVal}}">
+  </div>
+  <div>
+    <label>To (UTC)</label>
+    <input type="datetime-local" name="endDate" value="{{.EndVal}}">
+  </div>
+  <button class="secondary">Apply</button>
+</form>
+<div class="card chart-card">
+  <h2 style="margin-top:0">Visits per day</h2>
+  {{.Chart}}
+</div>
+<div class="split">
+  {{- range .Breakdowns}}
+  <div class="card">
+    <h2 style="margin-top:0">{{.Title}}</h2>
+    {{template "bar-list" .Rows}}
+  </div>
+  {{- end}}
+</div>
+<h2>Visits</h2>
+<div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>When (UTC)</th>
+          {{- if .ShowVisitedUrl}}<th>Visited URL</th>{{end}}
+          <th>Location</th>
+          <th>Browser / OS</th>
+          <th>Device</th>
+          <th>Referrer</th>
+          <th>Bot?</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{- range .Visits}}
+        <tr>
+          <td class="muted">{{.When}}</td>
+          {{- if $.ShowVisitedUrl}}<td><span class="truncate mono" style="max-width:260px">{{.VisitedUrl}}</span></td>{{end}}
+          <td>{{.Location}}</td>
+          <td>{{.BrowserOs}}</td>
+          <td>{{.Device}}</td>
+          <td>{{if .Referer}}<span class="truncate" style="max-width:220px">{{.Referer}}</span>{{else}}—{{end}}</td>
+          <td>{{if .IsBot}}<span class="badge red">bot</span>{{end}}</td>
+        </tr>
+        {{- end}}
+      </tbody>
+    </table>
+  </div>
+  {{template "pager" .Pager}}
+</div>
+{{end}}

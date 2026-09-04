@@ -1,0 +1,35 @@
+{{define "content"}}{{with .Data}}
+<h1>Overview</h1>
+{{- if .GeoWarning}}
+<div class="alert warning">Geolocation is off: set GORT_GEOLITE_LICENSE_KEY to enrich visits with country and city data.</div>
+{{- end}}
+<div class="stat-grid">
+  <div class="stat"><div class="num">{{.Stats.ShortUrlCount}}</div><div class="label"><a href="/admin/short-urls">Short URLs</a></div></div>
+  <div class="stat"><div class="num">{{.Stats.VisitCount}}</div><div class="label">Visits</div></div>
+  <div class="stat"><div class="num">{{.Stats.OrphanVisitCount}}</div><div class="label"><a href="/admin/visits/orphan">Orphan visits</a></div></div>
+  <div class="stat"><div class="num">{{.Stats.TagCount}}</div><div class="label"><a href="/admin/tags">Tags</a></div></div>
+  <div class="stat"><div class="num">{{.Stats.BotVisitCount}}</div><div class="label">Bot visits</div></div>
+</div>
+<div class="card chart-card" style="margin-top:1rem">
+  <h2 style="margin-top:0">Visits — last 30 days</h2>
+  {{.Chart}}
+</div>
+<h2>Latest short URLs</h2>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Short URL</th><th>Long URL</th><th>Visits</th><th>Created (UTC)</th></tr>
+    </thead>
+    <tbody>
+      {{- range .Recent}}
+      <tr>
+        <td><a class="mono" href="{{.EditUrl}}">{{.Display}}</a></td>
+        <td><span class="truncate">{{.LongUrl}}</span></td>
+        <td>{{.Visits}}</td>
+        <td class="muted">{{.Created}}</td>
+      </tr>
+      {{- end}}
+    </tbody>
+  </table>
+</div>
+{{end}}{{end}}

@@ -1,0 +1,35 @@
+{{define "layout" -}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} · Gort</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/htmx.min.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/admin">Gort</a>
+    <nav>
+      <a href="/admin"{{if active .Path "/admin"}} class="active"{{end}}>Overview</a>
+      <a href="/admin/short-urls"{{if active .Path "/admin/short-urls"}} class="active"{{end}}>Short URLs</a>
+      <a href="/admin/tags"{{if active .Path "/admin/tags"}} class="active"{{end}}>Tags</a>
+      <a href="/admin/domains"{{if active .Path "/admin/domains"}} class="active"{{end}}>Domains</a>
+      <a href="/admin/visits/orphan"{{if active .Path "/admin/visits/orphan"}} class="active"{{end}}>Orphan visits</a>
+      {{- if .User.IsAdmin}}
+      <a href="/admin/api-keys"{{if active .Path "/admin/api-keys"}} class="active"{{end}}>API keys</a>
+      <a href="/admin/webhooks"{{if active .Path "/admin/webhooks"}} class="active"{{end}}>Webhooks</a>
+      <a href="/admin/users"{{if active .Path "/admin/users"}} class="active"{{end}}>Users</a>
+      {{- end}}
+    </nav>
+    <div class="spacer"></div>
+    <span class="who">{{.User.Username}}</span>
+    <form class="inline" method="post" action="/admin/logout">
+      <button class="secondary small">Log out</button>
+    </form>
+  </header>
+  <main class="container">{{template "content" .}}</main>
+</body>
+</html>
+{{- end}}

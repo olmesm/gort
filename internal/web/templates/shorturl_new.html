@@ -1,0 +1,63 @@
+{{define "content"}}{{with .Data}}
+<h1>New short URL</h1>
+{{- if .Error}}
+<div class="alert error">{{.Error}}</div>
+{{- end}}
+<div class="card">
+  <form class="stack" method="post" action="/admin/short-urls/new">
+    <div>
+      <label>Long URL *</label>
+      <input type="url" name="longUrl" value="{{.Form.LongUrl}}" required placeholder="https://example.com/some/very/long/path">
+    </div>
+    <div class="row">
+      <div>
+        <label>Custom slug (optional)</label>
+        <input type="text" name="customSlug" value="{{.Form.CustomSlug}}" placeholder="my-campaign">
+      </div>
+      <div>
+        <label>Domain (optional)</label>
+        <input type="text" name="domain" value="{{.Form.Domain}}" placeholder="{{.DefaultDomain}}">
+      </div>
+    </div>
+    <div>
+      <label>Title (optional; auto-resolved when empty)</label>
+      <input type="text" name="title" value="{{.Form.Title}}">
+    </div>
+    <div>
+      <label>Tags (comma separated)</label>
+      <input type="text" name="tags" value="{{.Form.Tags}}" placeholder="marketing, launch">
+    </div>
+    <div>
+      <label>Group (limits visibility to its members)</label>
+      {{template "group-picker" .Group}}
+    </div>
+    <div class="row">
+      <div>
+        <label>Valid since (UTC)</label>
+        <input type="datetime-local" name="validSince" value="{{.Form.ValidSince}}">
+      </div>
+      <div>
+        <label>Valid until (UTC)</label>
+        <input type="datetime-local" name="validUntil" value="{{.Form.ValidUntil}}">
+      </div>
+      <div>
+        <label>Max visits</label>
+        <input type="number" name="maxVisits" value="{{.Form.MaxVisits}}" min="1">
+      </div>
+    </div>
+    <div>
+      <label>Redirect status</label>
+      {{template "status-select" .StatusOptions}}
+    </div>
+    <div class="checkbox">
+      <input type="checkbox" name="forwardQuery" id="forwardQuery" value="true"{{if .Form.ForwardQuery}} checked{{end}}>
+      <label for="forwardQuery">Forward query params to the long URL</label>
+    </div>
+    <div class="checkbox">
+      <input type="checkbox" name="crawlable" id="crawlable" value="true"{{if .Form.Crawlable}} checked{{end}}>
+      <label for="crawlable">Allow search engines to crawl this short URL</label>
+    </div>
+    <div><button>Create short URL</button></div>
+  </form>
+</div>
+{{end}}{{end}}

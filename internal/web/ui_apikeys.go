@@ -9,17 +9,35 @@ import (
 
 	"github.com/olmesm/gort/internal/core"
 	"github.com/olmesm/gort/internal/data"
-	"github.com/olmesm/gort/internal/h"
 )
 
-func (a *App) apiKeysPageContent(banner h.Node) ([]h.Node, error) {
+type apiKeysView struct {
+	Error    string
+	PlainKey string
+	Rows     []apiKeyRowView
+	Domains  []string
+}
+
+type apiKeyRowView struct {
+	Name         string
+	Role         string
+	Domain       string
+	Expired      bool
+	Enabled      bool
+	Expires      string
+	Created      string
+	ToggleAction string
+	DeleteAction string
+}
+
+func (a *App) apiKeysViewModel(errorMessage, plainKey string) (apiKeysView, error) {
 	keys, err := data.ListApiKeys(a.Db)
 	if err != nil {
-		return nil, err
+		return apiKeysView{}, err
 	}
 	domains, err := data.ListDomains(a.Db)
 	if err != nil {
-		return nil, err
+		return apiKeysView{}, err
 	}
 	authorityOf := func(id *int64) string {
 		if id == nil {
@@ -33,101 +51,42 @@ func (a *App) apiKeysPageContent(banner h.Node) ([]h.Node, error) {
 		return "—"
 	}
 
-	var rows []h.Node
+	model := apiKeysView{Error: errorMessage, PlainKey: plainKey}
+	for _, d := range domains {
+		model.Domains = append(model.Domains, d.Authority)
+	}
 	for _, k := range keys {
-		expired := k.ExpiresAt != nil && !k.ExpiresAt.After(time.Now().UTC())
-		name := "—"
-		if k.Name != nil {
-			name = *k.Name
-		}
 		expires := "never"
 		if k.ExpiresAt != nil {
 			expires = formatDateTime(*k.ExpiresAt)
 		}
-		var statusBadge h.Node
-		switch {
-		case expired:
-			statusBadge = h.E("span", []h.Attr{h.A("class", "badge red")}, h.Text("expired"))
-		case k.Enabled:
-			statusBadge = h.E("span", []h.Attr{h.A("class", "badge green")}, h.Text("enabled"))
-		default:
-			statusBadge = h.E("span", []h.Attr{h.A("class", "badge red")}, h.Text("disabled"))
-		}
-		toggleLabel := "Enable"
-		if k.Enabled {
-			toggleLabel = "Disable"
-		}
-
-		rows = append(rows, h.E("tr", nil,
-			h.E("td", nil, h.Text(name)),
-			h.E("td", nil, h.E("span", []h.Attr{h.A("class", "badge gray")}, h.Text(k.Role))),
-			h.E("td", nil, h.Text(authorityOf(k.DomainId))),
-			h.E("td", nil, statusBadge),
-			h.E("td", []h.Attr{h.A("class", "muted")}, h.Text(expires)),
-			h.E("td", []h.Attr{h.A("class", "muted")}, h.Text(formatDateTime(k.CreatedAt))),
-			h.E("td", []h.Attr{h.A("class", "actions")},
-				h.E("form", []h.Attr{
-					h.A("class", "inline"), h.A("method", "post"),
-					h.A("action", fmt.Sprintf("/admin/api-keys/%d/toggle", k.Id)),
-				},
-					h.E("button", []h.Attr{h.A("class", "secondary small")}, h.Text(toggleLabel))),
-				h.Text(" "),
-				h.E("form", []h.Attr{
-					h.A("class", "inline"), h.A("method", "post"),
-					h.A("action", fmt.Sprintf("/admin/api-keys/%d/delete", k.Id)),
-					h.A("onsubmit", "return confirm('Delete this API key?')"),
-				},
-					h.E("button", []h.Attr{h.A("class", "danger small")}, h.Text("Delete"))))))
+		model.Rows = append(model.Rows, apiKeyRowView{
+			Name:         orDash(k.Name),
+			Role:         k.Role,
+			Domain:       authorityOf(k.DomainId),
+			Expired:      k.ExpiresAt != nil && !k.ExpiresAt.After(time.Now().UTC()),
+			Enabled:      k.Enabled,
+			Expires:      expires,
+			Created:      formatDateTime(k.CreatedAt),
+			ToggleAction: fmt.Sprintf("/admin/api-keys/%d/toggle", k.Id),
+			DeleteAction: fmt.Sprintf("/admin/api-keys/%d/delete", k.Id),
+		})
 	}
-
-	domainOptions := []h.Node{h.E("option", []h.Attr{h.A("value", "")}, h.Text("—"))}
-	for _, d := range domains {
-		domainOptions = append(domainOptions,
-			h.E("option", []h.Attr{h.A("value", d.Authority)}, h.Text(d.Authority)))
-	}
-
-	return []h.Node{
-		h.E("h1", nil, h.Text("API keys")),
-		h.E("p", []h.Attr{h.A("class", "muted")},
-			h.Text("Keys authenticate REST API calls via the X-Api-Key header. Admin keys can do everything; author keys only see short URLs they created; domain keys are limited to one domain.")),
-		banner,
-		h.E("div", []h.Attr{h.A("class", "table-wrap")},
-			h.E("table", nil,
-				h.E("thead", nil,
-					h.E("tr", nil,
-						h.E("th", nil, h.Text("Name")),
-						h.E("th", nil, h.Text("Role")),
-						h.E("th", nil, h.Text("Domain")),
-						h.E("th", nil, h.Text("Status")),
-						h.E("th", nil, h.Text("Expires (UTC)")),
-						h.E("th", nil, h.Text("Created (UTC)")),
-						h.E("th", nil))),
-				h.E("tbody", nil, rows...))),
-		h.E("h2", nil, h.Text("Create API key")),
-		h.E("div", []h.Attr{h.A("class", "card")},
-			h.E("form", []h.Attr{h.A("class", "row"), h.A("method", "post"), h.A("action", "/admin/api-keys")},
-				formField("Name", textInput("name", "", "ci-deploy")),
-				formField("Role",
-					h.E("select", []h.Attr{h.A("name", "role")},
-						h.E("option", []h.Attr{h.A("value", "admin")}, h.Text("admin")),
-						h.E("option", []h.Attr{h.A("value", "author")}, h.Text("author")),
-						h.E("option", []h.Attr{h.A("value", "domain")}, h.Text("domain")))),
-				formField("Domain (for domain role)",
-					h.E("select", []h.Attr{h.A("name", "domain")}, domainOptions...)),
-				formField("Expires (UTC, optional)",
-					h.E("input", []h.Attr{h.A("type", "datetime-local"), h.A("name", "expiresAt")})),
-				h.E("div", nil, h.E("button", nil, h.Text("Create"))))),
-	}, nil
+	return model, nil
 }
 
-// GET /admin/api-keys (admin)
-func (a *App) uiListApiKeys(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
-	content, err := a.apiKeysPageContent(h.Empty())
+func (a *App) renderApiKeysPage(w http.ResponseWriter, user *CurrentUser, errorMessage, plainKey string) {
+	model, err := a.apiKeysViewModel(errorMessage, plainKey)
 	if err != nil {
 		a.serverError(w, err)
 		return
 	}
-	respondPage(w, user, "/admin/api-keys", "API keys", content)
+	a.renderPage(w, http.StatusOK, "apikeys", user, "/admin/api-keys", "API keys", model)
+}
+
+// GET /admin/api-keys (admin)
+func (a *App) uiListApiKeys(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
+	a.renderApiKeysPage(w, user, "", "")
 }
 
 // POST /admin/api-keys (admin) — shows the plaintext key once.
@@ -151,28 +110,17 @@ func (a *App) uiCreateApiKey(user *CurrentUser, w http.ResponseWriter, r *http.R
 	}
 
 	var role core.ApiKeyRole
-	roleError := ""
 	switch r.PostFormValue("role") {
 	case "author":
 		role = core.AuthorRole()
 	case "domain":
 		if domain == nil {
-			roleError = "Domain-role keys need a domain."
-		} else {
-			role = core.DomainRole(core.DomainID(domain.Id))
-		}
-	default:
-		role = core.AdminRole()
-	}
-
-	if roleError != "" {
-		content, err := a.apiKeysPageContent(alertError(roleError))
-		if err != nil {
-			a.serverError(w, err)
+			a.renderApiKeysPage(w, user, "Domain-role keys need a domain.", "")
 			return
 		}
-		respondPage(w, user, "/admin/api-keys", "API keys", content)
-		return
+		role = core.DomainRole(core.DomainID(domain.Id))
+	default:
+		role = core.AdminRole()
 	}
 
 	var expiresAt *time.Time
@@ -185,16 +133,7 @@ func (a *App) uiCreateApiKey(user *CurrentUser, w http.ResponseWriter, r *http.R
 		a.serverError(w, err)
 		return
 	}
-	banner := alertSuccess(
-		h.Text("API key created — copy it now, it will not be shown again: "),
-		h.E("br", nil),
-		h.E("strong", []h.Attr{h.A("class", "mono")}, h.Text(plainKey)))
-	content, err := a.apiKeysPageContent(banner)
-	if err != nil {
-		a.serverError(w, err)
-		return
-	}
-	respondPage(w, user, "/admin/api-keys", "API keys", content)
+	a.renderApiKeysPage(w, user, "", plainKey)
 }
 
 // POST /admin/api-keys/{id}/toggle (admin)

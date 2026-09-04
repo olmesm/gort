@@ -1,0 +1,47 @@
+{{define "content"}}{{with .Data}}
+<h1>Domains</h1>
+<p class="muted">Short URLs are unique per domain. Point extra domains at this server and register them here (or let them auto-register on first use).</p>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Domain</th><th>Short URLs</th><th>Visits</th><th>Not-found redirects (base / 404 / invalid)</th><th></th></tr>
+    </thead>
+    <tbody>
+      {{- range .Rows}}
+      <tr>
+        <td><span class="mono">{{.Authority}}</span>{{if .IsDefault}} <span class="badge green">default</span>{{end}}</td>
+        <td>{{.ShortUrlCount}}</td>
+        <td>{{.VisitCount}}</td>
+        <td>
+          <form method="post" action="{{.RedirectsAction}}" class="stack" style="max-width:100%">
+            <div class="row">
+              <input type="url" name="baseUrlRedirect" placeholder="Base URL redirect" value="{{.BaseUrlRedirect}}">
+              <input type="url" name="regular404Redirect" placeholder="Regular 404 redirect" value="{{.Regular404Redirect}}">
+              <input type="url" name="invalidShortUrlRedirect" placeholder="Invalid short URL redirect" value="{{.InvalidShortUrlRedirect}}">
+              <button class="secondary small">Save</button>
+            </div>
+          </form>
+        </td>
+        <td class="actions">
+          {{- if not .IsDefault}}
+          <form class="inline" method="post" action="{{.DeleteAction}}" onsubmit="return confirm('Delete this domain and ALL its short URLs?')">
+            <button class="danger small">Delete</button>
+          </form>
+          {{- end}}
+        </td>
+      </tr>
+      {{- end}}
+    </tbody>
+  </table>
+</div>
+<h2>Add domain</h2>
+<div class="card">
+  <form class="row" method="post" action="/admin/domains">
+    <div>
+      <label>Authority (host or host:port)</label>
+      <input type="text" name="authority" value="" placeholder="links.example.com">
+    </div>
+    <div><button>Add domain</button></div>
+  </form>
+</div>
+{{end}}{{end}}

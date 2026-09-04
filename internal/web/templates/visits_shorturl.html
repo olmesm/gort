@@ -1,0 +1,8 @@
+{{define "content"}}{{with .Data}}
+<h1>Visits — <span class="mono">{{.Display}}</span></h1>
+<p>
+  <a href="{{.EditUrl}}">← Back to edit</a> ·
+  <a href="{{.ShortUrl}}" target="_blank" rel="noreferrer">{{.LongUrl}}</a>
+</p>
+{{template "analytics" .Analytics}}
+{{end}}{{end}}

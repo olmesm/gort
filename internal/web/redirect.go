@@ -8,51 +8,19 @@ import (
 
 	"github.com/olmesm/gort/internal/core"
 	"github.com/olmesm/gort/internal/data"
-	"github.com/olmesm/gort/internal/h"
 )
 
 // The public-facing side: short URL redirects, base URL, robots.txt, QR
 // codes.
 
-func notFoundPage(message string) string {
-	return h.Document(h.E("html", []h.Attr{h.A("lang", "en")},
-		h.E("head", nil,
-			h.E("meta", []h.Attr{h.A("charset", "utf-8")}),
-			h.E("title", nil, h.Text("Not found")),
-			h.E("style", nil, h.Raw(
-				"body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#0b0d13;color:#e7eaf3}"+
-					"main{text-align:center;padding:2rem}h1{font-size:4rem;margin:0}p{color:#6b7385}"))),
-		h.E("body", nil,
-			h.E("main", nil,
-				h.E("h1", nil, h.Text("404")),
-				h.E("p", nil, h.Text(message))))))
-}
-
-func respondNotFound(w http.ResponseWriter, message string) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusNotFound)
-	_, _ = w.Write([]byte(notFoundPage(message)))
+func (a *App) respondNotFound(w http.ResponseWriter, message string) {
+	a.renderShared(w, http.StatusNotFound, "notfound", message)
 }
 
 // redirectWith redirects with an arbitrary 3xx status code.
 func redirectWith(w http.ResponseWriter, status core.RedirectStatus, location string) {
 	w.Header().Set("Location", location)
 	w.WriteHeader(status.Code())
-}
-
-func landingPage() string {
-	return h.Document(h.E("html", []h.Attr{h.A("lang", "en")},
-		h.E("head", nil,
-			h.E("meta", []h.Attr{h.A("charset", "utf-8")}),
-			h.E("title", nil, h.Text("Gort")),
-			h.E("style", nil, h.Raw(
-				"body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#0b0d13;color:#e7eaf3}"+
-					"main{text-align:center;padding:2rem}a{color:#818cf8}"))),
-		h.E("body", nil,
-			h.E("main", nil,
-				h.E("h1", nil, h.Text("Gort")),
-				h.E("p", nil, h.Text("A self-hosted URL shortener.")),
-				h.E("p", nil, h.E("a", []h.Attr{h.A("href", "/admin")}, h.Text("Open the dashboard")))))))
 }
 
 // GET /rest/health — no auth; checks database connectivity.
@@ -85,8 +53,7 @@ func (a *App) handleBaseUrl(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, target, http.StatusFound)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte(landingPage()))
+	a.renderShared(w, http.StatusOK, "landing", nil)
 }
 
 // GET /robots.txt — disallow everything except crawlable short URLs and the
@@ -120,7 +87,7 @@ func (a *App) handleQrCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if shortUrl == nil {
-		respondNotFound(w, "There is no short URL to encode.")
+		a.respondNotFound(w, "There is no short URL to encode.")
 		return
 	}
 	q := r.URL.Query()
@@ -191,7 +158,7 @@ func (a *App) handleInvalid(w http.ResponseWriter, r *http.Request, slug string)
 		http.Redirect(w, r, target, http.StatusFound)
 		return
 	}
-	respondNotFound(w, "This short URL does not exist.")
+	a.respondNotFound(w, "This short URL does not exist.")
 }
 
 // GET /{...} — the redirect hot path.

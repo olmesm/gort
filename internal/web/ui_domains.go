@@ -8,8 +8,29 @@ import (
 
 	"github.com/olmesm/gort/internal/core"
 	"github.com/olmesm/gort/internal/data"
-	"github.com/olmesm/gort/internal/h"
 )
+
+type domainsView struct {
+	Rows []domainRowView
+}
+
+type domainRowView struct {
+	Authority               string
+	IsDefault               bool
+	ShortUrlCount           int64
+	VisitCount              int64
+	BaseUrlRedirect         string
+	Regular404Redirect      string
+	InvalidShortUrlRedirect string
+	RedirectsAction         string
+	DeleteAction            string
+}
+
+type messageView struct {
+	Error     string
+	BackUrl   string
+	BackLabel string
+}
 
 // GET /admin/domains (admin)
 func (a *App) uiListDomains(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
@@ -18,79 +39,29 @@ func (a *App) uiListDomains(user *CurrentUser, w http.ResponseWriter, r *http.Re
 		a.serverError(w, err)
 		return
 	}
-
-	valueOf := func(p *string) string {
-		if p == nil {
-			return ""
-		}
-		return *p
-	}
-
-	var rows []h.Node
+	model := domainsView{}
 	for _, d := range domains {
-		rows = append(rows, h.E("tr", nil,
-			h.E("td", nil,
-				h.E("span", []h.Attr{h.A("class", "mono")}, h.Text(d.Authority)),
-				h.IfNode(d.IsDefault, h.Text(" ")),
-				h.IfNode(d.IsDefault,
-					h.E("span", []h.Attr{h.A("class", "badge green")}, h.Text("default")))),
-			h.E("td", nil, h.Text(strconv.FormatInt(d.ShortUrlCount, 10))),
-			h.E("td", nil, h.Text(strconv.FormatInt(d.VisitCount, 10))),
-			h.E("td", nil,
-				h.E("form", []h.Attr{
-					h.A("method", "post"),
-					h.A("action", fmt.Sprintf("/admin/domains/%d/redirects", d.Id)),
-					h.A("class", "stack"),
-					h.A("style", "max-width:100%"),
-				},
-					h.E("div", []h.Attr{h.A("class", "row")},
-						h.E("input", []h.Attr{
-							h.A("type", "url"), h.A("name", "baseUrlRedirect"),
-							h.A("placeholder", "Base URL redirect"),
-							h.A("value", valueOf(d.BaseUrlRedirect)),
-						}),
-						h.E("input", []h.Attr{
-							h.A("type", "url"), h.A("name", "regular404Redirect"),
-							h.A("placeholder", "Regular 404 redirect"),
-							h.A("value", valueOf(d.Regular404Redirect)),
-						}),
-						h.E("input", []h.Attr{
-							h.A("type", "url"), h.A("name", "invalidShortUrlRedirect"),
-							h.A("placeholder", "Invalid short URL redirect"),
-							h.A("value", valueOf(d.InvalidShortUrlRedirect)),
-						}),
-						h.E("button", []h.Attr{h.A("class", "secondary small")}, h.Text("Save"))))),
-			h.E("td", []h.Attr{h.A("class", "actions")},
-				h.IfNode(!d.IsDefault,
-					h.E("form", []h.Attr{
-						h.A("class", "inline"), h.A("method", "post"),
-						h.A("action", fmt.Sprintf("/admin/domains/%d/delete", d.Id)),
-						h.A("onsubmit", "return confirm('Delete this domain and ALL its short URLs?')"),
-					},
-						h.E("button", []h.Attr{h.A("class", "danger small")}, h.Text("Delete")))))))
+		model.Rows = append(model.Rows, domainRowView{
+			Authority:               d.Authority,
+			IsDefault:               d.IsDefault,
+			ShortUrlCount:           d.ShortUrlCount,
+			VisitCount:              d.VisitCount,
+			BaseUrlRedirect:         valueOrEmpty(d.BaseUrlRedirect),
+			Regular404Redirect:      valueOrEmpty(d.Regular404Redirect),
+			InvalidShortUrlRedirect: valueOrEmpty(d.InvalidShortUrlRedirect),
+			RedirectsAction:         fmt.Sprintf("/admin/domains/%d/redirects", d.Id),
+			DeleteAction:            fmt.Sprintf("/admin/domains/%d/delete", d.Id),
+		})
 	}
+	a.renderPage(w, http.StatusOK, "domains", user, "/admin/domains", "Domains", model)
+}
 
-	content := []h.Node{
-		h.E("h1", nil, h.Text("Domains")),
-		h.E("p", []h.Attr{h.A("class", "muted")},
-			h.Text("Short URLs are unique per domain. Point extra domains at this server and register them here (or let them auto-register on first use).")),
-		h.E("div", []h.Attr{h.A("class", "table-wrap")},
-			h.E("table", nil,
-				h.E("thead", nil,
-					h.E("tr", nil,
-						h.E("th", nil, h.Text("Domain")),
-						h.E("th", nil, h.Text("Short URLs")),
-						h.E("th", nil, h.Text("Visits")),
-						h.E("th", nil, h.Text("Not-found redirects (base / 404 / invalid)")),
-						h.E("th", nil))),
-				h.E("tbody", nil, rows...))),
-		h.E("h2", nil, h.Text("Add domain")),
-		h.E("div", []h.Attr{h.A("class", "card")},
-			h.E("form", []h.Attr{h.A("class", "row"), h.A("method", "post"), h.A("action", "/admin/domains")},
-				formField("Authority (host or host:port)", textInput("authority", "", "links.example.com")),
-				h.E("div", nil, h.E("button", nil, h.Text("Add domain"))))),
-	}
-	respondPage(w, user, "/admin/domains", "Domains", content)
+func (a *App) renderDomainsMessage(w http.ResponseWriter, status int, user *CurrentUser, message string) {
+	a.renderPage(w, status, "message", user, "/admin/domains", "Domains", messageView{
+		Error:     message,
+		BackUrl:   "/admin/domains",
+		BackLabel: "← Back to domains",
+	})
 }
 
 // POST /admin/domains (admin)
@@ -99,13 +70,9 @@ func (a *App) uiCreateDomain(user *CurrentUser, w http.ResponseWriter, r *http.R
 		BadRequest(w, "Invalid form submission.")
 		return
 	}
-	backLink := h.E("p", nil,
-		h.E("a", []h.Attr{h.A("href", "/admin/domains")}, h.Text("← Back to domains")))
-
 	authority, err := core.NewDomainAuthority(r.PostFormValue("authority"))
 	if err != nil {
-		respondHtml(w, http.StatusBadRequest, layoutPage(user, "/admin/domains", "Domains",
-			[]h.Node{alertError(err.Error()), backLink}))
+		a.renderDomainsMessage(w, http.StatusBadRequest, user, err.Error())
 		return
 	}
 	created, err := data.CreateDomain(a.Db, authority)
@@ -114,8 +81,8 @@ func (a *App) uiCreateDomain(user *CurrentUser, w http.ResponseWriter, r *http.R
 		return
 	}
 	if created == nil {
-		respondPage(w, user, "/admin/domains", "Domains",
-			[]h.Node{alertError(fmt.Sprintf("Domain '%s' is already registered.", authority.Value())), backLink})
+		a.renderDomainsMessage(w, http.StatusOK, user,
+			fmt.Sprintf("Domain '%s' is already registered.", authority.Value()))
 		return
 	}
 	http.Redirect(w, r, "/admin/domains", http.StatusFound)

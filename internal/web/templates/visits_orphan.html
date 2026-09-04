@@ -1,0 +1,16 @@
+{{define "content"}}{{with .Data}}
+<h1>Orphan visits</h1>
+<p class="muted">Traffic that reached this server without hitting an active short URL: base URL hits, unknown short codes and other 404s.</p>
+<div class="toolbar">
+  <a class="btn secondary small" href="/admin/visits/orphan">All</a>
+  <a class="btn secondary small" href="/admin/visits/orphan?type=base_url">Base URL</a>
+  <a class="btn secondary small" href="/admin/visits/orphan?type=invalid_short_url">Invalid short URLs</a>
+  <a class="btn secondary small" href="/admin/visits/orphan?type=regular_404">Other 404s</a>
+  {{- if .ShowDelete}}
+  <form class="inline" method="post" action="/admin/visits/orphan/delete" onsubmit="return confirm('Delete ALL orphan visits?')">
+    <button class="danger small">Delete all orphan visits</button>
+  </form>
+  {{- end}}
+</div>
+{{template "analytics" .Analytics}}
+{{end}}{{end}}

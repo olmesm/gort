@@ -1,0 +1,65 @@
+{{define "content"}}{{with .Data}}
+<h1>Users</h1>
+<p class="muted">Dashboard accounts. Admins additionally manage domains, API keys, webhooks and users.</p>
+{{- if .Error}}
+<div class="alert error">{{.Error}}</div>
+{{- end}}
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Username</th><th>Role</th><th>Created (UTC)</th><th>Set new password</th><th></th></tr>
+    </thead>
+    <tbody>
+      {{- range .Rows}}
+      <tr>
+        <td>{{.Username}}{{if .IsSelf}} <span class="badge gray">you</span>{{end}}</td>
+        <td>
+          <form class="inline" method="post" action="{{.RoleAction}}">
+            <select name="role"{{if .IsLastAdmin}} disabled{{end}}>
+              <option value="user"{{if eq .Role "user"}} selected{{end}}>user</option>
+              <option value="admin"{{if eq .Role "admin"}} selected{{end}}>admin</option>
+            </select>
+            {{if not .IsLastAdmin}}<button class="secondary small">Set</button>{{end}}
+          </form>
+        </td>
+        <td class="muted">{{.Created}}</td>
+        <td>
+          <form class="inline" method="post" action="{{.PasswordAction}}">
+            <input type="password" name="password" placeholder="New password" style="width:11rem">
+            <button class="secondary small">Update</button>
+          </form>
+        </td>
+        <td class="actions">
+          {{- if .CanDelete}}
+          <form class="inline" method="post" action="{{.DeleteAction}}" onsubmit="return confirm('Delete this user?')">
+            <button class="danger small">Delete</button>
+          </form>
+          {{- end}}
+        </td>
+      </tr>
+      {{- end}}
+    </tbody>
+  </table>
+</div>
+<h2>Create user</h2>
+<div class="card">
+  <form class="row" method="post" action="/admin/users">
+    <div>
+      <label>Username</label>
+      <input type="text" name="username" value="">
+    </div>
+    <div>
+      <label>Password</label>
+      <input type="password" name="password" required>
+    </div>
+    <div>
+      <label>Role</label>
+      <select name="role">
+        <option value="user">user</option>
+        <option value="admin">admin</option>
+      </select>
+    </div>
+    <div><button>Create user</button></div>
+  </form>
+</div>
+{{end}}{{end}}

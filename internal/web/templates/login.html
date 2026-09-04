@@ -1,0 +1,35 @@
+{{define "login" -}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Log in · Gort</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="card login-card">
+      <h1>Gort</h1>
+      {{- if .Error}}
+      <div class="alert error">{{.Error}}</div>
+      {{- end}}
+      {{- if .OidcEnabled}}
+      <a class="btn" style="display:block;text-align:center" href="/admin/oidc/login?returnUrl={{.ReturnUrlParam}}">Continue with {{.ProviderName}}</a>
+      {{- end}}
+      {{- if .ShowPasswordForm}}
+      {{- if .OidcEnabled}}
+      <p class="muted" style="text-align:center;margin:0.75rem 0 0">or sign in with a local account</p>
+      {{- end}}
+      <form class="stack" method="post" action="/admin/login">
+        <input type="hidden" name="returnUrl" value="{{.ReturnUrl}}">
+        <div><label>Username</label><input type="text" name="username" required autofocus></div>
+        <div><label>Password</label><input type="password" name="password" required></div>
+        <button>Log in</button>
+      </form>
+      {{- end}}
+    </div>
+  </div>
+</body>
+</html>
+{{- end}}
