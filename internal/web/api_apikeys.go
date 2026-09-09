@@ -79,7 +79,7 @@ func (a *App) apiListApiKeys(_ *AuthenticatedKey, w http.ResponseWriter, r *http
 // POST /rest/v1/api-keys (admin) — the plaintext key is returned exactly
 // once.
 func (a *App) apiCreateApiKey(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
-	body, err := ReadJSON[CreateApiKeyBody](r)
+	body, err := ReadJSON[CreateApiKeyBody](w, r)
 	if err != nil {
 		BadRequest(w, err.Error())
 		return
@@ -87,7 +87,7 @@ func (a *App) apiCreateApiKey(_ *AuthenticatedKey, w http.ResponseWriter, r *htt
 
 	var domain *data.DomainRow
 	if body.Domain != nil {
-		domain, err = data.TryGetDomainByAuthority(a.Db, strings.ToLower(strings.TrimSpace(*body.Domain)))
+		domain, err = data.DomainByAuthority(a.Db, strings.ToLower(strings.TrimSpace(*body.Domain)))
 		if err != nil {
 			a.serverError(w, err)
 			return
@@ -142,7 +142,7 @@ func apiKeyIdFromPath(r *http.Request) (core.ApiKeyID, bool) {
 
 // PATCH /rest/v1/api-keys/{id} (admin)
 func (a *App) apiPatchApiKey(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
-	body, err := ReadJSON[PatchApiKeyBody](r)
+	body, err := ReadJSON[PatchApiKeyBody](w, r)
 	if err != nil {
 		BadRequest(w, err.Error())
 		return

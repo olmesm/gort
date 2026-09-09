@@ -107,7 +107,7 @@ func (a *App) uiSetUserRole(_ *CurrentUser, w http.ResponseWriter, r *http.Reque
 			if r.PostFormValue("role") == "admin" {
 				role = core.UserAdmin
 			}
-			target, err := data.TryFindUserById(a.Db, core.UserID(id))
+			target, err := data.UserByID(a.Db, core.UserID(id))
 			if err != nil {
 				a.serverError(w, err)
 				return
@@ -156,7 +156,7 @@ func (a *App) uiSetUserPassword(user *CurrentUser, w http.ResponseWriter, r *htt
 // POST /admin/users/{id}/delete (admin)
 func (a *App) uiDeleteUser(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
 	if id, err := strconv.ParseInt(r.PathValue("id"), 10, 64); err == nil {
-		target, err := data.TryFindUserById(a.Db, core.UserID(id))
+		target, err := data.UserByID(a.Db, core.UserID(id))
 		if err != nil {
 			a.serverError(w, err)
 			return

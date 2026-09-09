@@ -97,7 +97,7 @@ func (a *App) requireApiKey(handler func(key *AuthenticatedKey, w http.ResponseW
 			Unauthorized(w, "Expected an API key in the X-Api-Key header.")
 			return
 		}
-		row, err := data.TryFindApiKeyByHash(a.Db, HashApiKey(key))
+		row, err := data.ApiKeyByHash(a.Db, HashApiKey(key))
 		if err != nil {
 			a.serverError(w, err)
 			return

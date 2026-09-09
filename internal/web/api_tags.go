@@ -44,7 +44,7 @@ func (a *App) apiListTags(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Re
 
 // PUT /rest/v1/tags — rename
 func (a *App) apiRenameTag(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
-	body, err := ReadJSON[RenameTagBody](r)
+	body, err := ReadJSON[RenameTagBody](w, r)
 	if err != nil {
 		BadRequest(w, err.Error())
 		return

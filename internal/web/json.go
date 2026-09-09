@@ -22,9 +22,11 @@ func RespondJSON(w http.ResponseWriter, status int, value any) {
 	_, _ = w.Write(body)
 }
 
-// ReadJSON reads and deserializes a JSON request body.
-func ReadJSON[T any](r *http.Request) (*T, error) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+// ReadJSON reads and deserializes a JSON request body, capped at 1 MiB.
+// http.MaxBytesReader (unlike a plain LimitReader) also closes the
+// connection on overrun so a huge body isn't read to the end.
+func ReadJSON[T any](w http.ResponseWriter, r *http.Request) (*T, error) {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
 	if err != nil {
 		return nil, fmt.Errorf("Invalid request body: %s", err)
 	}

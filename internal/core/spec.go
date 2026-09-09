@@ -93,7 +93,7 @@ func normalizeTitle(t *string) *string {
 	return &trimmed
 }
 
-func parseStatus(code *int) (*RedirectStatus, *ShortUrlError) {
+func parseStatus(code *int) (*RedirectStatus, error) {
 	if code == nil {
 		return nil, nil
 	}
@@ -105,17 +105,17 @@ func parseStatus(code *int) (*RedirectStatus, *ShortUrlError) {
 }
 
 // NewShortUrlSpec parses and validates raw input into a spec.
-func NewShortUrlSpec(input ShortUrlSpecInput) (*ShortUrlSpec, *ShortUrlError) {
+func NewShortUrlSpec(input ShortUrlSpecInput) (*ShortUrlSpec, error) {
 	longUrl, err := NewLongUrl(input.LongUrl)
 	if err != nil {
-		return nil, NewShortUrlError(ErrInvalidLongUrl, err.Error())
+		return nil, NewError(ErrInvalidLongUrl, err.Error())
 	}
 
 	var customSlug *ShortCode
 	if input.CustomSlug != nil {
 		code, err := ShortCodeOfSlug(*input.CustomSlug)
 		if err != nil {
-			return nil, NewShortUrlError(ErrInvalidSlug, err.Error())
+			return nil, NewError(ErrInvalidSlug, err.Error())
 		}
 		customSlug = &code
 	}
@@ -124,14 +124,14 @@ func NewShortUrlSpec(input ShortUrlSpecInput) (*ShortUrlSpec, *ShortUrlError) {
 	if input.Domain != nil {
 		d, err := NewDomainAuthority(*input.Domain)
 		if err != nil {
-			return nil, NewShortUrlError(ErrUnknownDomain, err.Error())
+			return nil, NewError(ErrUnknownDomain, err.Error())
 		}
 		domain = &d
 	}
 
 	tags, err := NewTagNames(input.Tags)
 	if err != nil {
-		return nil, NewShortUrlError(ErrInvalidTag, err.Error())
+		return nil, NewError(ErrInvalidTag, err.Error())
 	}
 
 	group, serr := parseGroup(input.Group)
@@ -141,7 +141,7 @@ func NewShortUrlSpec(input ShortUrlSpecInput) (*ShortUrlSpec, *ShortUrlError) {
 
 	lifetime, err := NewLifetime(input.ValidSince, input.ValidUntil, input.MaxVisits)
 	if err != nil {
-		return nil, NewShortUrlError(ErrInvalidLifetime, err.Error())
+		return nil, NewError(ErrInvalidLifetime, err.Error())
 	}
 
 	status, serr := parseStatus(input.RedirectStatus)
@@ -167,13 +167,13 @@ func NewShortUrlSpec(input ShortUrlSpecInput) (*ShortUrlSpec, *ShortUrlError) {
 
 // parseGroup validates an optional group field; an empty value means "no
 // group".
-func parseGroup(raw *string) (*GroupName, *ShortUrlError) {
+func parseGroup(raw *string) (*GroupName, error) {
 	if raw == nil || NormalizeGroup(*raw) == "" {
 		return nil, nil
 	}
 	group, err := NewGroupName(*raw)
 	if err != nil {
-		return nil, NewShortUrlError(ErrInvalidGroup, err.Error())
+		return nil, NewError(ErrInvalidGroup, err.Error())
 	}
 	return &group, nil
 }
@@ -210,10 +210,10 @@ type ShortUrlEditInput struct {
 	ChangeTags bool
 }
 
-func NewShortUrlEdit(input ShortUrlEditInput) (*ShortUrlEdit, *ShortUrlError) {
+func NewShortUrlEdit(input ShortUrlEditInput) (*ShortUrlEdit, error) {
 	longUrl, err := NewLongUrl(input.LongUrl)
 	if err != nil {
-		return nil, NewShortUrlError(ErrInvalidLongUrl, err.Error())
+		return nil, NewError(ErrInvalidLongUrl, err.Error())
 	}
 
 	group, gerr := parseGroup(input.Group)
@@ -223,7 +223,7 @@ func NewShortUrlEdit(input ShortUrlEditInput) (*ShortUrlEdit, *ShortUrlError) {
 
 	lifetime, err := NewLifetime(input.ValidSince, input.ValidUntil, input.MaxVisits)
 	if err != nil {
-		return nil, NewShortUrlError(ErrInvalidLifetime, err.Error())
+		return nil, NewError(ErrInvalidLifetime, err.Error())
 	}
 
 	status, ok := RedirectStatusOfCode(input.RedirectStatus)
@@ -235,7 +235,7 @@ func NewShortUrlEdit(input ShortUrlEditInput) (*ShortUrlEdit, *ShortUrlError) {
 	if input.ChangeTags {
 		tags, err = NewTagNames(input.Tags)
 		if err != nil {
-			return nil, NewShortUrlError(ErrInvalidTag, err.Error())
+			return nil, NewError(ErrInvalidTag, err.Error())
 		}
 		if tags == nil {
 			tags = []TagName{}

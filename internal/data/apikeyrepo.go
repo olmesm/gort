@@ -2,7 +2,6 @@ package data
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 
@@ -45,56 +44,25 @@ func InsertApiKey(db *Db, keyHash string, name *string, role core.ApiKeyRole, ex
 		fmt.Sprintf("SELECT %s FROM api_keys WHERE id = ?", apiKeySelectCols), id))
 }
 
-func TryFindApiKeyByHash(db *Db, keyHash string) (*ApiKeyRow, error) {
-	k, err := scanApiKeyRow(db.QueryRow(
-		fmt.Sprintf("SELECT %s FROM api_keys WHERE key_hash = ?", apiKeySelectCols), keyHash))
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	return k, err
+func ApiKeyByHash(db *Db, keyHash string) (*ApiKeyRow, error) {
+	return queryOne(db, scanApiKeyRow,
+		fmt.Sprintf("SELECT %s FROM api_keys WHERE key_hash = ?", apiKeySelectCols), keyHash)
 }
 
 func ListApiKeys(db *Db) ([]ApiKeyRow, error) {
-	rows, err := db.Query(
+	return queryAll(db, scanApiKeyRow,
 		fmt.Sprintf("SELECT %s FROM api_keys ORDER BY created_at DESC", apiKeySelectCols))
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []ApiKeyRow
-	for rows.Next() {
-		k, err := scanApiKeyRow(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, *k)
-	}
-	return out, rows.Err()
 }
 
-func TryGetApiKeyById(db *Db, id core.ApiKeyID) (*ApiKeyRow, error) {
-	k, err := scanApiKeyRow(db.QueryRow(
-		fmt.Sprintf("SELECT %s FROM api_keys WHERE id = ?", apiKeySelectCols), id.Value()))
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	return k, err
+func ApiKeyByID(db *Db, id core.ApiKeyID) (*ApiKeyRow, error) {
+	return queryOne(db, scanApiKeyRow,
+		fmt.Sprintf("SELECT %s FROM api_keys WHERE id = ?", apiKeySelectCols), id.Value())
 }
 
 func SetApiKeyEnabled(db *Db, id core.ApiKeyID, enabled bool) (bool, error) {
-	res, err := db.Exec("UPDATE api_keys SET enabled = ? WHERE id = ?", enabled, id.Value())
-	if err != nil {
-		return false, err
-	}
-	affected, _ := res.RowsAffected()
-	return affected > 0, nil
+	return execAffected(db, "UPDATE api_keys SET enabled = ? WHERE id = ?", enabled, id.Value())
 }
 
 func DeleteApiKey(db *Db, id core.ApiKeyID) (bool, error) {
-	res, err := db.Exec("DELETE FROM api_keys WHERE id = ?", id.Value())
-	if err != nil {
-		return false, err
-	}
-	affected, _ := res.RowsAffected()
-	return affected > 0, nil
+	return execAffected(db, "DELETE FROM api_keys WHERE id = ?", id.Value())
 }

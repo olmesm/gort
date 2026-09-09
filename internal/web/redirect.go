@@ -81,7 +81,7 @@ func (a *App) handleQrCode(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, err)
 		return
 	}
-	shortUrl, err := data.TryGetByCode(a.Db, core.DomainID(domain.Id), code)
+	shortUrl, err := data.ShortUrlByCode(a.Db, core.DomainID(domain.Id), code)
 	if err != nil {
 		a.serverError(w, err)
 		return
@@ -174,7 +174,7 @@ func (a *App) handleShortUrl(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, err)
 		return
 	}
-	found, err := data.TryGetByCode(a.Db, core.DomainID(domain.Id), slug)
+	found, err := data.ShortUrlByCode(a.Db, core.DomainID(domain.Id), slug)
 	if err != nil {
 		a.serverError(w, err)
 		return
@@ -202,7 +202,7 @@ func (a *App) handleShortUrl(w http.ResponseWriter, r *http.Request) {
 	}
 
 	visitor := visitorContextOf(r)
-	rules, err := data.GetRules(a.Db, id)
+	rules, err := data.RedirectRules(a.Db, id)
 	if err != nil {
 		a.serverError(w, err)
 		return

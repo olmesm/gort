@@ -188,7 +188,7 @@ func (a *App) findAccessibleShortUrl(w http.ResponseWriter, key *AuthenticatedKe
 		NotFound(w, fmt.Sprintf("Domain '%s' is not registered.", domainAuthority))
 		return nil
 	}
-	detail, err := data.TryGetDetail(a.Db, core.DomainID(domain.Id), code)
+	detail, err := data.ShortUrlDetailByCode(a.Db, core.DomainID(domain.Id), code)
 	if err != nil {
 		a.serverError(w, err)
 		return nil

@@ -295,9 +295,10 @@ the original F# codebase:
 - **Typed everything at boundaries.** `ShortUrlID`/`DomainID`/… prevent id
   transposition; API-key roles parse fail-closed (an unknown stored role is
   an invalid key, never a default admin).
-- **Errors as values.** Domain failures are typed (`ShortUrlError` and
-  friends); the persistence edge translates driver errors immediately (e.g.
-  duplicate key → slug-in-use conflict).
+- **Errors as values.** Domain failures are sentinel error categories
+  (`core.ErrSlugInUse` and friends, matched with `errors.Is`); the
+  persistence edge translates driver errors immediately (e.g. duplicate key
+  → slug-in-use conflict).
 - **Atomic writes.** A short URL and its tag links are inserted in one
   transaction; rules and tag replacements likewise.
 - **Events off the hot path.** The redirect path does one indexed lookup,

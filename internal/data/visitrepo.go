@@ -108,35 +108,22 @@ func MarkGeoResolved(db *Db, visitId core.VisitID) error {
 	return err
 }
 
-// ListPendingGeo lists visits still awaiting geolocation (with a usable IP).
-func ListPendingGeo(db *Db, limit int) ([]struct {
+// PendingGeoRow is a visit still awaiting geolocation (with a usable IP).
+type PendingGeoRow struct {
 	Id core.VisitID
 	Ip string
-}, error) {
-	rows, err := db.Query(
-		fmt.Sprintf(`SELECT id, remote_ip FROM visits
-		             WHERE geo_resolved = %s AND remote_ip IS NOT NULL
-		             ORDER BY id LIMIT ?`, db.BoolLiteral(false)), limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []struct {
-		Id core.VisitID
-		Ip string
-	}
-	for rows.Next() {
-		var id int64
-		var ip string
-		if err := rows.Scan(&id, &ip); err != nil {
+}
+
+func ListPendingGeo(db *Db, limit int) ([]PendingGeoRow, error) {
+	return queryAll(db, func(r rowScanner) (*PendingGeoRow, error) {
+		var p PendingGeoRow
+		if err := r.Scan(&p.Id, &p.Ip); err != nil {
 			return nil, err
 		}
-		out = append(out, struct {
-			Id core.VisitID
-			Ip string
-		}{core.VisitID(id), ip})
-	}
-	return out, rows.Err()
+		return &p, nil
+	}, fmt.Sprintf(`SELECT id, remote_ip FROM visits
+	                WHERE geo_resolved = %s AND remote_ip IS NOT NULL
+	                ORDER BY id LIMIT ?`, db.BoolLiteral(false)), limit)
 }
 
 func buildVisitFilterSql(db *Db, filters VisitFilters) ([]string, []any) {
@@ -167,31 +154,18 @@ func pageVisitQuery(db *Db, baseWhere string, baseArgs []any, filters VisitFilte
 	}
 	args := append(append([]any{}, baseArgs...), extraArgs...)
 
-	var total int64
-	if err := db.QueryRow(
-		fmt.Sprintf("SELECT COUNT(*) FROM visits vi WHERE %s", whereClause), args...).Scan(&total); err != nil {
+	total, err := queryScalar[int64](db,
+		fmt.Sprintf("SELECT COUNT(*) FROM visits vi WHERE %s", whereClause), args...)
+	if err != nil {
 		return empty, err
 	}
 
 	listArgs := append(append([]any{}, args...), size, core.PageOffset(page, size))
-	rows, err := db.Query(
+	items, err := queryAll(db, scanVisitRow,
 		fmt.Sprintf(`SELECT %s FROM visits vi WHERE %s
 		             ORDER BY vi.visited_at DESC, vi.id DESC
 		             LIMIT ? OFFSET ?`, visitSelectColsAliased(), whereClause), listArgs...)
 	if err != nil {
-		return empty, err
-	}
-	defer rows.Close()
-
-	items := []VisitRow{}
-	for rows.Next() {
-		v, err := scanVisitRow(rows)
-		if err != nil {
-			return empty, err
-		}
-		items = append(items, *v)
-	}
-	if err := rows.Err(); err != nil {
 		return empty, err
 	}
 	return core.Page[VisitRow]{Items: items, CurrentPage: page, ItemsPerPage: size, TotalItems: total}, nil
@@ -242,19 +216,9 @@ func ListVisitsForDomain(db *Db, domainId core.DomainID, filters VisitFilters) (
 }
 
 func DeleteVisitsForShortUrl(db *Db, shortUrlId core.ShortUrlID) (int, error) {
-	res, err := db.Exec("DELETE FROM visits WHERE short_url_id = ?", shortUrlId.Value())
-	if err != nil {
-		return 0, err
-	}
-	affected, _ := res.RowsAffected()
-	return int(affected), nil
+	return execCount(db, "DELETE FROM visits WHERE short_url_id = ?", shortUrlId.Value())
 }
 
 func DeleteOrphanVisits(db *Db) (int, error) {
-	res, err := db.Exec(fmt.Sprintf("DELETE FROM visits WHERE %s", IsOrphanVisit("visits")))
-	if err != nil {
-		return 0, err
-	}
-	affected, _ := res.RowsAffected()
-	return int(affected), nil
+	return execCount(db, fmt.Sprintf("DELETE FROM visits WHERE %s", IsOrphanVisit("visits")))
 }

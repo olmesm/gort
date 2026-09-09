@@ -19,24 +19,17 @@ func (e *TagRenameError) Error() string {
 	return fmt.Sprintf("Tag '%s' was not found.", e.Name)
 }
 
+// TagsForShortUrl returns the tag names of one short URL; never nil, since
+// the result is serialized as a JSON array.
 func TagsForShortUrl(db *Db, shortUrlId core.ShortUrlID) ([]string, error) {
-	rows, err := db.Query(
+	out, err := queryStrings(db,
 		`SELECT t.name FROM tags t
 		 JOIN short_url_tags st ON st.tag_id = t.id
 		 WHERE st.short_url_id = ? ORDER BY t.name`, shortUrlId.Value())
-	if err != nil {
-		return nil, err
+	if out == nil {
+		out = []string{}
 	}
-	defer rows.Close()
-	out := []string{}
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return nil, err
-		}
-		out = append(out, name)
-	}
-	return out, rows.Err()
+	return out, err
 }
 
 // TagsForShortUrls fetches tags for many short URLs at once: id -> tag names.
@@ -78,36 +71,28 @@ func ListTags(db *Db, searchTerm string, page, itemsPerPage int) (core.Page[TagS
 		whereArgs = append(whereArgs, "%"+searchTerm+"%")
 	}
 
-	var total int64
-	if err := db.QueryRow(
-		fmt.Sprintf("SELECT COUNT(*) FROM tags t %s", whereClause), whereArgs...).Scan(&total); err != nil {
+	total, err := queryScalar[int64](db,
+		fmt.Sprintf("SELECT COUNT(*) FROM tags t %s", whereClause), whereArgs...)
+	if err != nil {
 		return empty, err
 	}
 
 	listArgs := append(append([]any{}, whereArgs...), itemsPerPage, core.PageOffset(page, itemsPerPage))
-	rows, err := db.Query(
-		fmt.Sprintf(`SELECT t.id, t.name,
-		        (SELECT COUNT(*) FROM short_url_tags st WHERE st.tag_id = t.id) AS short_url_count,
-		        (SELECT COUNT(*) FROM visits v
-		           JOIN short_url_tags st ON st.short_url_id = v.short_url_id
-		          WHERE st.tag_id = t.id) AS visit_count
-		 FROM tags t %s
-		 ORDER BY t.name
-		 LIMIT ? OFFSET ?`, whereClause), listArgs...)
-	if err != nil {
-		return empty, err
-	}
-	defer rows.Close()
-
-	items := []TagStatsRow{}
-	for rows.Next() {
+	items, err := queryAll(db, func(r rowScanner) (*TagStatsRow, error) {
 		var t TagStatsRow
-		if err := rows.Scan(&t.Id, &t.Name, &t.ShortUrlCount, &t.VisitCount); err != nil {
-			return empty, err
+		if err := r.Scan(&t.Id, &t.Name, &t.ShortUrlCount, &t.VisitCount); err != nil {
+			return nil, err
 		}
-		items = append(items, t)
-	}
-	if err := rows.Err(); err != nil {
+		return &t, nil
+	}, fmt.Sprintf(`SELECT t.id, t.name,
+	        (SELECT COUNT(*) FROM short_url_tags st WHERE st.tag_id = t.id) AS short_url_count,
+	        (SELECT COUNT(*) FROM visits v
+	           JOIN short_url_tags st ON st.short_url_id = v.short_url_id
+	          WHERE st.tag_id = t.id) AS visit_count
+	 FROM tags t %s
+	 ORDER BY t.name
+	 LIMIT ? OFFSET ?`, whereClause), listArgs...)
+	if err != nil {
 		return empty, err
 	}
 
@@ -122,19 +107,18 @@ func ListTags(db *Db, searchTerm string, page, itemsPerPage int) (core.Page[TagS
 // RenameTag renames a tag; oldName is a caller-supplied candidate, newName is
 // validated.
 func RenameTag(db *Db, oldName string, newName core.TagName) error {
-	var existingNew int64
-	if err := db.QueryRow("SELECT COUNT(*) FROM tags WHERE name = ?", newName.Value()).Scan(&existingNew); err != nil {
+	existingNew, err := queryScalar[int64](db, "SELECT COUNT(*) FROM tags WHERE name = ?", newName.Value())
+	if err != nil {
 		return err
 	}
 	if existingNew > 0 && oldName != newName.Value() {
 		return &TagRenameError{NameTaken: true, Name: newName.Value()}
 	}
-	res, err := db.Exec("UPDATE tags SET name = ? WHERE name = ?", newName.Value(), oldName)
+	renamed, err := execAffected(db, "UPDATE tags SET name = ? WHERE name = ?", newName.Value(), oldName)
 	if err != nil {
 		return err
 	}
-	affected, _ := res.RowsAffected()
-	if affected == 0 {
+	if !renamed {
 		return &TagRenameError{NotFound: true, Name: oldName}
 	}
 	return nil
@@ -146,33 +130,18 @@ func DeleteTags(db *Db, names []string) (int, error) {
 		return 0, nil
 	}
 	inClause, args := InList("name", names)
-	res, err := db.Exec(fmt.Sprintf("DELETE FROM tags WHERE %s", inClause), args...)
-	if err != nil {
-		return 0, err
-	}
-	affected, _ := res.RowsAffected()
-	return int(affected), nil
+	return execCount(db, fmt.Sprintf("DELETE FROM tags WHERE %s", inClause), args...)
 }
 
 func TagExists(db *Db, name string) (bool, error) {
-	var count int64
-	err := db.QueryRow("SELECT COUNT(*) FROM tags WHERE name = ?", name).Scan(&count)
+	count, err := queryScalar[int64](db, "SELECT COUNT(*) FROM tags WHERE name = ?", name)
 	return count > 0, err
 }
 
 func ListAllTagNames(db *Db) ([]string, error) {
-	rows, err := db.Query("SELECT name FROM tags ORDER BY name")
-	if err != nil {
-		return nil, err
+	out, err := queryStrings(db, "SELECT name FROM tags ORDER BY name")
+	if out == nil {
+		out = []string{}
 	}
-	defer rows.Close()
-	out := []string{}
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return nil, err
-		}
-		out = append(out, name)
-	}
-	return out, rows.Err()
+	return out, err
 }

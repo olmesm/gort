@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -240,59 +241,50 @@ const (
 	MaxVisitsReached ExpirationReason = "max_visits_reached"
 )
 
-// ShortUrlError is everything that can go wrong creating (or editing) a short
-// URL.
-type ShortUrlErrorKind string
-
-const (
-	ErrInvalidLongUrl          ShortUrlErrorKind = "invalid-long-url"
-	ErrInvalidSlug             ShortUrlErrorKind = "invalid-slug"
-	ErrInvalidTag              ShortUrlErrorKind = "invalid-tag"
-	ErrInvalidGroup            ShortUrlErrorKind = "invalid-group"
-	ErrInvalidLifetime         ShortUrlErrorKind = "invalid-lifetime"
-	ErrInvalidRedirectStatus   ShortUrlErrorKind = "invalid-redirect-status"
-	ErrSlugInUse               ShortUrlErrorKind = "slug-in-use"
-	ErrUnknownDomain           ShortUrlErrorKind = "unknown-domain"
-	ErrCodeGenerationExhausted ShortUrlErrorKind = "code-generation-exhausted"
+// Sentinel categories for everything that can go wrong creating (or editing)
+// a short URL. Test with errors.Is; the wrapped error's text is the
+// human-readable message for UI banners and problem details.
+var (
+	ErrInvalidLongUrl          = errors.New("invalid long URL")
+	ErrInvalidSlug             = errors.New("invalid slug")
+	ErrInvalidTag              = errors.New("invalid tag")
+	ErrInvalidGroup            = errors.New("invalid group")
+	ErrInvalidLifetime         = errors.New("invalid lifetime")
+	ErrInvalidRedirectStatus   = errors.New("invalid redirect status")
+	ErrSlugInUse               = errors.New("slug in use")
+	ErrUnknownDomain           = errors.New("unknown domain")
+	ErrCodeGenerationExhausted = errors.New("code generation exhausted")
 )
 
-type ShortUrlError struct {
-	Kind ShortUrlErrorKind
-	// Detail carries the validation message (or slug/domain data for SlugInUse).
-	Detail string
-	Slug   string
-	Domain string
-	Status int
+// categorizedError pairs a sentinel category with a user-facing message. The
+// message alone is the Error() text so it can go straight into a UI banner.
+type categorizedError struct {
+	category error
+	message  string
 }
 
-func (e *ShortUrlError) Error() string { return e.Message() }
+func (e *categorizedError) Error() string { return e.message }
+func (e *categorizedError) Unwrap() error { return e.category }
 
-// Message is the human-readable message, for UI banners and problem details.
-func (e *ShortUrlError) Message() string {
-	switch e.Kind {
-	case ErrInvalidRedirectStatus:
-		return fmt.Sprintf("'%d' is not a supported redirect status. Use 301, 302, 307 or 308.", e.Status)
-	case ErrSlugInUse:
-		return fmt.Sprintf("The slug '%s' is already in use on domain '%s'.", e.Slug, e.Domain)
-	case ErrCodeGenerationExhausted:
-		return "Could not find a free short code; try again or use a custom slug."
-	default:
-		return e.Detail
-	}
+// NewError attaches a user-facing message to one of the sentinel categories.
+func NewError(category error, message string) error {
+	return &categorizedError{category: category, message: message}
 }
 
-func NewShortUrlError(kind ShortUrlErrorKind, detail string) *ShortUrlError {
-	return &ShortUrlError{Kind: kind, Detail: detail}
+func NewErrorf(category error, format string, args ...any) error {
+	return NewError(category, fmt.Sprintf(format, args...))
 }
 
-func SlugInUseError(slug, domain string) *ShortUrlError {
-	return &ShortUrlError{Kind: ErrSlugInUse, Slug: slug, Domain: domain}
+func SlugInUseError(slug, domain string) error {
+	return NewErrorf(ErrSlugInUse, "The slug '%s' is already in use on domain '%s'.", slug, domain)
 }
 
-func InvalidRedirectStatusError(status int) *ShortUrlError {
-	return &ShortUrlError{Kind: ErrInvalidRedirectStatus, Status: status}
+func InvalidRedirectStatusError(status int) error {
+	return NewErrorf(ErrInvalidRedirectStatus,
+		"'%d' is not a supported redirect status. Use 301, 302, 307 or 308.", status)
 }
 
-func CodeGenerationExhaustedError() *ShortUrlError {
-	return &ShortUrlError{Kind: ErrCodeGenerationExhausted}
+func CodeGenerationExhaustedError() error {
+	return NewError(ErrCodeGenerationExhausted,
+		"Could not find a free short code; try again or use a custom slug.")
 }

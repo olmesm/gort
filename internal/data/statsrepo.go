@@ -93,24 +93,16 @@ func VisitsPerDay(db *Db, scope VisitScope, startDate, endDate *time.Time) ([]Da
 	rangeSql, rangeArgs := rangeWhere(db, startDate, endDate)
 	dayExpr := db.DayExpr("vi.visited_at")
 
-	rows, err := db.Query(
-		fmt.Sprintf(`SELECT %s AS day, COUNT(*) AS count
-		             FROM visits vi WHERE %s%s
-		             GROUP BY %s ORDER BY day`, dayExpr, scopeSql, rangeSql, dayExpr),
-		append(scopeArgs, rangeArgs...)...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []DayCount
-	for rows.Next() {
+	return queryAll(db, func(r rowScanner) (*DayCount, error) {
 		var d DayCount
-		if err := rows.Scan(&d.Day, &d.Count); err != nil {
+		if err := r.Scan(&d.Day, &d.Count); err != nil {
 			return nil, err
 		}
-		out = append(out, d)
-	}
-	return out, rows.Err()
+		return &d, nil
+	}, fmt.Sprintf(`SELECT %s AS day, COUNT(*) AS count
+	                FROM visits vi WHERE %s%s
+	                GROUP BY %s ORDER BY day`, dayExpr, scopeSql, rangeSql, dayExpr),
+		append(scopeArgs, rangeArgs...)...)
 }
 
 type LabelCount struct {
@@ -132,35 +124,25 @@ func Breakdown(db *Db, scope VisitScope, column string, startDate, endDate *time
 	rangeSql, rangeArgs := rangeWhere(db, startDate, endDate)
 	args := append(append(scopeArgs, rangeArgs...), limit)
 
-	rows, err := db.Query(
-		fmt.Sprintf(`SELECT vi.%s AS label, COUNT(*) AS count
-		             FROM visits vi WHERE %s%s
-		             GROUP BY vi.%s ORDER BY count DESC
-		             LIMIT ?`, column, scopeSql, rangeSql, column), args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []LabelCount
-	for rows.Next() {
+	return queryAll(db, func(r rowScanner) (*LabelCount, error) {
 		var label sql.NullString
 		var count int64
-		if err := rows.Scan(&label, &count); err != nil {
+		if err := r.Scan(&label, &count); err != nil {
 			return nil, err
 		}
-		out = append(out, LabelCount{Label: strPtr(label), Count: count})
-	}
-	return out, rows.Err()
+		return &LabelCount{Label: strPtr(label), Count: count}, nil
+	}, fmt.Sprintf(`SELECT vi.%s AS label, COUNT(*) AS count
+	                FROM visits vi WHERE %s%s
+	                GROUP BY vi.%s ORDER BY count DESC
+	                LIMIT ?`, column, scopeSql, rangeSql, column), args...)
 }
 
 func VisitCount(db *Db, scope VisitScope, startDate, endDate *time.Time) (int64, error) {
 	scopeSql, scopeArgs := scopeWhere(scope)
 	rangeSql, rangeArgs := rangeWhere(db, startDate, endDate)
-	var count int64
-	err := db.QueryRow(
+	return queryScalar[int64](db,
 		fmt.Sprintf("SELECT COUNT(*) FROM visits vi WHERE %s%s", scopeSql, rangeSql),
-		append(scopeArgs, rangeArgs...)...).Scan(&count)
-	return count, err
+		append(scopeArgs, rangeArgs...)...)
 }
 
 func Overview(db *Db) (OverviewRow, error) {

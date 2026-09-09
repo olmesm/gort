@@ -157,7 +157,7 @@ func (a *App) uiShortUrlVisits(user *CurrentUser, w http.ResponseWriter, r *http
 		respondPlainNotFound(w)
 		return
 	}
-	detail, err := data.TryGetDetailById(a.Db, core.ShortUrlID(id))
+	detail, err := data.ShortUrlDetailByID(a.Db, core.ShortUrlID(id))
 	if err != nil {
 		a.serverError(w, err)
 		return

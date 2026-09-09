@@ -41,62 +41,35 @@ func InsertWebhook(db *Db, name, url, secret string, events []core.WebhookEvent)
 }
 
 func ListWebhooks(db *Db) ([]WebhookRow, error) {
-	rows, err := db.Query(fmt.Sprintf("SELECT %s FROM webhooks ORDER BY name", webhookSelectCols))
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []WebhookRow
-	for rows.Next() {
-		w, err := scanWebhookRow(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, *w)
-	}
-	return out, rows.Err()
+	return queryAll(db, scanWebhookRow,
+		fmt.Sprintf("SELECT %s FROM webhooks ORDER BY name", webhookSelectCols))
 }
 
 // ListWebhooksForEvent lists enabled webhooks subscribed to a given event.
 func ListWebhooksForEvent(db *Db, event core.WebhookEvent) ([]WebhookRow, error) {
-	rows, err := db.Query(
+	enabled, err := queryAll(db, scanWebhookRow,
 		fmt.Sprintf("SELECT %s FROM webhooks WHERE enabled = %s", webhookSelectCols, db.BoolLiteral(true)))
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	var out []WebhookRow
-	for rows.Next() {
-		w, err := scanWebhookRow(rows)
-		if err != nil {
-			return nil, err
-		}
+	for _, w := range enabled {
 		for _, e := range strings.Split(w.Events, ",") {
 			if strings.TrimSpace(e) == event.Slug() {
-				out = append(out, *w)
+				out = append(out, w)
 				break
 			}
 		}
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func SetWebhookEnabled(db *Db, id core.WebhookID, enabled bool) (bool, error) {
-	res, err := db.Exec("UPDATE webhooks SET enabled = ? WHERE id = ?", enabled, id.Value())
-	if err != nil {
-		return false, err
-	}
-	affected, _ := res.RowsAffected()
-	return affected > 0, nil
+	return execAffected(db, "UPDATE webhooks SET enabled = ? WHERE id = ?", enabled, id.Value())
 }
 
 func DeleteWebhook(db *Db, id core.WebhookID) (bool, error) {
-	res, err := db.Exec("DELETE FROM webhooks WHERE id = ?", id.Value())
-	if err != nil {
-		return false, err
-	}
-	affected, _ := res.RowsAffected()
-	return affected > 0, nil
+	return execAffected(db, "DELETE FROM webhooks WHERE id = ?", id.Value())
 }
 
 // ---- Delivery queue ----
@@ -118,26 +91,12 @@ type DueDelivery struct {
 // DueDeliveries returns deliveries due for an attempt, joined with their
 // webhook config.
 func DueDeliveries(db *Db, limit int) ([]DueDelivery, error) {
-	rows, err := db.Query(
-		`SELECT wd.id, wd.webhook_id, wd.event, wd.payload, wd.attempts, wd.next_attempt_at,
-		        wd.status, wd.last_error, wd.created_at,
-		        w.id, w.name, w.url, w.secret, w.events, w.enabled, w.created_at
-		 FROM webhook_deliveries wd
-		 JOIN webhooks w ON w.id = wd.webhook_id
-		 WHERE wd.status = 'pending' AND wd.next_attempt_at <= ?
-		 ORDER BY wd.next_attempt_at LIMIT ?`,
-		db.BindTime(time.Now()), limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []DueDelivery
-	for rows.Next() {
+	return queryAll(db, func(r rowScanner) (*DueDelivery, error) {
 		var d WebhookDeliveryRow
 		var w WebhookRow
 		var lastError sql.NullString
 		var nextAttemptAt, dCreatedAt, wCreatedAt NullTime
-		err := rows.Scan(&d.Id, &d.WebhookId, &d.Event, &d.Payload, &d.Attempts, &nextAttemptAt,
+		err := r.Scan(&d.Id, &d.WebhookId, &d.Event, &d.Payload, &d.Attempts, &nextAttemptAt,
 			&d.Status, &lastError, &dCreatedAt,
 			&w.Id, &w.Name, &w.Url, &w.Secret, &w.Events, &w.Enabled, &wCreatedAt)
 		if err != nil {
@@ -147,9 +106,15 @@ func DueDeliveries(db *Db, limit int) ([]DueDelivery, error) {
 		d.LastError = strPtr(lastError)
 		d.CreatedAt = dCreatedAt.Time
 		w.CreatedAt = wCreatedAt.Time
-		out = append(out, DueDelivery{Delivery: d, Webhook: w})
-	}
-	return out, rows.Err()
+		return &DueDelivery{Delivery: d, Webhook: w}, nil
+	}, `SELECT wd.id, wd.webhook_id, wd.event, wd.payload, wd.attempts, wd.next_attempt_at,
+	           wd.status, wd.last_error, wd.created_at,
+	           w.id, w.name, w.url, w.secret, w.events, w.enabled, w.created_at
+	    FROM webhook_deliveries wd
+	    JOIN webhooks w ON w.id = wd.webhook_id
+	    WHERE wd.status = 'pending' AND wd.next_attempt_at <= ?
+	    ORDER BY wd.next_attempt_at LIMIT ?`,
+		db.BindTime(time.Now()), limit)
 }
 
 func MarkDelivered(db *Db, deliveryId int64) error {

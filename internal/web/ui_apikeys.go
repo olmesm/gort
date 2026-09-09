@@ -102,7 +102,7 @@ func (a *App) uiCreateApiKey(user *CurrentUser, w http.ResponseWriter, r *http.R
 	var domain *data.DomainRow
 	if authority := r.PostFormValue("domain"); authority != "" {
 		var err error
-		domain, err = data.TryGetDomainByAuthority(a.Db, strings.ToLower(authority))
+		domain, err = data.DomainByAuthority(a.Db, strings.ToLower(authority))
 		if err != nil {
 			a.serverError(w, err)
 			return
@@ -139,7 +139,7 @@ func (a *App) uiCreateApiKey(user *CurrentUser, w http.ResponseWriter, r *http.R
 // POST /admin/api-keys/{id}/toggle (admin)
 func (a *App) uiToggleApiKey(_ *CurrentUser, w http.ResponseWriter, r *http.Request) {
 	if id, err := strconv.ParseInt(r.PathValue("id"), 10, 64); err == nil {
-		key, err := data.TryGetApiKeyById(a.Db, core.ApiKeyID(id))
+		key, err := data.ApiKeyByID(a.Db, core.ApiKeyID(id))
 		if err != nil {
 			a.serverError(w, err)
 			return

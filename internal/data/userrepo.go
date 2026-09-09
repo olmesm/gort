@@ -2,7 +2,6 @@ package data
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 
@@ -25,98 +24,52 @@ func scanUserRow(r rowScanner) (*UserRow, error) {
 
 // InsertUser creates a user. Returns nil if the username is taken.
 func InsertUser(db *Db, username, passwordHash string, role core.UserRole) (*UserRow, error) {
-	res, err := db.Exec(
+	inserted, err := execAffected(db,
 		`INSERT INTO users (username, password_hash, role, created_at)
 		 VALUES (?, ?, ?, ?)
 		 ON CONFLICT (username) DO NOTHING`,
 		username, passwordHash, role.Slug(), db.BindTime(time.Now()))
-	if err != nil {
+	if err != nil || !inserted {
 		return nil, err
 	}
-	affected, _ := res.RowsAffected()
-	if affected == 0 {
-		return nil, nil
-	}
-	return TryFindUserByUsername(db, username)
+	return UserByUsername(db, username)
 }
 
-func TryFindUserByUsername(db *Db, username string) (*UserRow, error) {
-	u, err := scanUserRow(db.QueryRow(
-		fmt.Sprintf("SELECT %s FROM users WHERE username = ?", userSelectCols), username))
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	return u, err
+func UserByUsername(db *Db, username string) (*UserRow, error) {
+	return queryOne(db, scanUserRow,
+		fmt.Sprintf("SELECT %s FROM users WHERE username = ?", userSelectCols), username)
 }
 
-func TryFindUserById(db *Db, id core.UserID) (*UserRow, error) {
-	u, err := scanUserRow(db.QueryRow(
-		fmt.Sprintf("SELECT %s FROM users WHERE id = ?", userSelectCols), id.Value()))
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	return u, err
+func UserByID(db *Db, id core.UserID) (*UserRow, error) {
+	return queryOne(db, scanUserRow,
+		fmt.Sprintf("SELECT %s FROM users WHERE id = ?", userSelectCols), id.Value())
 }
 
 func ListUsers(db *Db) ([]UserRow, error) {
-	rows, err := db.Query(fmt.Sprintf("SELECT %s FROM users ORDER BY username", userSelectCols))
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []UserRow
-	for rows.Next() {
-		u, err := scanUserRow(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, *u)
-	}
-	return out, rows.Err()
+	return queryAll(db, scanUserRow,
+		fmt.Sprintf("SELECT %s FROM users ORDER BY username", userSelectCols))
 }
 
 func UpdateUserPassword(db *Db, id core.UserID, passwordHash string) (bool, error) {
-	res, err := db.Exec("UPDATE users SET password_hash = ? WHERE id = ?", passwordHash, id.Value())
-	if err != nil {
-		return false, err
-	}
-	affected, _ := res.RowsAffected()
-	return affected > 0, nil
+	return execAffected(db, "UPDATE users SET password_hash = ? WHERE id = ?", passwordHash, id.Value())
 }
 
 func UpdateUserRole(db *Db, id core.UserID, role core.UserRole) (bool, error) {
-	res, err := db.Exec("UPDATE users SET role = ? WHERE id = ?", role.Slug(), id.Value())
-	if err != nil {
-		return false, err
-	}
-	affected, _ := res.RowsAffected()
-	return affected > 0, nil
+	return execAffected(db, "UPDATE users SET role = ? WHERE id = ?", role.Slug(), id.Value())
 }
 
 func DeleteUser(db *Db, id core.UserID) (bool, error) {
-	res, err := db.Exec("DELETE FROM users WHERE id = ?", id.Value())
-	if err != nil {
-		return false, err
-	}
-	affected, _ := res.RowsAffected()
-	return affected > 0, nil
+	return execAffected(db, "DELETE FROM users WHERE id = ?", id.Value())
 }
 
 func CountUsers(db *Db) (int64, error) {
-	var count int64
-	err := db.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)
-	return count, err
+	return queryScalar[int64](db, "SELECT COUNT(*) FROM users")
 }
 
-// TryFindUserBySubject looks up an SSO-provisioned user by its stable OIDC
-// subject.
-func TryFindUserBySubject(db *Db, subject string) (*UserRow, error) {
-	u, err := scanUserRow(db.QueryRow(
-		fmt.Sprintf("SELECT %s FROM users WHERE oidc_subject = ?", userSelectCols), subject))
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	return u, err
+// UserBySubject looks up an SSO-provisioned user by its stable OIDC subject.
+func UserBySubject(db *Db, subject string) (*UserRow, error) {
+	return queryOne(db, scanUserRow,
+		fmt.Sprintf("SELECT %s FROM users WHERE oidc_subject = ?", userSelectCols), subject)
 }
 
 // UpsertOidcUser provisions or refreshes the local shadow row for an OIDC
@@ -124,7 +77,7 @@ func TryFindUserBySubject(db *Db, subject string) (*UserRow, error) {
 // these rows (the stored hash is a sentinel no bcrypt hash can equal).
 // Returns the current row.
 func UpsertOidcUser(db *Db, subject, username string, role core.UserRole) (*UserRow, error) {
-	existing, err := TryFindUserBySubject(db, subject)
+	existing, err := UserBySubject(db, subject)
 	if err != nil {
 		return nil, err
 	}
@@ -141,20 +94,15 @@ func UpsertOidcUser(db *Db, subject, username string, role core.UserRole) (*User
 				return nil, err
 			}
 		}
-		return TryFindUserBySubject(db, subject)
+		return UserBySubject(db, subject)
 	}
 
 	insert := func(name string) (bool, error) {
-		res, err := db.Exec(
+		return execAffected(db,
 			`INSERT INTO users (username, password_hash, role, created_at, auth_source, oidc_subject)
 			 VALUES (?, '!oidc', ?, ?, 'oidc', ?)
 			 ON CONFLICT (username) DO NOTHING`,
 			name, role.Slug(), db.BindTime(time.Now()), subject)
-		if err != nil {
-			return false, err
-		}
-		affected, _ := res.RowsAffected()
-		return affected > 0, nil
 	}
 
 	inserted, err := insert(username)
@@ -172,11 +120,9 @@ func UpsertOidcUser(db *Db, subject, username string, role core.UserRole) (*User
 			return nil, err
 		}
 	}
-	return TryFindUserBySubject(db, subject)
+	return UserBySubject(db, subject)
 }
 
 func CountAdmins(db *Db) (int64, error) {
-	var count int64
-	err := db.QueryRow("SELECT COUNT(*) FROM users WHERE role = ?", core.UserAdmin.Slug()).Scan(&count)
-	return count, err
+	return queryScalar[int64](db, "SELECT COUNT(*) FROM users WHERE role = ?", core.UserAdmin.Slug())
 }

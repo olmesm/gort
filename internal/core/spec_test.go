@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -69,7 +70,7 @@ func TestSpecsCollectEveryValidatedPiece(t *testing.T) {
 		RedirectStatus: intPtr(301),
 	})
 	if serr != nil {
-		t.Fatalf("unexpected: %s", serr.Message())
+		t.Fatalf("unexpected: %s", serr)
 	}
 	if spec.LongUrl.Value() != "https://example.com/x" {
 		t.Errorf("long url: %q", spec.LongUrl.Value())
@@ -90,8 +91,8 @@ func TestSpecsRejectAZeroMaxVisitBudget(t *testing.T) {
 	if serr == nil {
 		t.Fatal("expected rejection")
 	}
-	if serr.Kind != ErrInvalidLifetime {
-		t.Errorf("wrong error kind: %s", serr.Kind)
+	if !errors.Is(serr, ErrInvalidLifetime) {
+		t.Errorf("wrong error category: %s", serr)
 	}
 }
 
@@ -100,15 +101,15 @@ func TestSpecsRejectUnsupportedRedirectStatuses(t *testing.T) {
 	if serr == nil {
 		t.Fatal("expected rejection")
 	}
-	if serr.Kind != ErrInvalidRedirectStatus || serr.Status != 418 {
-		t.Errorf("wrong error: %+v", serr)
+	if !errors.Is(serr, ErrInvalidRedirectStatus) || !strings.Contains(serr.Error(), "'418'") {
+		t.Errorf("wrong error: %v", serr)
 	}
 }
 
 func TestSpecsBlankOutWhitespaceTitles(t *testing.T) {
 	spec, serr := NewShortUrlSpec(ShortUrlSpecInput{LongUrl: "https://example.com", Title: strPtr("   ")})
 	if serr != nil {
-		t.Fatal(serr.Message())
+		t.Fatal(serr)
 	}
 	if spec.Title != nil {
 		t.Errorf("expected nil title, got %q", *spec.Title)

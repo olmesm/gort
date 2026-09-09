@@ -103,7 +103,7 @@ func (a *App) apiListWebhooks(_ *AuthenticatedKey, w http.ResponseWriter, r *htt
 // POST /rest/v1/webhooks (admin) — the signing secret is returned exactly
 // once.
 func (a *App) apiCreateWebhook(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
-	body, err := ReadJSON[CreateWebhookBody](r)
+	body, err := ReadJSON[CreateWebhookBody](w, r)
 	if err != nil {
 		BadRequest(w, err.Error())
 		return
@@ -131,7 +131,7 @@ func webhookIdFromPath(r *http.Request) (core.WebhookID, bool) {
 
 // PATCH /rest/v1/webhooks/{id} (admin)
 func (a *App) apiPatchWebhook(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
-	body, err := ReadJSON[PatchWebhookBody](r)
+	body, err := ReadJSON[PatchWebhookBody](w, r)
 	if err != nil {
 		BadRequest(w, err.Error())
 		return

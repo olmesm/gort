@@ -60,7 +60,7 @@ func (a *App) apiListDomains(_ *AuthenticatedKey, w http.ResponseWriter, r *http
 
 // POST /rest/v1/domains (admin)
 func (a *App) apiCreateDomain(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
-	body, err := ReadJSON[CreateDomainBody](r)
+	body, err := ReadJSON[CreateDomainBody](w, r)
 	if err != nil {
 		BadRequest(w, err.Error())
 		return
@@ -84,12 +84,12 @@ func (a *App) apiCreateDomain(_ *AuthenticatedKey, w http.ResponseWriter, r *htt
 
 // PATCH /rest/v1/domains/redirects (admin)
 func (a *App) apiSetDomainRedirects(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
-	body, err := ReadJSON[DomainRedirectsBody](r)
+	body, err := ReadJSON[DomainRedirectsBody](w, r)
 	if err != nil {
 		BadRequest(w, err.Error())
 		return
 	}
-	domain, err := data.TryGetDomainByAuthority(a.Db, strings.ToLower(strings.TrimSpace(body.Domain)))
+	domain, err := data.DomainByAuthority(a.Db, strings.ToLower(strings.TrimSpace(body.Domain)))
 	if err != nil {
 		a.serverError(w, err)
 		return
@@ -103,7 +103,7 @@ func (a *App) apiSetDomainRedirects(_ *AuthenticatedKey, w http.ResponseWriter, 
 		a.serverError(w, err)
 		return
 	}
-	updated, err := data.TryGetDomainById(a.Db, core.DomainID(domain.Id))
+	updated, err := data.DomainByID(a.Db, core.DomainID(domain.Id))
 	if err != nil || updated == nil {
 		a.serverError(w, err)
 		return
@@ -114,7 +114,7 @@ func (a *App) apiSetDomainRedirects(_ *AuthenticatedKey, w http.ResponseWriter, 
 // DELETE /rest/v1/domains/{authority} (admin)
 func (a *App) apiDeleteDomain(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
 	authority := r.PathValue("authority")
-	domain, err := data.TryGetDomainByAuthority(a.Db, strings.ToLower(authority))
+	domain, err := data.DomainByAuthority(a.Db, strings.ToLower(authority))
 	if err != nil {
 		a.serverError(w, err)
 		return
@@ -137,7 +137,7 @@ func (a *App) apiDeleteDomain(_ *AuthenticatedKey, w http.ResponseWriter, r *htt
 // GET /rest/v1/domains/{authority}/visits
 func (a *App) apiDomainVisits(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
 	authority := r.PathValue("authority")
-	domain, err := data.TryGetDomainByAuthority(a.Db, strings.ToLower(authority))
+	domain, err := data.DomainByAuthority(a.Db, strings.ToLower(authority))
 	if err != nil {
 		a.serverError(w, err)
 		return

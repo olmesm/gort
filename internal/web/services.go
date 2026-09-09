@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/olmesm/gort/internal/core"
@@ -14,23 +15,23 @@ import (
 // ResolveRequestDomain resolves the domain row for an incoming request Host
 // (falling back to the default domain).
 func (a *App) ResolveRequestDomain(hostAuthority string) (*data.DomainRow, error) {
-	byHost, err := data.TryGetDomainByAuthority(a.Db, strings.ToLower(hostAuthority))
+	byHost, err := data.DomainByAuthority(a.Db, strings.ToLower(hostAuthority))
 	if err != nil {
 		return nil, err
 	}
 	if byHost != nil {
 		return byHost, nil
 	}
-	return data.GetDefaultDomain(a.Db)
+	return data.DefaultDomain(a.Db)
 }
 
 // ResolveNamedDomain resolves an explicitly named domain (API "domain"
 // param). Empty → default domain; unknown → nil.
 func (a *App) ResolveNamedDomain(authority string) (*data.DomainRow, error) {
 	if authority == "" {
-		return data.GetDefaultDomain(a.Db)
+		return data.DefaultDomain(a.Db)
 	}
-	return data.TryGetDomainByAuthority(a.Db, strings.ToLower(strings.TrimSpace(authority)))
+	return data.DomainByAuthority(a.Db, strings.ToLower(strings.TrimSpace(authority)))
 }
 
 // LifetimeOfRow is the lifetime stored on a row. Values were validated on
@@ -47,9 +48,9 @@ func LifetimeOfRow(row *data.ShortUrlRow) core.Lifetime {
 // unknown authorities.
 func (a *App) resolveTargetDomain(domain *core.DomainAuthority) (*data.DomainRow, error) {
 	if domain == nil {
-		return data.GetDefaultDomain(a.Db)
+		return data.DefaultDomain(a.Db)
 	}
-	existing, err := data.TryGetDomainByAuthority(a.Db, domain.Value())
+	existing, err := data.DomainByAuthority(a.Db, domain.Value())
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +65,7 @@ func (a *App) resolveTargetDomain(domain *core.DomainAuthority) (*data.DomainRow
 		return created, nil
 	}
 	// Lost a race with a concurrent insert; fetch the winner.
-	return data.TryGetDomainByAuthority(a.Db, domain.Value())
+	return data.DomainByAuthority(a.Db, domain.Value())
 }
 
 // Author says who created a short URL: a dashboard user or an API key.
@@ -78,14 +79,14 @@ func ApiKeyAuthor(id core.ApiKeyID) *Author { return &Author{ApiKeyId: &id} }
 
 // insertWithCode inserts with the spec's slug, or retries generated codes
 // until one is free.
-func (a *App) insertWithCode(spec *core.ShortUrlSpec, domain *data.DomainRow, record func(core.ShortCode) data.NewShortUrl) (core.ShortUrlID, *core.ShortUrlError) {
+func (a *App) insertWithCode(spec *core.ShortUrlSpec, domain *data.DomainRow, record func(core.ShortCode) data.NewShortUrl) (core.ShortUrlID, error) {
 	if spec.CustomSlug != nil {
 		id, err := data.CreateShortUrl(a.Db, record(*spec.CustomSlug), spec.Tags)
-		if err == data.ErrDuplicateShortCode {
+		if errors.Is(err, data.ErrDuplicateShortCode) {
 			return 0, core.SlugInUseError(spec.CustomSlug.Value(), domain.Authority)
 		}
 		if err != nil {
-			return 0, core.NewShortUrlError(ErrKindInternal, err.Error())
+			return 0, err
 		}
 		return id, nil
 	}
@@ -100,42 +101,38 @@ func (a *App) insertWithCode(spec *core.ShortUrlSpec, domain *data.DomainRow, re
 
 	for attempt := 0; attempt < 10; attempt++ {
 		id, err := data.CreateShortUrl(a.Db, record(core.GenerateShortCode(codeLength)), spec.Tags)
-		if err == data.ErrDuplicateShortCode {
+		if errors.Is(err, data.ErrDuplicateShortCode) {
 			continue
 		}
 		if err != nil {
-			return 0, core.NewShortUrlError(ErrKindInternal, err.Error())
+			return 0, err
 		}
 		return id, nil
 	}
 	return 0, core.CodeGenerationExhaustedError()
 }
 
-// ErrKindInternal marks unexpected persistence failures surfaced through
-// ShortUrlError so callers can map them to a 500.
-const ErrKindInternal core.ShortUrlErrorKind = "internal"
-
 // CreateShortUrl creates a short URL from a validated spec: domain resolution
 // (auto-registering unknown domains), code generation with collision retry,
 // atomic insert with tags, async title resolution and event publication.
-func (a *App) CreateShortUrl(author *Author, spec *core.ShortUrlSpec) (*ShortUrlDto, *core.ShortUrlError) {
+func (a *App) CreateShortUrl(author *Author, spec *core.ShortUrlSpec) (*ShortUrlDto, error) {
 	domain, err := a.resolveTargetDomain(spec.Domain)
 	if err != nil {
-		return nil, core.NewShortUrlError(ErrKindInternal, err.Error())
+		return nil, err
 	}
 	if domain == nil {
-		return nil, core.NewShortUrlError(core.ErrUnknownDomain, "The domain is not registered.")
+		return nil, core.NewError(core.ErrUnknownDomain, "The domain is not registered.")
 	}
 
 	if spec.FindIfExists {
-		existing, err := data.TryFindByLongUrl(a.Db, core.DomainID(domain.Id), spec.LongUrl)
+		existing, err := data.ShortUrlDetailByLongUrl(a.Db, core.DomainID(domain.Id), spec.LongUrl)
 		if err != nil {
-			return nil, core.NewShortUrlError(ErrKindInternal, err.Error())
+			return nil, err
 		}
 		if existing != nil {
 			tags, err := data.TagsForShortUrl(a.Db, core.ShortUrlID(existing.Id))
 			if err != nil {
-				return nil, core.NewShortUrlError(ErrKindInternal, err.Error())
+				return nil, err
 			}
 			dto := NewShortUrlDto(a.Cfg, tags, existing)
 			return &dto, nil
@@ -176,18 +173,21 @@ func (a *App) CreateShortUrl(author *Author, spec *core.ShortUrlSpec) (*ShortUrl
 		return nu
 	}
 
-	id, serr := a.insertWithCode(spec, domain, record)
-	if serr != nil {
-		return nil, serr
+	id, err := a.insertWithCode(spec, domain, record)
+	if err != nil {
+		return nil, err
 	}
 
 	if a.Cfg.AutoResolveTitles && spec.Title == nil {
 		a.Queues.enqueueTitle(id, spec.LongUrl)
 	}
 
-	detail, err := data.TryGetDetailById(a.Db, id)
-	if err != nil || detail == nil {
-		return nil, core.CodeGenerationExhaustedError()
+	detail, err := data.ShortUrlDetailByID(a.Db, id)
+	if err != nil {
+		return nil, err
+	}
+	if detail == nil {
+		return nil, errors.New("short URL missing immediately after insert")
 	}
 
 	dto := NewShortUrlDto(a.Cfg, core.TagValues(spec.Tags), detail)
@@ -223,7 +223,7 @@ func (a *App) EditShortUrl(id core.ShortUrlID, current *data.ShortUrlDetail, edi
 		}
 	}
 
-	updated, err := data.TryGetDetailById(a.Db, id)
+	updated, err := data.ShortUrlDetailByID(a.Db, id)
 	if err != nil {
 		return nil, err
 	}

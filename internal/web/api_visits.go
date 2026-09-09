@@ -36,7 +36,7 @@ func (a *App) scopeFromQuery(w http.ResponseWriter, key *AuthenticatedKey, q url
 		return &scope
 	}
 	if authority := q.Get("domain"); authority != "" {
-		d, err := data.TryGetDomainByAuthority(a.Db, strings.ToLower(authority))
+		d, err := data.DomainByAuthority(a.Db, strings.ToLower(authority))
 		if err != nil {
 			a.serverError(w, err)
 			return nil

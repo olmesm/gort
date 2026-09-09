@@ -41,7 +41,7 @@ func TestSpecsCarryTheValidatedGroup(t *testing.T) {
 	group := "/team-a"
 	spec, serr := NewShortUrlSpec(ShortUrlSpecInput{LongUrl: "https://example.com", Group: &group})
 	if serr != nil {
-		t.Fatal(serr.Message())
+		t.Fatal(serr)
 	}
 	if spec.Group == nil || spec.Group.Value() != "team-a" {
 		t.Errorf("group: %v", spec.Group)
