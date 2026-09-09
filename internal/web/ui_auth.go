@@ -55,9 +55,6 @@ func (a *App) uiLogin(w http.ResponseWriter, r *http.Request) error {
 	if a.Cfg.OidcEnabled() && a.Cfg.OidcOnly {
 		return a.renderLogin(w, http.StatusForbidden, "Password login is disabled; use single sign-on.", "/admin")
 	}
-	if err := r.ParseForm(); err != nil {
-		return a.renderLogin(w, http.StatusBadRequest, "Invalid form submission.", "/admin")
-	}
 	username := strings.TrimSpace(r.PostFormValue("username"))
 	password := r.PostFormValue("password")
 	returnUrl := safeReturnUrl(r.PostFormValue("returnUrl"))

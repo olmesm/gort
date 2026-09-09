@@ -3,7 +3,6 @@ package web
 import (
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/olmesm/gort/internal/core"
@@ -65,9 +64,6 @@ func (a *App) renderDomainsMessage(w http.ResponseWriter, status int, user *Curr
 
 // POST /admin/domains (admin)
 func (a *App) uiCreateDomain(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	if err := r.ParseForm(); err != nil {
-		return BadRequest("Invalid form submission.")
-	}
 	authority, err := core.NewDomainAuthority(r.PostFormValue("authority"))
 	if err != nil {
 		return a.renderDomainsMessage(w, http.StatusBadRequest, user, err.Error())
@@ -85,12 +81,9 @@ func (a *App) uiCreateDomain(user *CurrentUser, w http.ResponseWriter, r *http.R
 
 // POST /admin/domains/{id}/redirects (admin)
 func (a *App) uiSetDomainRedirects(_ *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	id, err := pathID[core.DomainID](r, "id")
 	if err != nil {
-		return errPageNotFound
-	}
-	if err := r.ParseForm(); err != nil {
-		return BadRequest("Invalid form submission.")
+		return err
 	}
 	getOpt := func(name string) *string {
 		if v := strings.TrimSpace(r.PostFormValue(name)); v != "" {
@@ -98,7 +91,7 @@ func (a *App) uiSetDomainRedirects(_ *CurrentUser, w http.ResponseWriter, r *htt
 		}
 		return nil
 	}
-	if _, err := data.UpdateDomainRedirects(r.Context(), a.Db, core.DomainID(id),
+	if _, err := data.UpdateDomainRedirects(r.Context(), a.Db, id,
 		getOpt("baseUrlRedirect"), getOpt("regular404Redirect"), getOpt("invalidShortUrlRedirect")); err != nil {
 		return err
 	}
@@ -107,10 +100,12 @@ func (a *App) uiSetDomainRedirects(_ *CurrentUser, w http.ResponseWriter, r *htt
 
 // POST /admin/domains/{id}/delete (admin)
 func (a *App) uiDeleteDomain(_ *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	if id, err := strconv.ParseInt(r.PathValue("id"), 10, 64); err == nil {
-		if _, err := data.DeleteDomain(r.Context(), a.Db, core.DomainID(id)); err != nil {
-			return err
-		}
+	id, err := pathID[core.DomainID](r, "id")
+	if err != nil {
+		return err
+	}
+	if _, err := data.DeleteDomain(r.Context(), a.Db, id); err != nil {
+		return err
 	}
 	return redirect(w, r, "/admin/domains")
 }

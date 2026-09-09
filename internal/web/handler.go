@@ -3,6 +3,7 @@ package web
 import (
 	"errors"
 	"net/http"
+	"strconv"
 )
 
 // handler is an http.HandlerFunc that reports failure by returning an error
@@ -58,3 +59,13 @@ var (
 	errPageNotFound = &plainError{http.StatusNotFound, "Not found"}
 	errAdminOnly    = &plainError{http.StatusForbidden, "Forbidden: admin access required."}
 )
+
+// pathID parses a numeric path value into a typed id. A malformed value gets
+// the same plain 404 an unknown id would, so handlers treat both alike.
+func pathID[ID ~int64](r *http.Request, name string) (ID, error) {
+	n, err := strconv.ParseInt(r.PathValue(name), 10, 64)
+	if err != nil {
+		return 0, errPageNotFound
+	}
+	return ID(n), nil
+}

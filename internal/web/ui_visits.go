@@ -6,7 +6,6 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -154,11 +153,11 @@ type shortUrlVisitsView struct {
 
 // GET /admin/short-urls/{id}/visits
 func (a *App) uiShortUrlVisits(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	id, err := pathID[core.ShortUrlID](r, "id")
 	if err != nil {
-		return errPageNotFound
+		return err
 	}
-	detail, err := data.ShortUrlDetailByID(r.Context(), a.Db, core.ShortUrlID(id))
+	detail, err := data.ShortUrlDetailByID(r.Context(), a.Db, id)
 	if err != nil {
 		return err
 	}

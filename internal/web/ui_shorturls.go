@@ -340,9 +340,6 @@ func splitTagsField(csv string) []string {
 
 // POST /admin/short-urls/new
 func (a *App) uiCreateShortUrl(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	if err := r.ParseForm(); err != nil {
-		return BadRequest("Invalid form submission.")
-	}
 	form := readSuCreateForm(r)
 
 	status := form.RedirectStatus
@@ -448,11 +445,11 @@ type suRuleView struct {
 // user's group scope: a link outside the scope is indistinguishable from a
 // missing one.
 func (a *App) loadDetailFromPath(user *CurrentUser, r *http.Request) (*data.ShortUrlDetail, error) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	id, err := pathID[core.ShortUrlID](r, "id")
 	if err != nil {
-		return nil, errPageNotFound
+		return nil, err
 	}
-	detail, err := data.ShortUrlDetailByID(r.Context(), a.Db, core.ShortUrlID(id))
+	detail, err := data.ShortUrlDetailByID(r.Context(), a.Db, id)
 	if err != nil {
 		return nil, err
 	}
@@ -523,9 +520,6 @@ func (a *App) uiEditShortUrl(user *CurrentUser, w http.ResponseWriter, r *http.R
 	if err != nil {
 		return err
 	}
-	if err := r.ParseForm(); err != nil {
-		return BadRequest("Invalid form submission.")
-	}
 	get := r.PostFormValue
 
 	status, err := strconv.Atoi(get("redirectStatus"))
@@ -573,9 +567,6 @@ func (a *App) uiAddRule(user *CurrentUser, w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		return err
 	}
-	if err := r.ParseForm(); err != nil {
-		return BadRequest("Invalid form submission.")
-	}
 	get := r.PostFormValue
 
 	var conditions []core.RuleCondition
@@ -621,9 +612,6 @@ func (a *App) uiDeleteRule(user *CurrentUser, w http.ResponseWriter, r *http.Req
 	detail, err := a.loadDetailFromPath(user, r)
 	if err != nil {
 		return err
-	}
-	if err := r.ParseForm(); err != nil {
-		return BadRequest("Invalid form submission.")
 	}
 	priority, err := strconv.Atoi(r.PostFormValue("priority"))
 	if err != nil {

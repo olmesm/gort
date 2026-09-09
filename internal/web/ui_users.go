@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/olmesm/gort/internal/core"
@@ -72,9 +71,6 @@ func (a *App) uiListUsers(user *CurrentUser, w http.ResponseWriter, r *http.Requ
 
 // POST /admin/users (admin)
 func (a *App) uiCreateUser(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	if err := r.ParseForm(); err != nil {
-		return BadRequest("Invalid form submission.")
-	}
 	username := strings.TrimSpace(r.PostFormValue("username"))
 	password := r.PostFormValue("password")
 	role := core.UserRegular
@@ -96,28 +92,27 @@ func (a *App) uiCreateUser(user *CurrentUser, w http.ResponseWriter, r *http.Req
 
 // POST /admin/users/{id}/role (admin)
 func (a *App) uiSetUserRole(_ *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err == nil {
-		if err := r.ParseForm(); err == nil {
-			role := core.UserRegular
-			if r.PostFormValue("role") == "admin" {
-				role = core.UserAdmin
-			}
-			target, err := data.UserByID(r.Context(), a.Db, core.UserID(id))
-			if err != nil {
-				return err
-			}
-			adminCount, err := data.CountAdmins(r.Context(), a.Db)
-			if err != nil {
-				return err
-			}
-			demotingLastAdmin := target != nil &&
-				target.Role == core.UserAdmin.Slug() && role == core.UserRegular && adminCount <= 1
-			if target != nil && !demotingLastAdmin {
-				if _, err := data.UpdateUserRole(r.Context(), a.Db, core.UserID(id), role); err != nil {
-					return err
-				}
-			}
+	id, err := pathID[core.UserID](r, "id")
+	if err != nil {
+		return err
+	}
+	role := core.UserRegular
+	if r.PostFormValue("role") == "admin" {
+		role = core.UserAdmin
+	}
+	target, err := data.UserByID(r.Context(), a.Db, id)
+	if err != nil {
+		return err
+	}
+	adminCount, err := data.CountAdmins(r.Context(), a.Db)
+	if err != nil {
+		return err
+	}
+	demotingLastAdmin := target != nil &&
+		target.Role == core.UserAdmin.Slug() && role == core.UserRegular && adminCount <= 1
+	if target != nil && !demotingLastAdmin {
+		if _, err := data.UpdateUserRole(r.Context(), a.Db, id, role); err != nil {
+			return err
 		}
 	}
 	return redirect(w, r, "/admin/users")
@@ -125,18 +120,15 @@ func (a *App) uiSetUserRole(_ *CurrentUser, w http.ResponseWriter, r *http.Reque
 
 // POST /admin/users/{id}/password (admin)
 func (a *App) uiSetUserPassword(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	id, err := pathID[core.UserID](r, "id")
 	if err != nil {
-		return errPageNotFound
-	}
-	if err := r.ParseForm(); err != nil {
-		return BadRequest("Invalid form submission.")
+		return err
 	}
 	password := r.PostFormValue("password")
 	if len(password) < 8 {
 		return a.renderUsersPage(r.Context(), w, user, "Passwords need at least 8 characters.")
 	}
-	if _, err := data.UpdateUserPassword(r.Context(), a.Db, core.UserID(id), HashPassword(password)); err != nil {
+	if _, err := data.UpdateUserPassword(r.Context(), a.Db, id, HashPassword(password)); err != nil {
 		return err
 	}
 	return redirect(w, r, "/admin/users")
@@ -144,21 +136,23 @@ func (a *App) uiSetUserPassword(user *CurrentUser, w http.ResponseWriter, r *htt
 
 // POST /admin/users/{id}/delete (admin)
 func (a *App) uiDeleteUser(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	if id, err := strconv.ParseInt(r.PathValue("id"), 10, 64); err == nil {
-		target, err := data.UserByID(r.Context(), a.Db, core.UserID(id))
-		if err != nil {
+	id, err := pathID[core.UserID](r, "id")
+	if err != nil {
+		return err
+	}
+	target, err := data.UserByID(r.Context(), a.Db, id)
+	if err != nil {
+		return err
+	}
+	adminCount, err := data.CountAdmins(r.Context(), a.Db)
+	if err != nil {
+		return err
+	}
+	isSelf := target != nil && target.Id == user.Id
+	isLastAdmin := target != nil && target.Role == core.UserAdmin.Slug() && adminCount <= 1
+	if target != nil && !isSelf && !isLastAdmin {
+		if _, err := data.DeleteUser(r.Context(), a.Db, id); err != nil {
 			return err
-		}
-		adminCount, err := data.CountAdmins(r.Context(), a.Db)
-		if err != nil {
-			return err
-		}
-		isSelf := target != nil && target.Id == user.Id
-		isLastAdmin := target != nil && target.Role == core.UserAdmin.Slug() && adminCount <= 1
-		if target != nil && !isSelf && !isLastAdmin {
-			if _, err := data.DeleteUser(r.Context(), a.Db, core.UserID(id)); err != nil {
-				return err
-			}
 		}
 	}
 	return redirect(w, r, "/admin/users")

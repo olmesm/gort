@@ -70,9 +70,6 @@ func (a *App) uiListTags(user *CurrentUser, w http.ResponseWriter, r *http.Reque
 
 // POST /admin/tags/rename
 func (a *App) uiRenameTag(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	if err := r.ParseForm(); err != nil {
-		return BadRequest("Invalid form submission.")
-	}
 	oldName := r.PostFormValue("oldName")
 
 	var message string
@@ -105,11 +102,9 @@ func (a *App) uiRenameTag(user *CurrentUser, w http.ResponseWriter, r *http.Requ
 
 // POST /admin/tags/delete
 func (a *App) uiDeleteTag(_ *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	if err := r.ParseForm(); err == nil {
-		if name := r.PostFormValue("name"); name != "" {
-			if _, err := data.DeleteTags(r.Context(), a.Db, []string{name}); err != nil {
-				return err
-			}
+	if name := r.PostFormValue("name"); name != "" {
+		if _, err := data.DeleteTags(r.Context(), a.Db, []string{name}); err != nil {
+			return err
 		}
 	}
 	return redirect(w, r, "/admin/tags")

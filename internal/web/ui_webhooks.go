@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/olmesm/gort/internal/core"
@@ -84,9 +83,6 @@ func (a *App) uiListWebhooks(user *CurrentUser, w http.ResponseWriter, r *http.R
 
 // POST /admin/webhooks (admin) — shows the signing secret once.
 func (a *App) uiCreateWebhook(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	if err := r.ParseForm(); err != nil {
-		return BadRequest("Invalid form submission.")
-	}
 	name := strings.TrimSpace(r.PostFormValue("name"))
 	hookUrl := strings.TrimSpace(r.PostFormValue("url"))
 	var events []core.WebhookEvent
@@ -107,18 +103,20 @@ func (a *App) uiCreateWebhook(user *CurrentUser, w http.ResponseWriter, r *http.
 
 // POST /admin/webhooks/{id}/toggle (admin)
 func (a *App) uiToggleWebhook(_ *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	if id, err := strconv.ParseInt(r.PathValue("id"), 10, 64); err == nil {
-		hooks, err := data.ListWebhooks(r.Context(), a.Db)
-		if err != nil {
-			return err
-		}
-		for _, hook := range hooks {
-			if hook.Id == core.WebhookID(id) {
-				if _, err := data.SetWebhookEnabled(r.Context(), a.Db, core.WebhookID(id), !hook.Enabled); err != nil {
-					return err
-				}
-				break
+	id, err := pathID[core.WebhookID](r, "id")
+	if err != nil {
+		return err
+	}
+	hooks, err := data.ListWebhooks(r.Context(), a.Db)
+	if err != nil {
+		return err
+	}
+	for _, hook := range hooks {
+		if hook.Id == id {
+			if _, err := data.SetWebhookEnabled(r.Context(), a.Db, id, !hook.Enabled); err != nil {
+				return err
 			}
+			break
 		}
 	}
 	return redirect(w, r, "/admin/webhooks")
@@ -126,10 +124,12 @@ func (a *App) uiToggleWebhook(_ *CurrentUser, w http.ResponseWriter, r *http.Req
 
 // POST /admin/webhooks/{id}/delete (admin)
 func (a *App) uiDeleteWebhook(_ *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	if id, err := strconv.ParseInt(r.PathValue("id"), 10, 64); err == nil {
-		if _, err := data.DeleteWebhook(r.Context(), a.Db, core.WebhookID(id)); err != nil {
-			return err
-		}
+	id, err := pathID[core.WebhookID](r, "id")
+	if err != nil {
+		return err
+	}
+	if _, err := data.DeleteWebhook(r.Context(), a.Db, id); err != nil {
+		return err
 	}
 	return redirect(w, r, "/admin/webhooks")
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -91,9 +90,6 @@ func (a *App) uiListApiKeys(user *CurrentUser, w http.ResponseWriter, r *http.Re
 
 // POST /admin/api-keys (admin) — shows the plaintext key once.
 func (a *App) uiCreateApiKey(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	if err := r.ParseForm(); err != nil {
-		return BadRequest("Invalid form submission.")
-	}
 	var name *string
 	if n := strings.TrimSpace(r.PostFormValue("name")); n != "" {
 		name = &n
@@ -134,15 +130,17 @@ func (a *App) uiCreateApiKey(user *CurrentUser, w http.ResponseWriter, r *http.R
 
 // POST /admin/api-keys/{id}/toggle (admin)
 func (a *App) uiToggleApiKey(_ *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	if id, err := strconv.ParseInt(r.PathValue("id"), 10, 64); err == nil {
-		key, err := data.ApiKeyByID(r.Context(), a.Db, core.ApiKeyID(id))
-		if err != nil {
+	id, err := pathID[core.ApiKeyID](r, "id")
+	if err != nil {
+		return err
+	}
+	key, err := data.ApiKeyByID(r.Context(), a.Db, id)
+	if err != nil {
+		return err
+	}
+	if key != nil {
+		if _, err := data.SetApiKeyEnabled(r.Context(), a.Db, id, !key.Enabled); err != nil {
 			return err
-		}
-		if key != nil {
-			if _, err := data.SetApiKeyEnabled(r.Context(), a.Db, core.ApiKeyID(id), !key.Enabled); err != nil {
-				return err
-			}
 		}
 	}
 	return redirect(w, r, "/admin/api-keys")
@@ -150,10 +148,12 @@ func (a *App) uiToggleApiKey(_ *CurrentUser, w http.ResponseWriter, r *http.Requ
 
 // POST /admin/api-keys/{id}/delete (admin)
 func (a *App) uiDeleteApiKey(_ *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	if id, err := strconv.ParseInt(r.PathValue("id"), 10, 64); err == nil {
-		if _, err := data.DeleteApiKey(r.Context(), a.Db, core.ApiKeyID(id)); err != nil {
-			return err
-		}
+	id, err := pathID[core.ApiKeyID](r, "id")
+	if err != nil {
+		return err
+	}
+	if _, err := data.DeleteApiKey(r.Context(), a.Db, id); err != nil {
+		return err
 	}
 	return redirect(w, r, "/admin/api-keys")
 }
