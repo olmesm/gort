@@ -48,6 +48,7 @@ jobs:
             echo "tag $VERSION exists from an unpublished attempt; re-tagging HEAD"
             git push --delete origin "refs/tags/$VERSION"
           fi
+          git tag -d "$VERSION" 2>/dev/null || true   # the checkout fetched it too
           git tag -a "$VERSION" -m "$VERSION"
           git push origin "refs/tags/$VERSION"
 
