@@ -14,6 +14,10 @@ on:
         description: "Version to tag and release (e.g. v1.2.3)"
         required: true
         type: string
+      notes_only:
+        description: "Only refresh the notes of an existing release from CHANGELOG.md"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -26,8 +30,30 @@ jobs:
         with:
           fetch-depth: 0
 
+      # The release notes are the CHANGELOG.md section for this version; a
+      # missing section fails the run so nothing ships undocumented. Written
+      # outside the checkout: GoReleaser refuses a dirty work tree.
+      - name: Extract release notes
+        env:
+          VERSION: ${{ inputs.version || github.ref_name }}
+        run: |
+          NOTES="$RUNNER_TEMP/release-notes.md"
+          awk -v v="${VERSION#v}" '$0 ~ "^## \\[" v "\\]" {f=1; next} /^## / {f=0} f' CHANGELOG.md > "$NOTES"
+          if ! grep -q '[^[:space:]]' "$NOTES"; then
+            echo "CHANGELOG.md has no section for $VERSION" >&2
+            exit 1
+          fi
+          cat "$NOTES"
+
+      - name: Refresh the notes of the existing release
+        if: inputs.notes_only == true
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$VERSION" --notes-file "$RUNNER_TEMP/release-notes.md"
+
       - name: Tag the release (manual dispatch only)
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && inputs.notes_only != true
         env:
           VERSION: ${{ inputs.version }}
           GH_TOKEN: ${{ github.token }}
@@ -53,28 +79,16 @@ jobs:
           git push origin "refs/tags/$VERSION"
 
       - uses: actions/setup-go@v5
+        if: inputs.notes_only != true
         with:
           go-version-file: go.mod
 
       - name: Test
+        if: inputs.notes_only != true
         run: go test ./...
 
-      # The release notes are the CHANGELOG.md section for this version; a
-      # missing section fails the release so nothing ships undocumented.
-      - name: Extract release notes
-        env:
-          VERSION: ${{ inputs.version || github.ref_name }}
-        run: |
-          # Written outside the checkout: GoReleaser refuses a dirty work tree.
-          NOTES="$RUNNER_TEMP/release-notes.md"
-          awk -v v="${VERSION#v}" '$0 ~ "^## \\[" v "\\]" {f=1; next} /^## / {f=0} f' CHANGELOG.md > "$NOTES"
-          if ! grep -q '[^[:space:]]' "$NOTES"; then
-            echo "CHANGELOG.md has no section for $VERSION" >&2
-            exit 1
-          fi
-          cat "$NOTES"
-
       - uses: goreleaser/goreleaser-action@v6
+        if: inputs.notes_only != true
         with:
           distribution: goreleaser
           version: "~> v2"

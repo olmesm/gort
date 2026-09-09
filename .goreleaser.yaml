@@ -37,10 +37,12 @@ checksum:
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
 
-# Release notes come from CHANGELOG.md (see the release workflow), not from
-# the commit list.
+# Release notes come from CHANGELOG.md, passed by the workflow as
+# --release-notes, which replaces this generated changelog. (Do not set
+# changelog.disable: that skips the stage before the file is read.)
 changelog:
-  disable: true
+  use: git
+  sort: asc
 
 release:
   github:
