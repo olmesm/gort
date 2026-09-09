@@ -1,7 +1,7 @@
 package data
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -88,12 +88,12 @@ type DayCount struct {
 }
 
 // VisitsPerDay returns daily visit counts within a range for the given scope.
-func VisitsPerDay(db *Db, scope VisitScope, startDate, endDate *time.Time) ([]DayCount, error) {
+func VisitsPerDay(ctx context.Context, db *Db, scope VisitScope, startDate, endDate *time.Time) ([]DayCount, error) {
 	scopeSql, scopeArgs := scopeWhere(scope)
 	rangeSql, rangeArgs := rangeWhere(db, startDate, endDate)
 	dayExpr := db.DayExpr("vi.visited_at")
 
-	return queryAll(db, func(r rowScanner) (*DayCount, error) {
+	return queryAll(ctx, db, func(r rowScanner) (*DayCount, error) {
 		var d DayCount
 		if err := r.Scan(&d.Day, &d.Count); err != nil {
 			return nil, err
@@ -112,7 +112,7 @@ type LabelCount struct {
 
 // Breakdown returns visit counts grouped by an attribute (country, city,
 // browser, os, referer, device).
-func Breakdown(db *Db, scope VisitScope, column string, startDate, endDate *time.Time, limit int) ([]LabelCount, error) {
+func Breakdown(ctx context.Context, db *Db, scope VisitScope, column string, startDate, endDate *time.Time, limit int) ([]LabelCount, error) {
 	switch column {
 	case "country_name", "country_code", "city", "browser", "os", "referer", "device":
 		// Whitelisted: this ends up in SQL directly.
@@ -124,30 +124,29 @@ func Breakdown(db *Db, scope VisitScope, column string, startDate, endDate *time
 	rangeSql, rangeArgs := rangeWhere(db, startDate, endDate)
 	args := append(append(scopeArgs, rangeArgs...), limit)
 
-	return queryAll(db, func(r rowScanner) (*LabelCount, error) {
-		var label sql.NullString
-		var count int64
-		if err := r.Scan(&label, &count); err != nil {
+	return queryAll(ctx, db, func(r rowScanner) (*LabelCount, error) {
+		var lc LabelCount
+		if err := r.Scan(&lc.Label, &lc.Count); err != nil {
 			return nil, err
 		}
-		return &LabelCount{Label: strPtr(label), Count: count}, nil
+		return &lc, nil
 	}, fmt.Sprintf(`SELECT vi.%s AS label, COUNT(*) AS count
 	                FROM visits vi WHERE %s%s
 	                GROUP BY vi.%s ORDER BY count DESC
 	                LIMIT ?`, column, scopeSql, rangeSql, column), args...)
 }
 
-func VisitCount(db *Db, scope VisitScope, startDate, endDate *time.Time) (int64, error) {
+func VisitCount(ctx context.Context, db *Db, scope VisitScope, startDate, endDate *time.Time) (int64, error) {
 	scopeSql, scopeArgs := scopeWhere(scope)
 	rangeSql, rangeArgs := rangeWhere(db, startDate, endDate)
-	return queryScalar[int64](db,
+	return queryScalar[int64](ctx, db,
 		fmt.Sprintf("SELECT COUNT(*) FROM visits vi WHERE %s%s", scopeSql, rangeSql),
 		append(scopeArgs, rangeArgs...)...)
 }
 
-func Overview(db *Db) (OverviewRow, error) {
+func Overview(ctx context.Context, db *Db) (OverviewRow, error) {
 	var o OverviewRow
-	err := db.QueryRow(fmt.Sprintf(
+	err := db.QueryRow(ctx, fmt.Sprintf(
 		`SELECT
 		   (SELECT COUNT(*) FROM short_urls) AS short_url_count,
 		   (SELECT COUNT(*) FROM visits vi WHERE %s) AS visit_count,

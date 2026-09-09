@@ -96,7 +96,7 @@ func (a *App) requireApiKey(next apiHandler) http.HandlerFunc {
 		if key == "" {
 			return Unauthorized("Expected an API key in the X-Api-Key header.")
 		}
-		row, err := data.ApiKeyByHash(a.Db, HashApiKey(key))
+		row, err := data.ApiKeyByHash(r.Context(), a.Db, HashApiKey(key))
 		if err != nil {
 			return err
 		}
@@ -239,7 +239,7 @@ func (a *App) SignIn(w http.ResponseWriter, user *data.UserRow) {
 // SignInWithGroups issues the session cookie carrying the user's OIDC groups.
 func (a *App) SignInWithGroups(w http.ResponseWriter, user *data.UserRow, groups []string) {
 	payload, _ := json.Marshal(sessionPayload{
-		Uid:      user.Id,
+		Uid:      user.Id.Value(),
 		Username: user.Username,
 		Role:     user.Role,
 		Groups:   groups,

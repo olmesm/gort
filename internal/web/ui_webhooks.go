@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -38,8 +39,8 @@ type eventCheckView struct {
 	Checked bool
 }
 
-func (a *App) webhooksViewModel(errorMessage, secret string) (webhooksView, error) {
-	hooks, err := data.ListWebhooks(a.Db)
+func (a *App) webhooksViewModel(ctx context.Context, errorMessage, secret string) (webhooksView, error) {
+	hooks, err := data.ListWebhooks(ctx, a.Db)
 	if err != nil {
 		return webhooksView{}, err
 	}
@@ -68,8 +69,8 @@ func (a *App) webhooksViewModel(errorMessage, secret string) (webhooksView, erro
 	return model, nil
 }
 
-func (a *App) renderWebhooksPage(w http.ResponseWriter, user *CurrentUser, errorMessage, secret string) error {
-	model, err := a.webhooksViewModel(errorMessage, secret)
+func (a *App) renderWebhooksPage(ctx context.Context, w http.ResponseWriter, user *CurrentUser, errorMessage, secret string) error {
+	model, err := a.webhooksViewModel(ctx, errorMessage, secret)
 	if err != nil {
 		return err
 	}
@@ -78,7 +79,7 @@ func (a *App) renderWebhooksPage(w http.ResponseWriter, user *CurrentUser, error
 
 // GET /admin/webhooks (admin)
 func (a *App) uiListWebhooks(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	return a.renderWebhooksPage(w, user, "", "")
+	return a.renderWebhooksPage(r.Context(), w, user, "", "")
 }
 
 // POST /admin/webhooks (admin) — shows the signing secret once.
@@ -95,25 +96,25 @@ func (a *App) uiCreateWebhook(user *CurrentUser, w http.ResponseWriter, r *http.
 		}
 	}
 	if name == "" || !isHttpUrl(hookUrl) || len(events) == 0 {
-		return a.renderWebhooksPage(w, user, "Name, a valid http(s) URL and at least one event are required.", "")
+		return a.renderWebhooksPage(r.Context(), w, user, "Name, a valid http(s) URL and at least one event are required.", "")
 	}
 	secret := generateWebhookSecret()
-	if _, err := data.InsertWebhook(a.Db, name, hookUrl, secret, events); err != nil {
+	if _, err := data.InsertWebhook(r.Context(), a.Db, name, hookUrl, secret, events); err != nil {
 		return err
 	}
-	return a.renderWebhooksPage(w, user, "", secret)
+	return a.renderWebhooksPage(r.Context(), w, user, "", secret)
 }
 
 // POST /admin/webhooks/{id}/toggle (admin)
 func (a *App) uiToggleWebhook(_ *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 	if id, err := strconv.ParseInt(r.PathValue("id"), 10, 64); err == nil {
-		hooks, err := data.ListWebhooks(a.Db)
+		hooks, err := data.ListWebhooks(r.Context(), a.Db)
 		if err != nil {
 			return err
 		}
 		for _, hook := range hooks {
-			if hook.Id == id {
-				if _, err := data.SetWebhookEnabled(a.Db, core.WebhookID(id), !hook.Enabled); err != nil {
+			if hook.Id == core.WebhookID(id) {
+				if _, err := data.SetWebhookEnabled(r.Context(), a.Db, core.WebhookID(id), !hook.Enabled); err != nil {
 					return err
 				}
 				break
@@ -126,7 +127,7 @@ func (a *App) uiToggleWebhook(_ *CurrentUser, w http.ResponseWriter, r *http.Req
 // POST /admin/webhooks/{id}/delete (admin)
 func (a *App) uiDeleteWebhook(_ *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 	if id, err := strconv.ParseInt(r.PathValue("id"), 10, 64); err == nil {
-		if _, err := data.DeleteWebhook(a.Db, core.WebhookID(id)); err != nil {
+		if _, err := data.DeleteWebhook(r.Context(), a.Db, core.WebhookID(id)); err != nil {
 			return err
 		}
 	}

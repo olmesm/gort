@@ -1,9 +1,13 @@
 package data
 
-import "time"
+import (
+	"time"
+
+	"github.com/olmesm/gort/internal/core"
+)
 
 type UserRow struct {
-	Id           int64
+	Id           core.UserID
 	Username     string
 	PasswordHash string
 	Role         string
@@ -15,7 +19,7 @@ type UserRow struct {
 }
 
 type DomainRow struct {
-	Id                      int64
+	Id                      core.DomainID
 	Authority               string
 	BaseUrlRedirect         *string
 	Regular404Redirect      *string
@@ -25,9 +29,9 @@ type DomainRow struct {
 }
 
 type ShortUrlRow struct {
-	Id                   int64
+	Id                   core.ShortUrlID
 	ShortCode            string
-	DomainId             int64
+	DomainId             core.DomainID
 	LongUrl              string
 	Title                *string
 	TitleWasAutoResolved bool
@@ -37,8 +41,8 @@ type ShortUrlRow struct {
 	MaxVisits            *int64
 	ValidSince           *time.Time
 	ValidUntil           *time.Time
-	AuthorUserId         *int64
-	AuthorApiKeyId       *int64
+	AuthorUserId         *core.UserID
+	AuthorApiKeyId       *core.ApiKeyID
 	GroupName            *string
 	CreatedAt            time.Time
 }
@@ -46,9 +50,9 @@ type ShortUrlRow struct {
 // ShortUrlDetail is a short URL row enriched with joined data for lists and
 // API payloads.
 type ShortUrlDetail struct {
-	Id                   int64
+	Id                   core.ShortUrlID
 	ShortCode            string
-	DomainId             int64
+	DomainId             core.DomainID
 	Authority            string
 	LongUrl              string
 	Title                *string
@@ -59,8 +63,8 @@ type ShortUrlDetail struct {
 	MaxVisits            *int64
 	ValidSince           *time.Time
 	ValidUntil           *time.Time
-	AuthorUserId         *int64
-	AuthorApiKeyId       *int64
+	AuthorUserId         *core.UserID
+	AuthorApiKeyId       *core.ApiKeyID
 	GroupName            *string
 	CreatedAt            time.Time
 	VisitCount           int64
@@ -75,8 +79,8 @@ type TagStatsRow struct {
 }
 
 type VisitRow struct {
-	Id          int64
-	ShortUrlId  *int64
+	Id          core.VisitID
+	ShortUrlId  *core.ShortUrlID
 	VisitType   string
 	VisitedAt   time.Time
 	Referer     *string
@@ -96,18 +100,18 @@ type VisitRow struct {
 }
 
 type ApiKeyRow struct {
-	Id        int64
+	Id        core.ApiKeyID
 	KeyHash   string
 	Name      *string
 	Role      string
-	DomainId  *int64
+	DomainId  *core.DomainID
 	Enabled   bool
 	ExpiresAt *time.Time
 	CreatedAt time.Time
 }
 
 type WebhookRow struct {
-	Id        int64
+	Id        core.WebhookID
 	Name      string
 	Url       string
 	Secret    string
@@ -118,7 +122,7 @@ type WebhookRow struct {
 
 type WebhookDeliveryRow struct {
 	Id            int64
-	WebhookId     int64
+	WebhookId     core.WebhookID
 	Event         string
 	Payload       string
 	Attempts      int

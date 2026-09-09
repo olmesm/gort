@@ -224,7 +224,7 @@ func (a *App) uiOidcCallback(w http.ResponseWriter, r *http.Request) error {
 		return a.oidcLoginError(w, "Sign-on failed: the ID token carried unreadable claims.")
 	}
 
-	user, err := data.UpsertOidcUser(a.Db, identity.Subject, identity.Username, identity.Role)
+	user, err := data.UpsertOidcUser(r.Context(), a.Db, identity.Subject, identity.Username, identity.Role)
 	if err != nil || user == nil {
 		return fmt.Errorf("provisioning OIDC user: %w", err)
 	}

@@ -1,6 +1,7 @@
 package data
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 )
@@ -10,8 +11,8 @@ import (
 type rowScanner interface{ Scan(dest ...any) error }
 
 // queryOne runs a single-row query; a missing row is (nil, nil), not an error.
-func queryOne[T any](db *Db, scan func(rowScanner) (*T, error), query string, args ...any) (*T, error) {
-	v, err := scan(db.QueryRow(query, args...))
+func queryOne[T any](ctx context.Context, db *Db, scan func(rowScanner) (*T, error), query string, args ...any) (*T, error) {
+	v, err := scan(db.QueryRow(ctx, query, args...))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -19,8 +20,8 @@ func queryOne[T any](db *Db, scan func(rowScanner) (*T, error), query string, ar
 }
 
 // queryAll runs a multi-row query and scans every row.
-func queryAll[T any](db *Db, scan func(rowScanner) (*T, error), query string, args ...any) ([]T, error) {
-	rows, err := db.Query(query, args...)
+func queryAll[T any](ctx context.Context, db *Db, scan func(rowScanner) (*T, error), query string, args ...any) ([]T, error) {
+	rows, err := db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -37,15 +38,15 @@ func queryAll[T any](db *Db, scan func(rowScanner) (*T, error), query string, ar
 }
 
 // queryScalar reads a single value (count, existence flag, …).
-func queryScalar[T any](db *Db, query string, args ...any) (T, error) {
+func queryScalar[T any](ctx context.Context, db *Db, query string, args ...any) (T, error) {
 	var v T
-	err := db.QueryRow(query, args...).Scan(&v)
+	err := db.QueryRow(ctx, query, args...).Scan(&v)
 	return v, err
 }
 
 // queryStrings reads a single string column from every row.
-func queryStrings(db *Db, query string, args ...any) ([]string, error) {
-	return queryAll(db, func(r rowScanner) (*string, error) {
+func queryStrings(ctx context.Context, db *Db, query string, args ...any) ([]string, error) {
+	return queryAll(ctx, db, func(r rowScanner) (*string, error) {
 		var s string
 		if err := r.Scan(&s); err != nil {
 			return nil, err
@@ -55,8 +56,8 @@ func queryStrings(db *Db, query string, args ...any) ([]string, error) {
 }
 
 // execCount runs a statement and reports how many rows it touched.
-func execCount(db *Db, query string, args ...any) (int, error) {
-	res, err := db.Exec(query, args...)
+func execCount(ctx context.Context, db *Db, query string, args ...any) (int, error) {
+	res, err := db.Exec(ctx, query, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -65,7 +66,7 @@ func execCount(db *Db, query string, args ...any) (int, error) {
 }
 
 // execAffected runs a statement and reports whether it touched any row.
-func execAffected(db *Db, query string, args ...any) (bool, error) {
-	n, err := execCount(db, query, args...)
+func execAffected(ctx context.Context, db *Db, query string, args ...any) (bool, error) {
+	n, err := execCount(ctx, db, query, args...)
 	return n > 0, err
 }

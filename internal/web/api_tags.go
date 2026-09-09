@@ -22,7 +22,7 @@ func (a *App) apiListTags(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Re
 	page := queryIntDefault(q, "page", 1)
 	itemsPerPage := queryIntDefault(q, "itemsPerPage", core.MaxPageSize)
 
-	result, err := data.ListTags(a.Db, q.Get("searchTerm"), page, itemsPerPage)
+	result, err := data.ListTags(r.Context(), a.Db, q.Get("searchTerm"), page, itemsPerPage)
 	if err != nil {
 		return err
 	}
@@ -51,7 +51,7 @@ func (a *App) apiRenameTag(_ *AuthenticatedKey, w http.ResponseWriter, r *http.R
 	if err != nil {
 		return BadRequest(err.Error())
 	}
-	if err := data.RenameTag(a.Db, body.OldName, newName); err != nil {
+	if err := data.RenameTag(r.Context(), a.Db, body.OldName, newName); err != nil {
 		var renameErr *data.TagRenameError
 		if errors.As(err, &renameErr) {
 			if renameErr.NameTaken {
@@ -77,7 +77,7 @@ func (a *App) apiDeleteTags(_ *AuthenticatedKey, w http.ResponseWriter, r *http.
 	if len(tags) == 0 {
 		return BadRequest("Provide at least one tag to delete via ?tags[]=.")
 	}
-	deleted, err := data.DeleteTags(a.Db, tags)
+	deleted, err := data.DeleteTags(r.Context(), a.Db, tags)
 	if err != nil {
 		return err
 	}
@@ -87,14 +87,14 @@ func (a *App) apiDeleteTags(_ *AuthenticatedKey, w http.ResponseWriter, r *http.
 // GET /rest/v1/tags/{tag}/visits
 func (a *App) apiTagVisits(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	tag := r.PathValue("tag")
-	exists, err := data.TagExists(a.Db, tag)
+	exists, err := data.TagExists(r.Context(), a.Db, tag)
 	if err != nil {
 		return err
 	}
 	if !exists {
 		return NotFound(fmt.Sprintf("Tag '%s' was not found.", tag))
 	}
-	page, err := data.ListVisitsForTag(a.Db, tag, visitFiltersFromQuery(r.URL.Query()))
+	page, err := data.ListVisitsForTag(r.Context(), a.Db, tag, visitFiltersFromQuery(r.URL.Query()))
 	if err != nil {
 		return err
 	}

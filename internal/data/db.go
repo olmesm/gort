@@ -1,6 +1,7 @@
 package data
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -78,29 +79,23 @@ func (db *Db) rebind(query string) string {
 	return b.String()
 }
 
-type execer interface {
-	Exec(query string, args ...any) (sql.Result, error)
-	Query(query string, args ...any) (*sql.Rows, error)
-	QueryRow(query string, args ...any) *sql.Row
-}
-
 // Exec / Query / QueryRow run against the pool with placeholder rebinding.
-func (db *Db) Exec(query string, args ...any) (sql.Result, error) {
-	return db.Pool.Exec(db.rebind(query), args...)
+func (db *Db) Exec(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	return db.Pool.ExecContext(ctx, db.rebind(query), args...)
 }
 
-func (db *Db) Query(query string, args ...any) (*sql.Rows, error) {
-	return db.Pool.Query(db.rebind(query), args...)
+func (db *Db) Query(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	return db.Pool.QueryContext(ctx, db.rebind(query), args...)
 }
 
-func (db *Db) QueryRow(query string, args ...any) *sql.Row {
-	return db.Pool.QueryRow(db.rebind(query), args...)
+func (db *Db) QueryRow(ctx context.Context, query string, args ...any) *sql.Row {
+	return db.Pool.QueryRowContext(ctx, db.rebind(query), args...)
 }
 
 // WithTx runs several statements atomically. The transaction commits when
 // work returns nil and rolls back otherwise.
-func (db *Db) WithTx(work func(tx *Tx) error) error {
-	raw, err := db.Pool.Begin()
+func (db *Db) WithTx(ctx context.Context, work func(tx *Tx) error) error {
+	raw, err := db.Pool.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -118,16 +113,12 @@ type Tx struct {
 	raw *sql.Tx
 }
 
-func (tx *Tx) Exec(query string, args ...any) (sql.Result, error) {
-	return tx.raw.Exec(tx.db.rebind(query), args...)
+func (tx *Tx) Exec(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	return tx.raw.ExecContext(ctx, tx.db.rebind(query), args...)
 }
 
-func (tx *Tx) Query(query string, args ...any) (*sql.Rows, error) {
-	return tx.raw.Query(tx.db.rebind(query), args...)
-}
-
-func (tx *Tx) QueryRow(query string, args ...any) *sql.Row {
-	return tx.raw.QueryRow(tx.db.rebind(query), args...)
+func (tx *Tx) QueryRow(ctx context.Context, query string, args ...any) *sql.Row {
+	return tx.raw.QueryRowContext(ctx, tx.db.rebind(query), args...)
 }
 
 // ---- Dialect-specific SQL fragments ----
@@ -251,6 +242,36 @@ func (n NullTime) Ptr() *time.Time {
 	return &t
 }
 
+// asTime and asTimePtr let a time field take part in a plain Scan call:
+// they route the raw column value through NullTime (TEXT in SQLite, native
+// timestamp in Postgres) into the field. Nullable columns scan straight
+// into pointer fields for every other type; only timestamps need this.
+type timeScanner struct{ dst *time.Time }
+
+func asTime(dst *time.Time) sql.Scanner { return timeScanner{dst} }
+
+func (t timeScanner) Scan(value any) error {
+	var n NullTime
+	if err := n.Scan(value); err != nil {
+		return err
+	}
+	*t.dst = n.Time
+	return nil
+}
+
+type timePtrScanner struct{ dst **time.Time }
+
+func asTimePtr(dst **time.Time) sql.Scanner { return timePtrScanner{dst} }
+
+func (t timePtrScanner) Scan(value any) error {
+	var n NullTime
+	if err := n.Scan(value); err != nil {
+		return err
+	}
+	*t.dst = n.Ptr()
+	return nil
+}
+
 func parseDbTime(s string) (time.Time, error) {
 	for _, layout := range []string{
 		sqliteTimeFormat,
@@ -267,32 +288,6 @@ func parseDbTime(s string) (time.Time, error) {
 		}
 	}
 	return time.Time{}, fmt.Errorf("cannot parse timestamp %q", s)
-}
-
-// ---- Nullable scan helpers ----
-
-func strPtr(n sql.NullString) *string {
-	if !n.Valid {
-		return nil
-	}
-	s := n.String
-	return &s
-}
-
-func int64Ptr(n sql.NullInt64) *int64 {
-	if !n.Valid {
-		return nil
-	}
-	v := n.Int64
-	return &v
-}
-
-func floatPtr(n sql.NullFloat64) *float64 {
-	if !n.Valid {
-		return nil
-	}
-	v := n.Float64
-	return &v
 }
 
 // IsDuplicateKey reports whether an error is a unique-constraint violation in

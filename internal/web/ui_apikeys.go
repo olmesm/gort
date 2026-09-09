@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -30,16 +31,16 @@ type apiKeyRowView struct {
 	DeleteAction string
 }
 
-func (a *App) apiKeysViewModel(errorMessage, plainKey string) (apiKeysView, error) {
-	keys, err := data.ListApiKeys(a.Db)
+func (a *App) apiKeysViewModel(ctx context.Context, errorMessage, plainKey string) (apiKeysView, error) {
+	keys, err := data.ListApiKeys(ctx, a.Db)
 	if err != nil {
 		return apiKeysView{}, err
 	}
-	domains, err := data.ListDomains(a.Db)
+	domains, err := data.ListDomains(ctx, a.Db)
 	if err != nil {
 		return apiKeysView{}, err
 	}
-	authorityOf := func(id *int64) string {
+	authorityOf := func(id *core.DomainID) string {
 		if id == nil {
 			return "—"
 		}
@@ -75,8 +76,8 @@ func (a *App) apiKeysViewModel(errorMessage, plainKey string) (apiKeysView, erro
 	return model, nil
 }
 
-func (a *App) renderApiKeysPage(w http.ResponseWriter, user *CurrentUser, errorMessage, plainKey string) error {
-	model, err := a.apiKeysViewModel(errorMessage, plainKey)
+func (a *App) renderApiKeysPage(ctx context.Context, w http.ResponseWriter, user *CurrentUser, errorMessage, plainKey string) error {
+	model, err := a.apiKeysViewModel(ctx, errorMessage, plainKey)
 	if err != nil {
 		return err
 	}
@@ -85,7 +86,7 @@ func (a *App) renderApiKeysPage(w http.ResponseWriter, user *CurrentUser, errorM
 
 // GET /admin/api-keys (admin)
 func (a *App) uiListApiKeys(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	return a.renderApiKeysPage(w, user, "", "")
+	return a.renderApiKeysPage(r.Context(), w, user, "", "")
 }
 
 // POST /admin/api-keys (admin) — shows the plaintext key once.
@@ -100,7 +101,7 @@ func (a *App) uiCreateApiKey(user *CurrentUser, w http.ResponseWriter, r *http.R
 	var domain *data.DomainRow
 	if authority := r.PostFormValue("domain"); authority != "" {
 		var err error
-		domain, err = data.DomainByAuthority(a.Db, strings.ToLower(authority))
+		domain, err = data.DomainByAuthority(r.Context(), a.Db, strings.ToLower(authority))
 		if err != nil {
 			return err
 		}
@@ -112,9 +113,9 @@ func (a *App) uiCreateApiKey(user *CurrentUser, w http.ResponseWriter, r *http.R
 		role = core.AuthorRole()
 	case "domain":
 		if domain == nil {
-			return a.renderApiKeysPage(w, user, "Domain-role keys need a domain.", "")
+			return a.renderApiKeysPage(r.Context(), w, user, "Domain-role keys need a domain.", "")
 		}
-		role = core.DomainRole(core.DomainID(domain.Id))
+		role = core.DomainRole(domain.Id)
 	default:
 		role = core.AdminRole()
 	}
@@ -125,21 +126,21 @@ func (a *App) uiCreateApiKey(user *CurrentUser, w http.ResponseWriter, r *http.R
 	}
 
 	plainKey := GenerateApiKey()
-	if _, err := data.InsertApiKey(a.Db, HashApiKey(plainKey), name, role, expiresAt); err != nil {
+	if _, err := data.InsertApiKey(r.Context(), a.Db, HashApiKey(plainKey), name, role, expiresAt); err != nil {
 		return err
 	}
-	return a.renderApiKeysPage(w, user, "", plainKey)
+	return a.renderApiKeysPage(r.Context(), w, user, "", plainKey)
 }
 
 // POST /admin/api-keys/{id}/toggle (admin)
 func (a *App) uiToggleApiKey(_ *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 	if id, err := strconv.ParseInt(r.PathValue("id"), 10, 64); err == nil {
-		key, err := data.ApiKeyByID(a.Db, core.ApiKeyID(id))
+		key, err := data.ApiKeyByID(r.Context(), a.Db, core.ApiKeyID(id))
 		if err != nil {
 			return err
 		}
 		if key != nil {
-			if _, err := data.SetApiKeyEnabled(a.Db, core.ApiKeyID(id), !key.Enabled); err != nil {
+			if _, err := data.SetApiKeyEnabled(r.Context(), a.Db, core.ApiKeyID(id), !key.Enabled); err != nil {
 				return err
 			}
 		}
@@ -150,7 +151,7 @@ func (a *App) uiToggleApiKey(_ *CurrentUser, w http.ResponseWriter, r *http.Requ
 // POST /admin/api-keys/{id}/delete (admin)
 func (a *App) uiDeleteApiKey(_ *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 	if id, err := strconv.ParseInt(r.PathValue("id"), 10, 64); err == nil {
-		if _, err := data.DeleteApiKey(a.Db, core.ApiKeyID(id)); err != nil {
+		if _, err := data.DeleteApiKey(r.Context(), a.Db, core.ApiKeyID(id)); err != nil {
 			return err
 		}
 	}

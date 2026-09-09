@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -13,7 +14,7 @@ import (
 // scopeFromQuery builds a stats scope from query params
 // (?shortCode=&domain=&tag=&orphan=true). On failure it writes the error
 // response and returns nil.
-func (a *App) scopeFromQuery(key *AuthenticatedKey, q url.Values) (data.VisitScope, error) {
+func (a *App) scopeFromQuery(ctx context.Context, key *AuthenticatedKey, q url.Values) (data.VisitScope, error) {
 	if queryBool(q, "orphan") {
 		if key.Role.Kind != core.RoleAdmin {
 			return data.VisitScope{}, Forbidden("Only admin keys can query orphan visit stats.")
@@ -22,24 +23,24 @@ func (a *App) scopeFromQuery(key *AuthenticatedKey, q url.Values) (data.VisitSco
 	}
 
 	if code := q.Get("shortCode"); code != "" {
-		detail, err := a.findAccessibleShortUrl(key, code, q.Get("domain"))
+		detail, err := a.findAccessibleShortUrl(ctx, key, code, q.Get("domain"))
 		if err != nil {
 			return data.VisitScope{}, err
 		}
-		return data.ShortUrlScope(core.ShortUrlID(detail.Id)), nil
+		return data.ShortUrlScope(detail.Id), nil
 	}
 	if tag := q.Get("tag"); tag != "" {
 		return data.TagScope(tag), nil
 	}
 	if authority := q.Get("domain"); authority != "" {
-		d, err := data.DomainByAuthority(a.Db, strings.ToLower(authority))
+		d, err := data.DomainByAuthority(ctx, a.Db, strings.ToLower(authority))
 		if err != nil {
 			return data.VisitScope{}, err
 		}
 		if d == nil {
 			return data.VisitScope{}, NotFound(fmt.Sprintf("Domain '%s' is not registered.", authority))
 		}
-		return data.DomainScope(core.DomainID(d.Id)), nil
+		return data.DomainScope(d.Id), nil
 	}
 
 	switch key.Role.Kind {
@@ -57,7 +58,7 @@ func (a *App) apiVisitsOverview(key *AuthenticatedKey, w http.ResponseWriter, r 
 	if key.Role.Kind != core.RoleAdmin {
 		return Forbidden("Only admin keys can view the global visit summary.")
 	}
-	o, err := data.Overview(a.Db)
+	o, err := data.Overview(r.Context(), a.Db)
 	if err != nil {
 		return err
 	}
@@ -76,7 +77,7 @@ func (a *App) apiListNonOrphanVisits(key *AuthenticatedKey, w http.ResponseWrite
 	if key.Role.Kind != core.RoleAdmin {
 		return Forbidden("Only admin keys can list all visits.")
 	}
-	page, err := data.ListNonOrphanVisits(a.Db, visitFiltersFromQuery(r.URL.Query()))
+	page, err := data.ListNonOrphanVisits(r.Context(), a.Db, visitFiltersFromQuery(r.URL.Query()))
 	if err != nil {
 		return err
 	}
@@ -93,7 +94,7 @@ func (a *App) apiListOrphanVisits(key *AuthenticatedKey, w http.ResponseWriter, 
 	if vt, ok := core.VisitTypeOfSlug(q.Get("type")); ok {
 		visitType = &vt
 	}
-	page, err := data.ListOrphanVisits(a.Db, visitType, visitFiltersFromQuery(q))
+	page, err := data.ListOrphanVisits(r.Context(), a.Db, visitType, visitFiltersFromQuery(q))
 	if err != nil {
 		return err
 	}
@@ -105,7 +106,7 @@ func (a *App) apiDeleteOrphanVisits(key *AuthenticatedKey, w http.ResponseWriter
 	if key.Role.Kind != core.RoleAdmin {
 		return Forbidden("Only admin keys can delete orphan visits.")
 	}
-	deleted, err := data.DeleteOrphanVisits(a.Db)
+	deleted, err := data.DeleteOrphanVisits(r.Context(), a.Db)
 	if err != nil {
 		return err
 	}
@@ -115,11 +116,11 @@ func (a *App) apiDeleteOrphanVisits(key *AuthenticatedKey, w http.ResponseWriter
 // GET /rest/v1/stats/visits-per-day
 func (a *App) apiVisitsPerDay(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	q := r.URL.Query()
-	scope, err := a.scopeFromQuery(key, q)
+	scope, err := a.scopeFromQuery(r.Context(), key, q)
 	if err != nil {
 		return err
 	}
-	series, err := data.VisitsPerDay(a.Db, scope, queryDate(q, "startDate"), queryDate(q, "endDate"))
+	series, err := data.VisitsPerDay(r.Context(), a.Db, scope, queryDate(q, "startDate"), queryDate(q, "endDate"))
 	if err != nil {
 		return err
 	}
@@ -158,7 +159,7 @@ func (a *App) apiBreakdown(key *AuthenticatedKey, w http.ResponseWriter, r *http
 		return BadRequest("Provide ?by= one of: country, countryCode, city, browser, os, referer, device.")
 	}
 
-	scope, err := a.scopeFromQuery(key, q)
+	scope, err := a.scopeFromQuery(r.Context(), key, q)
 
 	if err != nil {
 
@@ -174,7 +175,7 @@ func (a *App) apiBreakdown(key *AuthenticatedKey, w http.ResponseWriter, r *http
 		limit = 100
 	}
 
-	rows, err := data.Breakdown(a.Db, scope, column, queryDate(q, "startDate"), queryDate(q, "endDate"), limit)
+	rows, err := data.Breakdown(r.Context(), a.Db, scope, column, queryDate(q, "startDate"), queryDate(q, "endDate"), limit)
 	if err != nil {
 		return err
 	}

@@ -1,7 +1,7 @@
 package data
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"time"
 
@@ -12,19 +12,15 @@ const userSelectCols = "id, username, password_hash, role, created_at, auth_sour
 
 func scanUserRow(r rowScanner) (*UserRow, error) {
 	var u UserRow
-	var createdAt NullTime
-	var oidcSubject sql.NullString
-	if err := r.Scan(&u.Id, &u.Username, &u.PasswordHash, &u.Role, &createdAt, &u.AuthSource, &oidcSubject); err != nil {
+	if err := r.Scan(&u.Id, &u.Username, &u.PasswordHash, &u.Role, asTime(&u.CreatedAt), &u.AuthSource, &u.OidcSubject); err != nil {
 		return nil, err
 	}
-	u.CreatedAt = createdAt.Time
-	u.OidcSubject = strPtr(oidcSubject)
 	return &u, nil
 }
 
 // InsertUser creates a user. Returns nil if the username is taken.
-func InsertUser(db *Db, username, passwordHash string, role core.UserRole) (*UserRow, error) {
-	inserted, err := execAffected(db,
+func InsertUser(ctx context.Context, db *Db, username, passwordHash string, role core.UserRole) (*UserRow, error) {
+	inserted, err := execAffected(ctx, db,
 		`INSERT INTO users (username, password_hash, role, created_at)
 		 VALUES (?, ?, ?, ?)
 		 ON CONFLICT (username) DO NOTHING`,
@@ -32,43 +28,43 @@ func InsertUser(db *Db, username, passwordHash string, role core.UserRole) (*Use
 	if err != nil || !inserted {
 		return nil, err
 	}
-	return UserByUsername(db, username)
+	return UserByUsername(ctx, db, username)
 }
 
-func UserByUsername(db *Db, username string) (*UserRow, error) {
-	return queryOne(db, scanUserRow,
+func UserByUsername(ctx context.Context, db *Db, username string) (*UserRow, error) {
+	return queryOne(ctx, db, scanUserRow,
 		fmt.Sprintf("SELECT %s FROM users WHERE username = ?", userSelectCols), username)
 }
 
-func UserByID(db *Db, id core.UserID) (*UserRow, error) {
-	return queryOne(db, scanUserRow,
+func UserByID(ctx context.Context, db *Db, id core.UserID) (*UserRow, error) {
+	return queryOne(ctx, db, scanUserRow,
 		fmt.Sprintf("SELECT %s FROM users WHERE id = ?", userSelectCols), id.Value())
 }
 
-func ListUsers(db *Db) ([]UserRow, error) {
-	return queryAll(db, scanUserRow,
+func ListUsers(ctx context.Context, db *Db) ([]UserRow, error) {
+	return queryAll(ctx, db, scanUserRow,
 		fmt.Sprintf("SELECT %s FROM users ORDER BY username", userSelectCols))
 }
 
-func UpdateUserPassword(db *Db, id core.UserID, passwordHash string) (bool, error) {
-	return execAffected(db, "UPDATE users SET password_hash = ? WHERE id = ?", passwordHash, id.Value())
+func UpdateUserPassword(ctx context.Context, db *Db, id core.UserID, passwordHash string) (bool, error) {
+	return execAffected(ctx, db, "UPDATE users SET password_hash = ? WHERE id = ?", passwordHash, id.Value())
 }
 
-func UpdateUserRole(db *Db, id core.UserID, role core.UserRole) (bool, error) {
-	return execAffected(db, "UPDATE users SET role = ? WHERE id = ?", role.Slug(), id.Value())
+func UpdateUserRole(ctx context.Context, db *Db, id core.UserID, role core.UserRole) (bool, error) {
+	return execAffected(ctx, db, "UPDATE users SET role = ? WHERE id = ?", role.Slug(), id.Value())
 }
 
-func DeleteUser(db *Db, id core.UserID) (bool, error) {
-	return execAffected(db, "DELETE FROM users WHERE id = ?", id.Value())
+func DeleteUser(ctx context.Context, db *Db, id core.UserID) (bool, error) {
+	return execAffected(ctx, db, "DELETE FROM users WHERE id = ?", id.Value())
 }
 
-func CountUsers(db *Db) (int64, error) {
-	return queryScalar[int64](db, "SELECT COUNT(*) FROM users")
+func CountUsers(ctx context.Context, db *Db) (int64, error) {
+	return queryScalar[int64](ctx, db, "SELECT COUNT(*) FROM users")
 }
 
 // UserBySubject looks up an SSO-provisioned user by its stable OIDC subject.
-func UserBySubject(db *Db, subject string) (*UserRow, error) {
-	return queryOne(db, scanUserRow,
+func UserBySubject(ctx context.Context, db *Db, subject string) (*UserRow, error) {
+	return queryOne(ctx, db, scanUserRow,
 		fmt.Sprintf("SELECT %s FROM users WHERE oidc_subject = ?", userSelectCols), subject)
 }
 
@@ -76,13 +72,13 @@ func UserBySubject(db *Db, subject string) (*UserRow, error) {
 // user, matching on the stable subject. Password login is impossible for
 // these rows (the stored hash is a sentinel no bcrypt hash can equal).
 // Returns the current row.
-func UpsertOidcUser(db *Db, subject, username string, role core.UserRole) (*UserRow, error) {
-	existing, err := UserBySubject(db, subject)
+func UpsertOidcUser(ctx context.Context, db *Db, subject, username string, role core.UserRole) (*UserRow, error) {
+	existing, err := UserBySubject(ctx, db, subject)
 	if err != nil {
 		return nil, err
 	}
 	if existing != nil {
-		if _, err := db.Exec(
+		if _, err := db.Exec(ctx,
 			"UPDATE users SET username = ?, role = ? WHERE id = ?",
 			username, role.Slug(), existing.Id); err != nil {
 			// A username collision with another account keeps the old name;
@@ -90,15 +86,15 @@ func UpsertOidcUser(db *Db, subject, username string, role core.UserRole) (*User
 			if !IsDuplicateKey(err) {
 				return nil, err
 			}
-			if _, err := db.Exec("UPDATE users SET role = ? WHERE id = ?", role.Slug(), existing.Id); err != nil {
+			if _, err := db.Exec(ctx, "UPDATE users SET role = ? WHERE id = ?", role.Slug(), existing.Id); err != nil {
 				return nil, err
 			}
 		}
-		return UserBySubject(db, subject)
+		return UserBySubject(ctx, db, subject)
 	}
 
 	insert := func(name string) (bool, error) {
-		return execAffected(db,
+		return execAffected(ctx, db,
 			`INSERT INTO users (username, password_hash, role, created_at, auth_source, oidc_subject)
 			 VALUES (?, '!oidc', ?, ?, 'oidc', ?)
 			 ON CONFLICT (username) DO NOTHING`,
@@ -120,9 +116,9 @@ func UpsertOidcUser(db *Db, subject, username string, role core.UserRole) (*User
 			return nil, err
 		}
 	}
-	return UserBySubject(db, subject)
+	return UserBySubject(ctx, db, subject)
 }
 
-func CountAdmins(db *Db) (int64, error) {
-	return queryScalar[int64](db, "SELECT COUNT(*) FROM users WHERE role = ?", core.UserAdmin.Slug())
+func CountAdmins(ctx context.Context, db *Db) (int64, error) {
+	return queryScalar[int64](ctx, db, "SELECT COUNT(*) FROM users WHERE role = ?", core.UserAdmin.Slug())
 }

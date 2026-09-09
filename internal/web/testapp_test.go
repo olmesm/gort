@@ -49,7 +49,7 @@ func createApiKey(t *testing.T, app *App, role core.ApiKeyRole) string {
 	t.Helper()
 	plain := GenerateApiKey()
 	name := "test"
-	if _, err := data.InsertApiKey(app.Db, HashApiKey(plain), &name, role, nil); err != nil {
+	if _, err := data.InsertApiKey(t.Context(), app.Db, HashApiKey(plain), &name, role, nil); err != nil {
 		t.Fatal(err)
 	}
 	return plain

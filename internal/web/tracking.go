@@ -139,7 +139,7 @@ func (a *App) RecordVisit(r *http.Request, visitType core.VisitType, shortUrlId 
 		VisitedUrl: visitedUrl,
 	}
 
-	visitId, err := data.InsertVisit(a.Db, visit)
+	visitId, err := data.InsertVisit(r.Context(), a.Db, visit)
 	if err != nil {
 		a.Logger.Warn("Failed to record visit", "error", err)
 		return

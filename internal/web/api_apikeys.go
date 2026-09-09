@@ -35,7 +35,7 @@ type apiKeyDto struct {
 
 func newApiKeyDto(k *data.ApiKeyRow, domainAuthority *string) apiKeyDto {
 	return apiKeyDto{
-		Id:        k.Id,
+		Id:        k.Id.Value(),
 		Name:      k.Name,
 		Role:      k.Role,
 		Domain:    domainAuthority,
@@ -47,15 +47,15 @@ func newApiKeyDto(k *data.ApiKeyRow, domainAuthority *string) apiKeyDto {
 
 // GET /rest/v1/api-keys (admin)
 func (a *App) apiListApiKeys(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
-	keys, err := data.ListApiKeys(a.Db)
+	keys, err := data.ListApiKeys(r.Context(), a.Db)
 	if err != nil {
 		return err
 	}
-	domains, err := data.ListDomains(a.Db)
+	domains, err := data.ListDomains(r.Context(), a.Db)
 	if err != nil {
 		return err
 	}
-	authorityOf := func(id *int64) *string {
+	authorityOf := func(id *core.DomainID) *string {
 		if id == nil {
 			return nil
 		}
@@ -84,7 +84,7 @@ func (a *App) apiCreateApiKey(_ *AuthenticatedKey, w http.ResponseWriter, r *htt
 
 	var domain *data.DomainRow
 	if body.Domain != nil {
-		domain, err = data.DomainByAuthority(a.Db, strings.ToLower(strings.TrimSpace(*body.Domain)))
+		domain, err = data.DomainByAuthority(r.Context(), a.Db, strings.ToLower(strings.TrimSpace(*body.Domain)))
 		if err != nil {
 			return err
 		}
@@ -104,7 +104,7 @@ func (a *App) apiCreateApiKey(_ *AuthenticatedKey, w http.ResponseWriter, r *htt
 		if domain == nil {
 			return BadRequest("domain-role keys need an existing 'domain'.")
 		}
-		role = core.DomainRole(core.DomainID(domain.Id))
+		role = core.DomainRole(domain.Id)
 	default:
 		return BadRequest(fmt.Sprintf("Unknown role '%s'. Use admin, author or domain.", roleSlug))
 	}
@@ -114,7 +114,7 @@ func (a *App) apiCreateApiKey(_ *AuthenticatedKey, w http.ResponseWriter, r *htt
 	}
 
 	plainKey := GenerateApiKey()
-	row, err := data.InsertApiKey(a.Db, HashApiKey(plainKey), body.Name, role, body.ExpiresAt)
+	row, err := data.InsertApiKey(r.Context(), a.Db, HashApiKey(plainKey), body.Name, role, body.ExpiresAt)
 	if err != nil {
 		return err
 	}
@@ -142,7 +142,7 @@ func (a *App) apiPatchApiKey(_ *AuthenticatedKey, w http.ResponseWriter, r *http
 	if !ok {
 		return NotFound("API key was not found.")
 	}
-	updated, err := data.SetApiKeyEnabled(a.Db, id, body.Enabled)
+	updated, err := data.SetApiKeyEnabled(r.Context(), a.Db, id, body.Enabled)
 	if err != nil {
 		return err
 	}
@@ -158,7 +158,7 @@ func (a *App) apiDeleteApiKey(_ *AuthenticatedKey, w http.ResponseWriter, r *htt
 	if !ok {
 		return NotFound("API key was not found.")
 	}
-	deleted, err := data.DeleteApiKey(a.Db, id)
+	deleted, err := data.DeleteApiKey(r.Context(), a.Db, id)
 	if err != nil {
 		return err
 	}

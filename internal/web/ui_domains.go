@@ -34,7 +34,7 @@ type messageView struct {
 
 // GET /admin/domains (admin)
 func (a *App) uiListDomains(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	domains, err := data.ListDomainsWithStats(a.Db)
+	domains, err := data.ListDomainsWithStats(r.Context(), a.Db)
 	if err != nil {
 		return err
 	}
@@ -72,7 +72,7 @@ func (a *App) uiCreateDomain(user *CurrentUser, w http.ResponseWriter, r *http.R
 	if err != nil {
 		return a.renderDomainsMessage(w, http.StatusBadRequest, user, err.Error())
 	}
-	created, err := data.CreateDomain(a.Db, authority)
+	created, err := data.CreateDomain(r.Context(), a.Db, authority)
 	if err != nil {
 		return err
 	}
@@ -98,7 +98,7 @@ func (a *App) uiSetDomainRedirects(_ *CurrentUser, w http.ResponseWriter, r *htt
 		}
 		return nil
 	}
-	if _, err := data.UpdateDomainRedirects(a.Db, core.DomainID(id),
+	if _, err := data.UpdateDomainRedirects(r.Context(), a.Db, core.DomainID(id),
 		getOpt("baseUrlRedirect"), getOpt("regular404Redirect"), getOpt("invalidShortUrlRedirect")); err != nil {
 		return err
 	}
@@ -108,7 +108,7 @@ func (a *App) uiSetDomainRedirects(_ *CurrentUser, w http.ResponseWriter, r *htt
 // POST /admin/domains/{id}/delete (admin)
 func (a *App) uiDeleteDomain(_ *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 	if id, err := strconv.ParseInt(r.PathValue("id"), 10, 64); err == nil {
-		if _, err := data.DeleteDomain(a.Db, core.DomainID(id)); err != nil {
+		if _, err := data.DeleteDomain(r.Context(), a.Db, core.DomainID(id)); err != nil {
 			return err
 		}
 	}

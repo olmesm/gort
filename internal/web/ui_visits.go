@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -70,6 +71,7 @@ func newVisitRow(v data.VisitRow) visitRowView {
 // analyticsContent is the shared analytics block: chart + breakdowns + visit
 // table.
 func (a *App) analyticsContent(
+	ctx context.Context,
 	showVisitedUrl bool,
 	scope data.VisitScope,
 	listVisits func(data.VisitFilters) (core.Page[data.VisitRow], error),
@@ -90,7 +92,7 @@ func (a *App) analyticsContent(
 		start := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -29)
 		defaultedStart = &start
 	}
-	series, err := data.VisitsPerDay(a.Db, scope, defaultedStart, endDate)
+	series, err := data.VisitsPerDay(ctx, a.Db, scope, defaultedStart, endDate)
 	if err != nil {
 		return analyticsView{}, err
 	}
@@ -109,7 +111,7 @@ func (a *App) analyticsContent(
 		{"Operating systems", "os"},
 		{"Referrers", "referer"},
 	} {
-		rows, err := data.Breakdown(a.Db, scope, card.column, startDate, endDate, 8)
+		rows, err := data.Breakdown(ctx, a.Db, scope, card.column, startDate, endDate, 8)
 		if err != nil {
 			return analyticsView{}, err
 		}
@@ -156,17 +158,17 @@ func (a *App) uiShortUrlVisits(user *CurrentUser, w http.ResponseWriter, r *http
 	if err != nil {
 		return errPageNotFound
 	}
-	detail, err := data.ShortUrlDetailByID(a.Db, core.ShortUrlID(id))
+	detail, err := data.ShortUrlDetailByID(r.Context(), a.Db, core.ShortUrlID(id))
 	if err != nil {
 		return err
 	}
 	if detail == nil || !user.CanSeeGroup(detail.GroupName) {
 		return errPageNotFound
 	}
-	shortUrlId := core.ShortUrlID(detail.Id)
-	analytics, err := a.analyticsContent(false, data.ShortUrlScope(shortUrlId),
+	shortUrlId := detail.Id
+	analytics, err := a.analyticsContent(r.Context(), false, data.ShortUrlScope(shortUrlId),
 		func(f data.VisitFilters) (core.Page[data.VisitRow], error) {
-			return data.ListVisitsForShortUrl(a.Db, shortUrlId, f)
+			return data.ListVisitsForShortUrl(r.Context(), a.Db, shortUrlId, f)
 		},
 		fmt.Sprintf("/admin/short-urls/%d/visits", detail.Id), r.URL.Query())
 	if err != nil {
@@ -195,9 +197,9 @@ func (a *App) uiOrphanVisits(user *CurrentUser, w http.ResponseWriter, r *http.R
 	if vt, ok := core.VisitTypeOfSlug(q.Get("type")); ok {
 		visitType = &vt
 	}
-	analytics, err := a.analyticsContent(true, data.OrphanScope(),
+	analytics, err := a.analyticsContent(r.Context(), true, data.OrphanScope(),
 		func(f data.VisitFilters) (core.Page[data.VisitRow], error) {
-			return data.ListOrphanVisits(a.Db, visitType, f)
+			return data.ListOrphanVisits(r.Context(), a.Db, visitType, f)
 		},
 		"/admin/visits/orphan", q)
 	if err != nil {
@@ -212,7 +214,7 @@ func (a *App) uiOrphanVisits(user *CurrentUser, w http.ResponseWriter, r *http.R
 
 // POST /admin/visits/orphan/delete (admin)
 func (a *App) uiDeleteOrphanVisits(_ *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	if _, err := data.DeleteOrphanVisits(a.Db); err != nil {
+	if _, err := data.DeleteOrphanVisits(r.Context(), a.Db); err != nil {
 		return err
 	}
 	return redirect(w, r, "/admin/visits/orphan")

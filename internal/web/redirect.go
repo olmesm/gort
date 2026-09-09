@@ -27,7 +27,7 @@ func redirectWith(w http.ResponseWriter, status core.RedirectStatus, location st
 func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) error {
 	const version = "1.0.0"
 	var one int64
-	if err := a.Db.QueryRow("SELECT 1").Scan(&one); err != nil {
+	if err := a.Db.QueryRow(r.Context(), "SELECT 1").Scan(&one); err != nil {
 		return RespondJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "fail", "version": version})
 	}
 	return RespondJSON(w, http.StatusOK, map[string]string{"status": "pass", "version": version})
@@ -35,7 +35,7 @@ func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) error {
 
 // GET / — orphan-tracked; redirects when a base-url redirect is configured.
 func (a *App) handleBaseUrl(w http.ResponseWriter, r *http.Request) error {
-	domain, err := a.ResolveRequestDomain(r.Host)
+	domain, err := a.ResolveRequestDomain(r.Context(), r.Host)
 	if err != nil {
 		return err
 	}
@@ -56,7 +56,7 @@ func (a *App) handleBaseUrl(w http.ResponseWriter, r *http.Request) error {
 // GET /robots.txt — disallow everything except crawlable short URLs and the
 // base URL.
 func (a *App) handleRobots(w http.ResponseWriter, r *http.Request) error {
-	crawlable, err := data.ListCrawlable(a.Db)
+	crawlable, err := data.ListCrawlable(r.Context(), a.Db)
 	if err != nil {
 		return err
 	}
@@ -73,11 +73,11 @@ func (a *App) handleRobots(w http.ResponseWriter, r *http.Request) error {
 // GET /{code}/qr-code — public QR code for an existing short URL.
 func (a *App) handleQrCode(w http.ResponseWriter, r *http.Request) error {
 	code := r.PathValue("code")
-	domain, err := a.ResolveRequestDomain(r.Host)
+	domain, err := a.ResolveRequestDomain(r.Context(), r.Host)
 	if err != nil {
 		return err
 	}
-	shortUrl, err := data.ShortUrlByCode(a.Db, core.DomainID(domain.Id), code)
+	shortUrl, err := data.ShortUrlByCode(r.Context(), a.Db, domain.Id, code)
 	if err != nil {
 		return err
 	}
@@ -122,7 +122,7 @@ func looksLikeShortCode(slug string) bool {
 // handleInvalid handles a missing/inactive short URL: orphan tracking +
 // configured fallbacks.
 func (a *App) handleInvalid(w http.ResponseWriter, r *http.Request, slug string) error {
-	domain, err := a.ResolveRequestDomain(r.Host)
+	domain, err := a.ResolveRequestDomain(r.Context(), r.Host)
 	if err != nil {
 		return err
 	}
@@ -162,11 +162,11 @@ func (a *App) handleShortUrl(w http.ResponseWriter, r *http.Request) error {
 		return nil
 	}
 
-	domain, err := a.ResolveRequestDomain(r.Host)
+	domain, err := a.ResolveRequestDomain(r.Context(), r.Host)
 	if err != nil {
 		return err
 	}
-	found, err := data.ShortUrlByCode(a.Db, core.DomainID(domain.Id), slug)
+	found, err := data.ShortUrlByCode(r.Context(), a.Db, domain.Id, slug)
 	if err != nil {
 		return err
 	}
@@ -174,12 +174,12 @@ func (a *App) handleShortUrl(w http.ResponseWriter, r *http.Request) error {
 		return a.handleInvalid(w, r, slug)
 	}
 
-	id := core.ShortUrlID(found.Id)
+	id := found.Id
 	lifetime := LifetimeOfRow(found)
 
 	var visitCount int64
 	if lifetime.MaxVisits != nil {
-		visitCount, err = data.CountValidVisits(a.Db, id)
+		visitCount, err = data.CountValidVisits(r.Context(), a.Db, id)
 		if err != nil {
 			return err
 		}
@@ -190,7 +190,7 @@ func (a *App) handleShortUrl(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	visitor := visitorContextOf(r)
-	rules, err := data.RedirectRules(a.Db, id)
+	rules, err := data.RedirectRules(r.Context(), a.Db, id)
 	if err != nil {
 		return err
 	}

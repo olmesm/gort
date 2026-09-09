@@ -1,6 +1,7 @@
 package data
 
 import (
+	"context"
 	"time"
 )
 
@@ -292,8 +293,8 @@ func migrationScripts(dialect Dialect) []struct {
 }
 
 // Migrate applies all pending migrations. Safe to run on every startup.
-func Migrate(db *Db) error {
-	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+func Migrate(ctx context.Context, db *Db) error {
+	_, err := db.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
 	  version INT PRIMARY KEY,
 	  applied_at TEXT NOT NULL
 	)`)
@@ -302,7 +303,7 @@ func Migrate(db *Db) error {
 	}
 
 	applied := map[int]bool{}
-	rows, err := db.Query("SELECT version FROM schema_migrations")
+	rows, err := db.Query(ctx, "SELECT version FROM schema_migrations")
 	if err != nil {
 		return err
 	}
@@ -323,11 +324,11 @@ func Migrate(db *Db) error {
 		if applied[m.Version] {
 			continue
 		}
-		err := db.WithTx(func(tx *Tx) error {
-			if _, err := tx.Exec(m.Script); err != nil {
+		err := db.WithTx(ctx, func(tx *Tx) error {
+			if _, err := tx.Exec(ctx, m.Script); err != nil {
 				return err
 			}
-			_, err := tx.Exec(
+			_, err := tx.Exec(ctx,
 				"INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
 				m.Version, time.Now().UTC().Format(time.RFC3339Nano))
 			return err

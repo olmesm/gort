@@ -8,10 +8,11 @@ import (
 	"time"
 )
 
-func int64Ptr(v int64) *int64        { return &v }
-func intPtr(v int) *int              { return &v }
-func strPtr(v string) *string        { return &v }
-func timePtr(v time.Time) *time.Time { return &v }
+func int64Ptr(v int64) *int64          { return &v }
+func domainIDPtr(v DomainID) *DomainID { return &v }
+func intPtr(v int) *int                { return &v }
+func strPtr(v string) *string          { return &v }
+func timePtr(v time.Time) *time.Time   { return &v }
 
 // ---- Lifetime invariants ----
 
@@ -125,7 +126,7 @@ func TestApiKeyRoleParsingIsFailClosed(t *testing.T) {
 	if role, ok := ApiKeyRoleOfStored("author", nil); !ok || role.Kind != RoleAuthor {
 		t.Error("author should parse")
 	}
-	if role, ok := ApiKeyRoleOfStored("domain", int64Ptr(7)); !ok || role.Kind != RoleDomain || role.DomainID != DomainID(7) {
+	if role, ok := ApiKeyRoleOfStored("domain", domainIDPtr(7)); !ok || role.Kind != RoleDomain || role.DomainID != DomainID(7) {
 		t.Error("domain should parse with id")
 	}
 	// A domain role without a domain id is corrupt, not admin.

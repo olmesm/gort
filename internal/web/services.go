@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"errors"
 	"strings"
 
@@ -14,24 +15,24 @@ import (
 
 // ResolveRequestDomain resolves the domain row for an incoming request Host
 // (falling back to the default domain).
-func (a *App) ResolveRequestDomain(hostAuthority string) (*data.DomainRow, error) {
-	byHost, err := data.DomainByAuthority(a.Db, strings.ToLower(hostAuthority))
+func (a *App) ResolveRequestDomain(ctx context.Context, hostAuthority string) (*data.DomainRow, error) {
+	byHost, err := data.DomainByAuthority(ctx, a.Db, strings.ToLower(hostAuthority))
 	if err != nil {
 		return nil, err
 	}
 	if byHost != nil {
 		return byHost, nil
 	}
-	return data.DefaultDomain(a.Db)
+	return data.DefaultDomain(ctx, a.Db)
 }
 
 // ResolveNamedDomain resolves an explicitly named domain (API "domain"
 // param). Empty → default domain; unknown → nil.
-func (a *App) ResolveNamedDomain(authority string) (*data.DomainRow, error) {
+func (a *App) ResolveNamedDomain(ctx context.Context, authority string) (*data.DomainRow, error) {
 	if authority == "" {
-		return data.DefaultDomain(a.Db)
+		return data.DefaultDomain(ctx, a.Db)
 	}
-	return data.DomainByAuthority(a.Db, strings.ToLower(strings.TrimSpace(authority)))
+	return data.DomainByAuthority(ctx, a.Db, strings.ToLower(strings.TrimSpace(authority)))
 }
 
 // LifetimeOfRow is the lifetime stored on a row. Values were validated on
@@ -46,18 +47,18 @@ func LifetimeOfRow(row *data.ShortUrlRow) core.Lifetime {
 
 // resolveTargetDomain resolves the spec's target domain, auto-registering
 // unknown authorities.
-func (a *App) resolveTargetDomain(domain *core.DomainAuthority) (*data.DomainRow, error) {
+func (a *App) resolveTargetDomain(ctx context.Context, domain *core.DomainAuthority) (*data.DomainRow, error) {
 	if domain == nil {
-		return data.DefaultDomain(a.Db)
+		return data.DefaultDomain(ctx, a.Db)
 	}
-	existing, err := data.DomainByAuthority(a.Db, domain.Value())
+	existing, err := data.DomainByAuthority(ctx, a.Db, domain.Value())
 	if err != nil {
 		return nil, err
 	}
 	if existing != nil {
 		return existing, nil
 	}
-	created, err := data.CreateDomain(a.Db, *domain)
+	created, err := data.CreateDomain(ctx, a.Db, *domain)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +66,7 @@ func (a *App) resolveTargetDomain(domain *core.DomainAuthority) (*data.DomainRow
 		return created, nil
 	}
 	// Lost a race with a concurrent insert; fetch the winner.
-	return data.DomainByAuthority(a.Db, domain.Value())
+	return data.DomainByAuthority(ctx, a.Db, domain.Value())
 }
 
 // Author says who created a short URL: a dashboard user or an API key.
@@ -79,9 +80,9 @@ func ApiKeyAuthor(id core.ApiKeyID) *Author { return &Author{ApiKeyId: &id} }
 
 // insertWithCode inserts with the spec's slug, or retries generated codes
 // until one is free.
-func (a *App) insertWithCode(spec *core.ShortUrlSpec, domain *data.DomainRow, record func(core.ShortCode) data.NewShortUrl) (core.ShortUrlID, error) {
+func (a *App) insertWithCode(ctx context.Context, spec *core.ShortUrlSpec, domain *data.DomainRow, record func(core.ShortCode) data.NewShortUrl) (core.ShortUrlID, error) {
 	if spec.CustomSlug != nil {
-		id, err := data.CreateShortUrl(a.Db, record(*spec.CustomSlug), spec.Tags)
+		id, err := data.CreateShortUrl(ctx, a.Db, record(*spec.CustomSlug), spec.Tags)
 		if errors.Is(err, data.ErrDuplicateShortCode) {
 			return 0, core.SlugInUseError(spec.CustomSlug.Value(), domain.Authority)
 		}
@@ -100,7 +101,7 @@ func (a *App) insertWithCode(spec *core.ShortUrlSpec, domain *data.DomainRow, re
 	}
 
 	for attempt := 0; attempt < 10; attempt++ {
-		id, err := data.CreateShortUrl(a.Db, record(core.GenerateShortCode(codeLength)), spec.Tags)
+		id, err := data.CreateShortUrl(ctx, a.Db, record(core.GenerateShortCode(codeLength)), spec.Tags)
 		if errors.Is(err, data.ErrDuplicateShortCode) {
 			continue
 		}
@@ -115,8 +116,8 @@ func (a *App) insertWithCode(spec *core.ShortUrlSpec, domain *data.DomainRow, re
 // CreateShortUrl creates a short URL from a validated spec: domain resolution
 // (auto-registering unknown domains), code generation with collision retry,
 // atomic insert with tags, async title resolution and event publication.
-func (a *App) CreateShortUrl(author *Author, spec *core.ShortUrlSpec) (*ShortUrlDto, error) {
-	domain, err := a.resolveTargetDomain(spec.Domain)
+func (a *App) CreateShortUrl(ctx context.Context, author *Author, spec *core.ShortUrlSpec) (*ShortUrlDto, error) {
+	domain, err := a.resolveTargetDomain(ctx, spec.Domain)
 	if err != nil {
 		return nil, err
 	}
@@ -125,12 +126,12 @@ func (a *App) CreateShortUrl(author *Author, spec *core.ShortUrlSpec) (*ShortUrl
 	}
 
 	if spec.FindIfExists {
-		existing, err := data.ShortUrlDetailByLongUrl(a.Db, core.DomainID(domain.Id), spec.LongUrl)
+		existing, err := data.ShortUrlDetailByLongUrl(ctx, a.Db, domain.Id, spec.LongUrl)
 		if err != nil {
 			return nil, err
 		}
 		if existing != nil {
-			tags, err := data.TagsForShortUrl(a.Db, core.ShortUrlID(existing.Id))
+			tags, err := data.TagsForShortUrl(ctx, a.Db, existing.Id)
 			if err != nil {
 				return nil, err
 			}
@@ -154,7 +155,7 @@ func (a *App) CreateShortUrl(author *Author, spec *core.ShortUrlSpec) (*ShortUrl
 		}
 		nu := data.NewShortUrl{
 			ShortCode:      code,
-			DomainId:       core.DomainID(domain.Id),
+			DomainId:       domain.Id,
 			LongUrl:        spec.LongUrl,
 			Title:          spec.Title,
 			RedirectStatus: status,
@@ -173,7 +174,7 @@ func (a *App) CreateShortUrl(author *Author, spec *core.ShortUrlSpec) (*ShortUrl
 		return nu
 	}
 
-	id, err := a.insertWithCode(spec, domain, record)
+	id, err := a.insertWithCode(ctx, spec, domain, record)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +183,7 @@ func (a *App) CreateShortUrl(author *Author, spec *core.ShortUrlSpec) (*ShortUrl
 		a.Queues.enqueueTitle(id, spec.LongUrl)
 	}
 
-	detail, err := data.ShortUrlDetailByID(a.Db, id)
+	detail, err := data.ShortUrlDetailByID(ctx, a.Db, id)
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +197,7 @@ func (a *App) CreateShortUrl(author *Author, spec *core.ShortUrlSpec) (*ShortUrl
 }
 
 // EditShortUrl applies a validated edit to an existing short URL.
-func (a *App) EditShortUrl(id core.ShortUrlID, current *data.ShortUrlDetail, edit *core.ShortUrlEdit) (*ShortUrlDto, error) {
+func (a *App) EditShortUrl(ctx context.Context, id core.ShortUrlID, current *data.ShortUrlDetail, edit *core.ShortUrlEdit) (*ShortUrlDto, error) {
 	titleUnchanged := (edit.Title == nil && current.Title == nil) ||
 		(edit.Title != nil && current.Title != nil && *edit.Title == *current.Title)
 
@@ -214,20 +215,20 @@ func (a *App) EditShortUrl(id core.ShortUrlID, current *data.ShortUrlDetail, edi
 		update.GroupName = &group
 	}
 
-	if _, err := data.UpdateShortUrl(a.Db, id, update); err != nil {
+	if _, err := data.UpdateShortUrl(ctx, a.Db, id, update); err != nil {
 		return nil, err
 	}
 	if edit.ChangeTags {
-		if err := data.SetShortUrlTags(a.Db, id, edit.Tags); err != nil {
+		if err := data.SetShortUrlTags(ctx, a.Db, id, edit.Tags); err != nil {
 			return nil, err
 		}
 	}
 
-	updated, err := data.ShortUrlDetailByID(a.Db, id)
+	updated, err := data.ShortUrlDetailByID(ctx, a.Db, id)
 	if err != nil {
 		return nil, err
 	}
-	tagNames, err := data.TagsForShortUrl(a.Db, id)
+	tagNames, err := data.TagsForShortUrl(ctx, a.Db, id)
 	if err != nil {
 		return nil, err
 	}

@@ -62,7 +62,7 @@ func (a *App) uiLogin(w http.ResponseWriter, r *http.Request) error {
 	password := r.PostFormValue("password")
 	returnUrl := safeReturnUrl(r.PostFormValue("returnUrl"))
 
-	user, err := data.UserByUsername(a.Db, username)
+	user, err := data.UserByUsername(r.Context(), a.Db, username)
 	if err != nil {
 		return err
 	}

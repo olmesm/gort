@@ -168,7 +168,7 @@ func (r ApiKeyRole) Slug() string { return string(r.Kind) }
 // ApiKeyRoleOfStored reconstructs a role from its stored representation.
 // Returns false for unknown role strings and for a domain role missing its
 // domain id.
-func ApiKeyRoleOfStored(slug string, domainID *int64) (ApiKeyRole, bool) {
+func ApiKeyRoleOfStored(slug string, domainID *DomainID) (ApiKeyRole, bool) {
 	switch slug {
 	case "admin":
 		return AdminRole(), true
@@ -176,7 +176,7 @@ func ApiKeyRoleOfStored(slug string, domainID *int64) (ApiKeyRole, bool) {
 		return AuthorRole(), true
 	case "domain":
 		if domainID != nil {
-			return DomainRole(DomainID(*domainID)), true
+			return DomainRole(*domainID), true
 		}
 		return ApiKeyRole{}, false
 	default:

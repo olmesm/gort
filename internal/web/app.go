@@ -82,7 +82,7 @@ func NewApp(cfg *AppConfig, logger *slog.Logger) (*App, error) {
 		a.oidc = newOidcClient(cfg)
 	}
 
-	if err := a.initialize(); err != nil {
+	if err := a.initialize(context.Background()); err != nil {
 		return nil, err
 	}
 	a.mux = a.buildRouter()
@@ -91,15 +91,15 @@ func NewApp(cfg *AppConfig, logger *slog.Logger) (*App, error) {
 
 // initialize runs migrations, registers the default domain and bootstraps
 // the first admin user.
-func (a *App) initialize() error {
-	if err := data.Migrate(a.Db); err != nil {
+func (a *App) initialize(ctx context.Context) error {
+	if err := data.Migrate(ctx, a.Db); err != nil {
 		return err
 	}
-	if _, err := data.EnsureDefaultDomain(a.Db, a.Cfg.DefaultDomain); err != nil {
+	if _, err := data.EnsureDefaultDomain(ctx, a.Db, a.Cfg.DefaultDomain); err != nil {
 		return err
 	}
 
-	userCount, err := data.CountUsers(a.Db)
+	userCount, err := data.CountUsers(ctx, a.Db)
 	if err != nil {
 		return err
 	}
@@ -118,7 +118,7 @@ func (a *App) initialize() error {
 			password = base64.RawURLEncoding.EncodeToString(bytes)
 			generated = true
 		}
-		created, err := data.InsertUser(a.Db, username, HashPassword(password), core.UserAdmin)
+		created, err := data.InsertUser(ctx, a.Db, username, HashPassword(password), core.UserAdmin)
 		if err != nil {
 			return err
 		}
@@ -305,8 +305,9 @@ func (a *App) Handler() http.Handler {
 func (a *App) Run(ctx context.Context) error {
 	a.StartWorkers(ctx)
 	server := &http.Server{
-		Addr:    fmt.Sprintf("0.0.0.0:%d", a.Cfg.Port),
-		Handler: a.Handler(),
+		Addr:              fmt.Sprintf("0.0.0.0:%d", a.Cfg.Port),
+		Handler:           a.Handler(),
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 	go func() {
 		<-ctx.Done()

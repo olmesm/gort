@@ -1,6 +1,7 @@
 package data
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/olmesm/gort/internal/core"
@@ -21,8 +22,8 @@ func (e *TagRenameError) Error() string {
 
 // TagsForShortUrl returns the tag names of one short URL; never nil, since
 // the result is serialized as a JSON array.
-func TagsForShortUrl(db *Db, shortUrlId core.ShortUrlID) ([]string, error) {
-	out, err := queryStrings(db,
+func TagsForShortUrl(ctx context.Context, db *Db, shortUrlId core.ShortUrlID) ([]string, error) {
+	out, err := queryStrings(ctx, db,
 		`SELECT t.name FROM tags t
 		 JOIN short_url_tags st ON st.tag_id = t.id
 		 WHERE st.short_url_id = ? ORDER BY t.name`, shortUrlId.Value())
@@ -33,8 +34,8 @@ func TagsForShortUrl(db *Db, shortUrlId core.ShortUrlID) ([]string, error) {
 }
 
 // TagsForShortUrls fetches tags for many short URLs at once: id -> tag names.
-func TagsForShortUrls(db *Db, shortUrlIds []core.ShortUrlID) (map[int64][]string, error) {
-	result := map[int64][]string{}
+func TagsForShortUrls(ctx context.Context, db *Db, shortUrlIds []core.ShortUrlID) (map[core.ShortUrlID][]string, error) {
+	result := map[core.ShortUrlID][]string{}
 	if len(shortUrlIds) == 0 {
 		return result, nil
 	}
@@ -43,7 +44,7 @@ func TagsForShortUrls(db *Db, shortUrlIds []core.ShortUrlID) (map[int64][]string
 		ids[i] = id.Value()
 	}
 	inClause, args := InList("st.short_url_id", ids)
-	rows, err := db.Query(
+	rows, err := db.Query(ctx,
 		fmt.Sprintf(`SELECT st.short_url_id, t.name FROM tags t
 		             JOIN short_url_tags st ON st.tag_id = t.id
 		             WHERE %s ORDER BY t.name`, inClause), args...)
@@ -52,7 +53,7 @@ func TagsForShortUrls(db *Db, shortUrlIds []core.ShortUrlID) (map[int64][]string
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id int64
+		var id core.ShortUrlID
 		var name string
 		if err := rows.Scan(&id, &name); err != nil {
 			return nil, err
@@ -62,7 +63,7 @@ func TagsForShortUrls(db *Db, shortUrlIds []core.ShortUrlID) (map[int64][]string
 	return result, rows.Err()
 }
 
-func ListTags(db *Db, searchTerm string, page, itemsPerPage int) (core.Page[TagStatsRow], error) {
+func ListTags(ctx context.Context, db *Db, searchTerm string, page, itemsPerPage int) (core.Page[TagStatsRow], error) {
 	empty := core.Page[TagStatsRow]{}
 	whereClause := ""
 	var whereArgs []any
@@ -71,14 +72,14 @@ func ListTags(db *Db, searchTerm string, page, itemsPerPage int) (core.Page[TagS
 		whereArgs = append(whereArgs, "%"+searchTerm+"%")
 	}
 
-	total, err := queryScalar[int64](db,
+	total, err := queryScalar[int64](ctx, db,
 		fmt.Sprintf("SELECT COUNT(*) FROM tags t %s", whereClause), whereArgs...)
 	if err != nil {
 		return empty, err
 	}
 
 	listArgs := append(append([]any{}, whereArgs...), itemsPerPage, core.PageOffset(page, itemsPerPage))
-	items, err := queryAll(db, func(r rowScanner) (*TagStatsRow, error) {
+	items, err := queryAll(ctx, db, func(r rowScanner) (*TagStatsRow, error) {
 		var t TagStatsRow
 		if err := r.Scan(&t.Id, &t.Name, &t.ShortUrlCount, &t.VisitCount); err != nil {
 			return nil, err
@@ -106,15 +107,15 @@ func ListTags(db *Db, searchTerm string, page, itemsPerPage int) (core.Page[TagS
 
 // RenameTag renames a tag; oldName is a caller-supplied candidate, newName is
 // validated.
-func RenameTag(db *Db, oldName string, newName core.TagName) error {
-	existingNew, err := queryScalar[int64](db, "SELECT COUNT(*) FROM tags WHERE name = ?", newName.Value())
+func RenameTag(ctx context.Context, db *Db, oldName string, newName core.TagName) error {
+	existingNew, err := queryScalar[int64](ctx, db, "SELECT COUNT(*) FROM tags WHERE name = ?", newName.Value())
 	if err != nil {
 		return err
 	}
 	if existingNew > 0 && oldName != newName.Value() {
 		return &TagRenameError{NameTaken: true, Name: newName.Value()}
 	}
-	renamed, err := execAffected(db, "UPDATE tags SET name = ? WHERE name = ?", newName.Value(), oldName)
+	renamed, err := execAffected(ctx, db, "UPDATE tags SET name = ? WHERE name = ?", newName.Value(), oldName)
 	if err != nil {
 		return err
 	}
@@ -125,21 +126,21 @@ func RenameTag(db *Db, oldName string, newName core.TagName) error {
 }
 
 // DeleteTags deletes tags by candidate names; returns how many existed.
-func DeleteTags(db *Db, names []string) (int, error) {
+func DeleteTags(ctx context.Context, db *Db, names []string) (int, error) {
 	if len(names) == 0 {
 		return 0, nil
 	}
 	inClause, args := InList("name", names)
-	return execCount(db, fmt.Sprintf("DELETE FROM tags WHERE %s", inClause), args...)
+	return execCount(ctx, db, fmt.Sprintf("DELETE FROM tags WHERE %s", inClause), args...)
 }
 
-func TagExists(db *Db, name string) (bool, error) {
-	count, err := queryScalar[int64](db, "SELECT COUNT(*) FROM tags WHERE name = ?", name)
+func TagExists(ctx context.Context, db *Db, name string) (bool, error) {
+	count, err := queryScalar[int64](ctx, db, "SELECT COUNT(*) FROM tags WHERE name = ?", name)
 	return count > 0, err
 }
 
-func ListAllTagNames(db *Db) ([]string, error) {
-	out, err := queryStrings(db, "SELECT name FROM tags ORDER BY name")
+func ListAllTagNames(ctx context.Context, db *Db) ([]string, error) {
+	out, err := queryStrings(ctx, db, "SELECT name FROM tags ORDER BY name")
 	if out == nil {
 		out = []string{}
 	}

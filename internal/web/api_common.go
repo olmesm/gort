@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -168,7 +169,7 @@ func canAccessShortUrl(key *AuthenticatedKey, detail *data.ShortUrlDetail) bool 
 	case core.RoleAuthor:
 		return detail.AuthorApiKeyId != nil && *detail.AuthorApiKeyId == key.Row.Id
 	case core.RoleDomain:
-		return detail.DomainId == key.Role.DomainID.Value()
+		return detail.DomainId == key.Role.DomainID
 	default:
 		return false
 	}
@@ -177,15 +178,15 @@ func canAccessShortUrl(key *AuthenticatedKey, detail *data.ShortUrlDetail) bool 
 // findAccessibleShortUrl resolves a short URL by code (+ optional ?domain=)
 // and checks key access. On failure it writes the error response and returns
 // nil.
-func (a *App) findAccessibleShortUrl(key *AuthenticatedKey, code, domainAuthority string) (*data.ShortUrlDetail, error) {
-	domain, err := a.ResolveNamedDomain(domainAuthority)
+func (a *App) findAccessibleShortUrl(ctx context.Context, key *AuthenticatedKey, code, domainAuthority string) (*data.ShortUrlDetail, error) {
+	domain, err := a.ResolveNamedDomain(ctx, domainAuthority)
 	if err != nil {
 		return nil, err
 	}
 	if domain == nil {
 		return nil, NotFound(fmt.Sprintf("Domain '%s' is not registered.", domainAuthority))
 	}
-	detail, err := data.ShortUrlDetailByCode(a.Db, core.DomainID(domain.Id), code)
+	detail, err := data.ShortUrlDetailByCode(ctx, a.Db, domain.Id, code)
 	if err != nil {
 		return nil, err
 	}

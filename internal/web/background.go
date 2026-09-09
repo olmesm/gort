@@ -174,7 +174,7 @@ func (a *App) eventWorker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case event := <-a.Queues.Events:
-			hooks, err := data.ListWebhooksForEvent(a.Db, event.Kind())
+			hooks, err := data.ListWebhooksForEvent(ctx, a.Db, event.Kind())
 			if err != nil {
 				a.Logger.Warn("Failed to fan out event to webhooks", "event", event.Kind().Slug(), "error", err)
 				continue
@@ -185,7 +185,7 @@ func (a *App) eventWorker(ctx context.Context) {
 			payload := event.ToDeliveryPayload(time.Now().UTC())
 			failed := false
 			for _, hook := range hooks {
-				if err := data.EnqueueDelivery(a.Db, core.WebhookID(hook.Id), event.Kind(), payload); err != nil {
+				if err := data.EnqueueDelivery(ctx, a.Db, hook.Id, event.Kind(), payload); err != nil {
 					a.Logger.Warn("Failed to enqueue webhook delivery", "webhook", hook.Id, "error", err)
 					failed = true
 				}
@@ -202,9 +202,9 @@ func (a *App) geoWorker(ctx context.Context) {
 	resolve := func(visitId core.VisitID, ip string) {
 		var err error
 		if info := a.Geo.TryLookup(ip); info != nil {
-			err = data.SetVisitGeo(a.Db, visitId, *info)
+			err = data.SetVisitGeo(ctx, a.Db, visitId, *info)
 		} else {
-			err = data.MarkGeoResolved(a.Db, visitId)
+			err = data.MarkGeoResolved(ctx, a.Db, visitId)
 		}
 		if err != nil {
 			a.Logger.Warn("Failed to geolocate visit", "visit", visitId.Value(), "error", err)
@@ -213,7 +213,7 @@ func (a *App) geoWorker(ctx context.Context) {
 
 	// Catch up on visits left unresolved by previous runs.
 	if a.Geo.IsAvailable() {
-		pending, err := data.ListPendingGeo(a.Db, 1000)
+		pending, err := data.ListPendingGeo(ctx, a.Db, 1000)
 		if err != nil {
 			a.Logger.Warn("Geo catch-up scan failed", "error", err)
 		} else {
@@ -277,7 +277,7 @@ func (a *App) titleWorker(ctx context.Context) {
 			return
 		case job := <-a.Queues.Title:
 			if title := a.TryFetchTitle(ctx, job.LongUrl); title != "" {
-				if err := data.SetResolvedTitle(a.Db, job.ShortUrlId, title); err != nil {
+				if err := data.SetResolvedTitle(ctx, a.Db, job.ShortUrlId, title); err != nil {
 					a.Logger.Warn("Failed to store title", "shortUrl", job.ShortUrlId.Value(), "error", err)
 				}
 			}
@@ -304,7 +304,7 @@ func (a *App) webhookWorker(ctx context.Context) {
 		req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, hook.Url,
 			strings.NewReader(delivery.Payload))
 		if err != nil {
-			_ = data.MarkFailedAttempt(a.Db, delivery.Id, delivery.Attempts, webhookMaxAttempts, err.Error())
+			_ = data.MarkFailedAttempt(ctx, a.Db, delivery.Id, delivery.Attempts, webhookMaxAttempts, err.Error())
 			return
 		}
 		req.Header.Set("Content-Type", "application/json; charset=utf-8")
@@ -317,16 +317,16 @@ func (a *App) webhookWorker(ctx context.Context) {
 				return
 			}
 			a.Logger.Warn("Webhook delivery failed", "delivery", delivery.Id, "error", err)
-			_ = data.MarkFailedAttempt(a.Db, delivery.Id, delivery.Attempts, webhookMaxAttempts, err.Error())
+			_ = data.MarkFailedAttempt(ctx, a.Db, delivery.Id, delivery.Attempts, webhookMaxAttempts, err.Error())
 			return
 		}
 		defer resp.Body.Close()
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			_ = data.MarkDelivered(a.Db, delivery.Id)
+			_ = data.MarkDelivered(ctx, a.Db, delivery.Id)
 		} else {
-			_ = data.MarkFailedAttempt(a.Db, delivery.Id, delivery.Attempts, webhookMaxAttempts,
+			_ = data.MarkFailedAttempt(ctx, a.Db, delivery.Id, delivery.Attempts, webhookMaxAttempts,
 				fmt.Sprintf("HTTP %d", resp.StatusCode))
 		}
 	}
@@ -339,7 +339,7 @@ func (a *App) webhookWorker(ctx context.Context) {
 		case <-a.Queues.WebhookSignal:
 		case <-time.After(15 * time.Second):
 		}
-		due, err := data.DueDeliveries(a.Db, 50)
+		due, err := data.DueDeliveries(ctx, a.Db, 50)
 		if err != nil {
 			a.Logger.Warn("Failed to load due webhook deliveries", "error", err)
 			continue

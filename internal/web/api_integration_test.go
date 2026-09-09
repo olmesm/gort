@@ -193,7 +193,7 @@ func TestKeysWithUnparseableStoredRolesAreRejectedNotAdmin(t *testing.T) {
 
 	// Simulate a corrupt row: role text nothing recognizes.
 	plain := GenerateApiKey()
-	_, err := app.Db.Exec(
+	_, err := app.Db.Exec(t.Context(),
 		`INSERT INTO api_keys (key_hash, name, role, domain_id, enabled, expires_at, created_at)
 		 VALUES (?, 'corrupt', 'superuser', NULL, 1, NULL, ?)`,
 		HashApiKey(plain), app.Db.BindTime(time.Now()))

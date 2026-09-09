@@ -1,7 +1,7 @@
 package data
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"time"
 
@@ -12,26 +12,20 @@ const apiKeySelectCols = "id, key_hash, name, role, domain_id, enabled, expires_
 
 func scanApiKeyRow(r rowScanner) (*ApiKeyRow, error) {
 	var k ApiKeyRow
-	var name sql.NullString
-	var domainId sql.NullInt64
-	var expiresAt, createdAt NullTime
-	if err := r.Scan(&k.Id, &k.KeyHash, &name, &k.Role, &domainId, &k.Enabled, &expiresAt, &createdAt); err != nil {
+	if err := r.Scan(&k.Id, &k.KeyHash, &k.Name, &k.Role, &k.DomainId, &k.Enabled,
+		asTimePtr(&k.ExpiresAt), asTime(&k.CreatedAt)); err != nil {
 		return nil, err
 	}
-	k.Name = strPtr(name)
-	k.DomainId = int64Ptr(domainId)
-	k.ExpiresAt = expiresAt.Ptr()
-	k.CreatedAt = createdAt.Time
 	return &k, nil
 }
 
-func InsertApiKey(db *Db, keyHash string, name *string, role core.ApiKeyRole, expiresAt *time.Time) (*ApiKeyRow, error) {
+func InsertApiKey(ctx context.Context, db *Db, keyHash string, name *string, role core.ApiKeyRole, expiresAt *time.Time) (*ApiKeyRow, error) {
 	var domainId any
 	if role.Kind == core.RoleDomain {
 		domainId = role.DomainID.Value()
 	}
 	var id int64
-	err := db.QueryRow(
+	err := db.QueryRow(ctx,
 		`INSERT INTO api_keys (key_hash, name, role, domain_id, enabled, expires_at, created_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?)
 		 RETURNING id`,
@@ -40,29 +34,29 @@ func InsertApiKey(db *Db, keyHash string, name *string, role core.ApiKeyRole, ex
 	if err != nil {
 		return nil, err
 	}
-	return scanApiKeyRow(db.QueryRow(
+	return scanApiKeyRow(db.QueryRow(ctx,
 		fmt.Sprintf("SELECT %s FROM api_keys WHERE id = ?", apiKeySelectCols), id))
 }
 
-func ApiKeyByHash(db *Db, keyHash string) (*ApiKeyRow, error) {
-	return queryOne(db, scanApiKeyRow,
+func ApiKeyByHash(ctx context.Context, db *Db, keyHash string) (*ApiKeyRow, error) {
+	return queryOne(ctx, db, scanApiKeyRow,
 		fmt.Sprintf("SELECT %s FROM api_keys WHERE key_hash = ?", apiKeySelectCols), keyHash)
 }
 
-func ListApiKeys(db *Db) ([]ApiKeyRow, error) {
-	return queryAll(db, scanApiKeyRow,
+func ListApiKeys(ctx context.Context, db *Db) ([]ApiKeyRow, error) {
+	return queryAll(ctx, db, scanApiKeyRow,
 		fmt.Sprintf("SELECT %s FROM api_keys ORDER BY created_at DESC", apiKeySelectCols))
 }
 
-func ApiKeyByID(db *Db, id core.ApiKeyID) (*ApiKeyRow, error) {
-	return queryOne(db, scanApiKeyRow,
+func ApiKeyByID(ctx context.Context, db *Db, id core.ApiKeyID) (*ApiKeyRow, error) {
+	return queryOne(ctx, db, scanApiKeyRow,
 		fmt.Sprintf("SELECT %s FROM api_keys WHERE id = ?", apiKeySelectCols), id.Value())
 }
 
-func SetApiKeyEnabled(db *Db, id core.ApiKeyID, enabled bool) (bool, error) {
-	return execAffected(db, "UPDATE api_keys SET enabled = ? WHERE id = ?", enabled, id.Value())
+func SetApiKeyEnabled(ctx context.Context, db *Db, id core.ApiKeyID, enabled bool) (bool, error) {
+	return execAffected(ctx, db, "UPDATE api_keys SET enabled = ? WHERE id = ?", enabled, id.Value())
 }
 
-func DeleteApiKey(db *Db, id core.ApiKeyID) (bool, error) {
-	return execAffected(db, "DELETE FROM api_keys WHERE id = ?", id.Value())
+func DeleteApiKey(ctx context.Context, db *Db, id core.ApiKeyID) (bool, error) {
+	return execAffected(ctx, db, "DELETE FROM api_keys WHERE id = ?", id.Value())
 }

@@ -36,7 +36,7 @@ type webhookDto struct {
 
 func newWebhookDto(w *data.WebhookRow) webhookDto {
 	return webhookDto{
-		Id:        w.Id,
+		Id:        w.Id.Value(),
 		Name:      w.Name,
 		Url:       w.Url,
 		Events:    strings.Split(w.Events, ","),
@@ -88,7 +88,7 @@ func generateWebhookSecret() string {
 
 // GET /rest/v1/webhooks (admin)
 func (a *App) apiListWebhooks(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
-	hooks, err := data.ListWebhooks(a.Db)
+	hooks, err := data.ListWebhooks(r.Context(), a.Db)
 	if err != nil {
 		return err
 	}
@@ -111,7 +111,7 @@ func (a *App) apiCreateWebhook(_ *AuthenticatedKey, w http.ResponseWriter, r *ht
 		return BadRequest(err.Error())
 	}
 	secret := generateWebhookSecret()
-	row, err := data.InsertWebhook(a.Db, name, hookUrl, secret, events)
+	row, err := data.InsertWebhook(r.Context(), a.Db, name, hookUrl, secret, events)
 	if err != nil {
 		return err
 	}
@@ -135,7 +135,7 @@ func (a *App) apiPatchWebhook(_ *AuthenticatedKey, w http.ResponseWriter, r *htt
 	if !ok {
 		return NotFound("Webhook was not found.")
 	}
-	updated, err := data.SetWebhookEnabled(a.Db, id, body.Enabled)
+	updated, err := data.SetWebhookEnabled(r.Context(), a.Db, id, body.Enabled)
 	if err != nil {
 		return err
 	}
@@ -151,7 +151,7 @@ func (a *App) apiDeleteWebhook(_ *AuthenticatedKey, w http.ResponseWriter, r *ht
 	if !ok {
 		return NotFound("Webhook was not found.")
 	}
-	deleted, err := data.DeleteWebhook(a.Db, id)
+	deleted, err := data.DeleteWebhook(r.Context(), a.Db, id)
 	if err != nil {
 		return err
 	}

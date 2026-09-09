@@ -1,9 +1,10 @@
 package data
 
 import (
-	"database/sql"
+	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -91,7 +92,7 @@ func visitCountExpr() string {
 	return fmt.Sprintf("(SELECT COUNT(*) FROM visits v WHERE v.short_url_id = su.id AND %s)", validVisitExpr())
 }
 
-func detailSelect(db *Db) string {
+func detailSelect(ctx context.Context, db *Db) string {
 	botCount := fmt.Sprintf(
 		"(SELECT COUNT(*) FROM visits v WHERE v.short_url_id = su.id AND %s AND v.is_bot = %s)",
 		validVisitExpr(), db.BoolLiteral(true))
@@ -107,56 +108,34 @@ func detailSelect(db *Db) string {
 
 func scanShortUrlDetail(r rowScanner) (*ShortUrlDetail, error) {
 	var d ShortUrlDetail
-	var title, groupName sql.NullString
-	var maxVisits, authorUserId, authorApiKeyId sql.NullInt64
-	var validSince, validUntil, createdAt NullTime
-	err := r.Scan(&d.Id, &d.ShortCode, &d.DomainId, &d.Authority, &d.LongUrl, &title,
+	err := r.Scan(&d.Id, &d.ShortCode, &d.DomainId, &d.Authority, &d.LongUrl, &d.Title,
 		&d.TitleWasAutoResolved, &d.RedirectStatus, &d.ForwardQuery, &d.Crawlable,
-		&maxVisits, &validSince, &validUntil, &authorUserId, &authorApiKeyId,
-		&groupName, &createdAt, &d.VisitCount, &d.BotVisitCount)
+		&d.MaxVisits, asTimePtr(&d.ValidSince), asTimePtr(&d.ValidUntil), &d.AuthorUserId, &d.AuthorApiKeyId,
+		&d.GroupName, asTime(&d.CreatedAt), &d.VisitCount, &d.BotVisitCount)
 	if err != nil {
 		return nil, err
 	}
-	d.Title = strPtr(title)
-	d.GroupName = strPtr(groupName)
-	d.MaxVisits = int64Ptr(maxVisits)
-	d.ValidSince = validSince.Ptr()
-	d.ValidUntil = validUntil.Ptr()
-	d.AuthorUserId = int64Ptr(authorUserId)
-	d.AuthorApiKeyId = int64Ptr(authorApiKeyId)
-	d.CreatedAt = createdAt.Time
 	return &d, nil
 }
 
 func scanShortUrlRow(r rowScanner) (*ShortUrlRow, error) {
 	var s ShortUrlRow
-	var title, groupName sql.NullString
-	var maxVisits, authorUserId, authorApiKeyId sql.NullInt64
-	var validSince, validUntil, createdAt NullTime
-	err := r.Scan(&s.Id, &s.ShortCode, &s.DomainId, &s.LongUrl, &title, &s.TitleWasAutoResolved,
-		&s.RedirectStatus, &s.ForwardQuery, &s.Crawlable, &maxVisits, &validSince,
-		&validUntil, &authorUserId, &authorApiKeyId, &groupName, &createdAt)
+	err := r.Scan(&s.Id, &s.ShortCode, &s.DomainId, &s.LongUrl, &s.Title, &s.TitleWasAutoResolved,
+		&s.RedirectStatus, &s.ForwardQuery, &s.Crawlable, &s.MaxVisits, asTimePtr(&s.ValidSince),
+		asTimePtr(&s.ValidUntil), &s.AuthorUserId, &s.AuthorApiKeyId, &s.GroupName, asTime(&s.CreatedAt))
 	if err != nil {
 		return nil, err
 	}
-	s.Title = strPtr(title)
-	s.GroupName = strPtr(groupName)
-	s.MaxVisits = int64Ptr(maxVisits)
-	s.ValidSince = validSince.Ptr()
-	s.ValidUntil = validUntil.Ptr()
-	s.AuthorUserId = int64Ptr(authorUserId)
-	s.AuthorApiKeyId = int64Ptr(authorApiKeyId)
-	s.CreatedAt = createdAt.Time
 	return &s, nil
 }
 
-func insertTagLinks(tx *Tx, shortUrlId int64, tags []core.TagName) error {
+func insertTagLinks(ctx context.Context, tx *Tx, shortUrlId int64, tags []core.TagName) error {
 	for _, tag := range tags {
-		if _, err := tx.Exec(
+		if _, err := tx.Exec(ctx,
 			"INSERT INTO tags (name) VALUES (?) ON CONFLICT (name) DO NOTHING", tag.Value()); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(
+		if _, err := tx.Exec(ctx,
 			`INSERT INTO short_url_tags (short_url_id, tag_id)
 			 SELECT ?, id FROM tags WHERE name = ?
 			 ON CONFLICT (short_url_id, tag_id) DO NOTHING`,
@@ -172,9 +151,9 @@ func insertTagLinks(tx *Tx, shortUrlId int64, tags []core.TagName) error {
 // this repository owns the whole write: a short URL is never observable
 // half-created. Returns ErrDuplicateShortCode when the (domain, code) pair
 // exists.
-func CreateShortUrl(db *Db, nu NewShortUrl, tags []core.TagName) (core.ShortUrlID, error) {
+func CreateShortUrl(ctx context.Context, db *Db, nu NewShortUrl, tags []core.TagName) (core.ShortUrlID, error) {
 	var id int64
-	err := db.WithTx(func(tx *Tx) error {
+	err := db.WithTx(ctx, func(tx *Tx) error {
 		var authorUserId, authorApiKeyId any
 		if nu.AuthorUserId != nil {
 			authorUserId = nu.AuthorUserId.Value()
@@ -182,7 +161,7 @@ func CreateShortUrl(db *Db, nu NewShortUrl, tags []core.TagName) (core.ShortUrlI
 		if nu.AuthorApiKeyId != nil {
 			authorApiKeyId = nu.AuthorApiKeyId.Value()
 		}
-		err := tx.QueryRow(
+		err := tx.QueryRow(ctx,
 			`INSERT INTO short_urls
 			   (short_code, domain_id, long_url, title, title_was_auto_resolved,
 			    redirect_status, forward_query, crawlable, max_visits,
@@ -196,7 +175,7 @@ func CreateShortUrl(db *Db, nu NewShortUrl, tags []core.TagName) (core.ShortUrlI
 		if err != nil {
 			return err
 		}
-		return insertTagLinks(tx, id, tags)
+		return insertTagLinks(ctx, tx, id, tags)
 	})
 	if err != nil {
 		if IsDuplicateKey(err) {
@@ -210,8 +189,8 @@ func CreateShortUrl(db *Db, nu NewShortUrl, tags []core.TagName) (core.ShortUrlI
 // ShortUrlByCode looks up by a *candidate* code from the URL path — untrusted
 // input, so a plain string is the honest parameter type here. Returns nil
 // when not found.
-func ShortUrlByCode(db *Db, domainId core.DomainID, code string) (*ShortUrlRow, error) {
-	return queryOne(db, scanShortUrlRow,
+func ShortUrlByCode(ctx context.Context, db *Db, domainId core.DomainID, code string) (*ShortUrlRow, error) {
+	return queryOne(ctx, db, scanShortUrlRow,
 		`SELECT id, short_code, domain_id, long_url, title, title_was_auto_resolved,
 		        redirect_status, forward_query, crawlable, max_visits, valid_since,
 		        valid_until, author_user_id, author_api_key_id, group_name, created_at
@@ -219,24 +198,24 @@ func ShortUrlByCode(db *Db, domainId core.DomainID, code string) (*ShortUrlRow, 
 		domainId.Value(), code)
 }
 
-func ShortUrlDetailByCode(db *Db, domainId core.DomainID, code string) (*ShortUrlDetail, error) {
-	return queryOne(db, scanShortUrlDetail,
-		detailSelect(db)+" WHERE su.domain_id = ? AND su.short_code = ?",
+func ShortUrlDetailByCode(ctx context.Context, db *Db, domainId core.DomainID, code string) (*ShortUrlDetail, error) {
+	return queryOne(ctx, db, scanShortUrlDetail,
+		detailSelect(ctx, db)+" WHERE su.domain_id = ? AND su.short_code = ?",
 		domainId.Value(), code)
 }
 
-func ShortUrlDetailByLongUrl(db *Db, domainId core.DomainID, longUrl core.LongUrl) (*ShortUrlDetail, error) {
-	return queryOne(db, scanShortUrlDetail,
-		detailSelect(db)+" WHERE su.domain_id = ? AND su.long_url = ? ORDER BY su.id LIMIT 1",
+func ShortUrlDetailByLongUrl(ctx context.Context, db *Db, domainId core.DomainID, longUrl core.LongUrl) (*ShortUrlDetail, error) {
+	return queryOne(ctx, db, scanShortUrlDetail,
+		detailSelect(ctx, db)+" WHERE su.domain_id = ? AND su.long_url = ? ORDER BY su.id LIMIT 1",
 		domainId.Value(), longUrl.Value())
 }
 
-func ShortUrlDetailByID(db *Db, id core.ShortUrlID) (*ShortUrlDetail, error) {
-	return queryOne(db, scanShortUrlDetail, detailSelect(db)+" WHERE su.id = ?", id.Value())
+func ShortUrlDetailByID(ctx context.Context, db *Db, id core.ShortUrlID) (*ShortUrlDetail, error) {
+	return queryOne(ctx, db, scanShortUrlDetail, detailSelect(ctx, db)+" WHERE su.id = ?", id.Value())
 }
 
-func UpdateShortUrl(db *Db, id core.ShortUrlID, u ShortUrlUpdate) (bool, error) {
-	return execAffected(db,
+func UpdateShortUrl(ctx context.Context, db *Db, id core.ShortUrlID, u ShortUrlUpdate) (bool, error) {
+	return execAffected(ctx, db,
 		`UPDATE short_urls SET
 		   long_url = ?, title = ?, title_was_auto_resolved = ?,
 		   redirect_status = ?, forward_query = ?,
@@ -250,25 +229,25 @@ func UpdateShortUrl(db *Db, id core.ShortUrlID, u ShortUrlUpdate) (bool, error) 
 }
 
 // SetShortUrlTags replaces the tag set of an existing short URL, atomically.
-func SetShortUrlTags(db *Db, id core.ShortUrlID, tags []core.TagName) error {
-	return db.WithTx(func(tx *Tx) error {
-		if _, err := tx.Exec("DELETE FROM short_url_tags WHERE short_url_id = ?", id.Value()); err != nil {
+func SetShortUrlTags(ctx context.Context, db *Db, id core.ShortUrlID, tags []core.TagName) error {
+	return db.WithTx(ctx, func(tx *Tx) error {
+		if _, err := tx.Exec(ctx, "DELETE FROM short_url_tags WHERE short_url_id = ?", id.Value()); err != nil {
 			return err
 		}
-		return insertTagLinks(tx, id.Value(), tags)
+		return insertTagLinks(ctx, tx, id.Value(), tags)
 	})
 }
 
-func SetResolvedTitle(db *Db, id core.ShortUrlID, title string) error {
-	_, err := db.Exec(
+func SetResolvedTitle(ctx context.Context, db *Db, id core.ShortUrlID, title string) error {
+	_, err := db.Exec(ctx,
 		`UPDATE short_urls SET title = ?, title_was_auto_resolved = ?
 		 WHERE id = ? AND title IS NULL`,
 		title, true, id.Value())
 	return err
 }
 
-func DeleteShortUrl(db *Db, id core.ShortUrlID) (bool, error) {
-	return execAffected(db, "DELETE FROM short_urls WHERE id = ?", id.Value())
+func DeleteShortUrl(ctx context.Context, db *Db, id core.ShortUrlID) (bool, error) {
+	return execAffected(ctx, db, "DELETE FROM short_urls WHERE id = ?", id.Value())
 }
 
 // MissingTitleRow is a short URL that still needs automatic title resolution.
@@ -277,8 +256,8 @@ type MissingTitleRow struct {
 	LongUrl string
 }
 
-func ListMissingTitles(db *Db, limit int) ([]MissingTitleRow, error) {
-	return queryAll(db, func(r rowScanner) (*MissingTitleRow, error) {
+func ListMissingTitles(ctx context.Context, db *Db, limit int) ([]MissingTitleRow, error) {
+	return queryAll(ctx, db, func(r rowScanner) (*MissingTitleRow, error) {
 		var m MissingTitleRow
 		if err := r.Scan(&m.Id, &m.LongUrl); err != nil {
 			return nil, err
@@ -288,26 +267,26 @@ func ListMissingTitles(db *Db, limit int) ([]MissingTitleRow, error) {
 }
 
 // ListCrawlable lists all crawlable short URL codes, for robots.txt generation.
-func ListCrawlable(db *Db) ([]string, error) {
-	return queryStrings(db,
+func ListCrawlable(ctx context.Context, db *Db) ([]string, error) {
+	return queryStrings(ctx, db,
 		fmt.Sprintf("SELECT short_code FROM short_urls WHERE crawlable = %s ORDER BY short_code",
 			db.BoolLiteral(true)))
 }
 
 // ListGroupNames lists the distinct groups referenced by short URLs, for
 // group pickers and filters.
-func ListGroupNames(db *Db) ([]string, error) {
-	return queryStrings(db,
+func ListGroupNames(ctx context.Context, db *Db) ([]string, error) {
+	return queryStrings(ctx, db,
 		"SELECT DISTINCT group_name FROM short_urls WHERE group_name IS NOT NULL ORDER BY group_name")
 }
 
-func CountValidVisits(db *Db, id core.ShortUrlID) (int64, error) {
-	return queryScalar[int64](db,
+func CountValidVisits(ctx context.Context, db *Db, id core.ShortUrlID) (int64, error) {
+	return queryScalar[int64](ctx, db,
 		fmt.Sprintf("SELECT COUNT(*) FROM visits v WHERE v.short_url_id = ? AND %s", validVisitExpr()),
 		id.Value())
 }
 
-func ListShortUrls(db *Db, filters ShortUrlFilters) (core.Page[ShortUrlDetail], error) {
+func ListShortUrls(ctx context.Context, db *Db, filters ShortUrlFilters) (core.Page[ShortUrlDetail], error) {
 	empty := core.Page[ShortUrlDetail]{}
 	page, size := core.NormalizePaging(filters.Page, filters.ItemsPerPage)
 	var conditions []string
@@ -405,7 +384,7 @@ func ListShortUrls(db *Db, filters ShortUrlFilters) (core.Page[ShortUrlDetail], 
 		orderDir = "DESC"
 	}
 
-	total, err := queryScalar[int64](db,
+	total, err := queryScalar[int64](ctx, db,
 		fmt.Sprintf(`SELECT COUNT(*) FROM short_urls su
 		             JOIN domains d ON d.id = su.domain_id %s`, whereClause),
 		args...)
@@ -414,9 +393,9 @@ func ListShortUrls(db *Db, filters ShortUrlFilters) (core.Page[ShortUrlDetail], 
 	}
 
 	listArgs := append(append([]any{}, args...), size, core.PageOffset(page, size))
-	items, err := queryAll(db, scanShortUrlDetail,
+	items, err := queryAll(ctx, db, scanShortUrlDetail,
 		fmt.Sprintf(`%s %s ORDER BY %s %s, su.id %s LIMIT ? OFFSET ?`,
-			detailSelect(db), whereClause, orderCol, orderDir, orderDir),
+			detailSelect(ctx, db), whereClause, orderCol, orderDir, orderDir),
 		listArgs...)
 	if err != nil {
 		return empty, err
@@ -453,13 +432,13 @@ func parseConditionRow(condType string, matchKey *string, matchValue string) (co
 	}
 }
 
-func RedirectRules(db *Db, shortUrlId core.ShortUrlID) ([]core.RedirectRule, error) {
+func RedirectRules(ctx context.Context, db *Db, shortUrlId core.ShortUrlID) ([]core.RedirectRule, error) {
 	type ruleRow struct {
 		id       int64
 		priority int
 		longUrl  string
 	}
-	ruleRows, err := queryAll(db, func(r rowScanner) (*ruleRow, error) {
+	ruleRows, err := queryAll(ctx, db, func(r rowScanner) (*ruleRow, error) {
 		var row ruleRow
 		if err := r.Scan(&row.id, &row.priority, &row.longUrl); err != nil {
 			return nil, err
@@ -484,14 +463,14 @@ func RedirectRules(db *Db, shortUrlId core.ShortUrlID) ([]core.RedirectRule, err
 		ok     bool
 	}
 	inClause, inArgs := InList("rule_id", ids)
-	condRows, err := queryAll(db, func(r rowScanner) (*condRow, error) {
+	condRows, err := queryAll(ctx, db, func(r rowScanner) (*condRow, error) {
 		var ruleId int64
 		var condType, matchValue string
-		var matchKey sql.NullString
+		var matchKey *string
 		if err := r.Scan(&ruleId, &condType, &matchKey, &matchValue); err != nil {
 			return nil, err
 		}
-		cond, ok := parseConditionRow(condType, strPtr(matchKey), matchValue)
+		cond, ok := parseConditionRow(condType, matchKey, matchValue)
 		return &condRow{ruleId: ruleId, cond: cond, ok: ok}, nil
 	}, fmt.Sprintf(`SELECT rule_id, cond_type, match_key, match_value
 	                FROM redirect_conditions WHERE %s`, inClause), inArgs...)
@@ -517,21 +496,16 @@ func RedirectRules(db *Db, shortUrlId core.ShortUrlID) ([]core.RedirectRule, err
 }
 
 // SetRedirectRules replaces all redirect rules of a short URL, atomically.
-func SetRedirectRules(db *Db, shortUrlId core.ShortUrlID, rules []core.RedirectRule) error {
-	sorted := make([]core.RedirectRule, len(rules))
-	copy(sorted, rules)
-	for i := 1; i < len(sorted); i++ {
-		for j := i; j > 0 && sorted[j].Priority < sorted[j-1].Priority; j-- {
-			sorted[j], sorted[j-1] = sorted[j-1], sorted[j]
-		}
-	}
-	return db.WithTx(func(tx *Tx) error {
-		if _, err := tx.Exec("DELETE FROM redirect_rules WHERE short_url_id = ?", shortUrlId.Value()); err != nil {
+func SetRedirectRules(ctx context.Context, db *Db, shortUrlId core.ShortUrlID, rules []core.RedirectRule) error {
+	sorted := slices.Clone(rules)
+	slices.SortStableFunc(sorted, func(a, b core.RedirectRule) int { return a.Priority - b.Priority })
+	return db.WithTx(ctx, func(tx *Tx) error {
+		if _, err := tx.Exec(ctx, "DELETE FROM redirect_rules WHERE short_url_id = ?", shortUrlId.Value()); err != nil {
 			return err
 		}
 		for i, rule := range sorted {
 			var ruleId int64
-			err := tx.QueryRow(
+			err := tx.QueryRow(ctx,
 				`INSERT INTO redirect_rules (short_url_id, priority, long_url)
 				 VALUES (?, ?, ?) RETURNING id`,
 				shortUrlId.Value(), i+1, rule.LongUrl).Scan(&ruleId)
@@ -543,7 +517,7 @@ func SetRedirectRules(db *Db, shortUrlId core.ShortUrlID, rules []core.RedirectR
 				if cond.Type == core.CondQueryParam {
 					matchKey = cond.Key
 				}
-				if _, err := tx.Exec(
+				if _, err := tx.Exec(ctx,
 					`INSERT INTO redirect_conditions (rule_id, cond_type, match_key, match_value)
 					 VALUES (?, ?, ?, ?)`,
 					ruleId, string(cond.Type), matchKey, cond.Value); err != nil {

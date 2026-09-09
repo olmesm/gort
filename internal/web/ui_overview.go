@@ -26,19 +26,19 @@ type overviewRecentRow struct {
 
 // GET /admin — dashboard overview.
 func (a *App) uiOverview(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	stats, err := data.Overview(a.Db)
+	stats, err := data.Overview(r.Context(), a.Db)
 	if err != nil {
 		return err
 	}
 	start := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -29)
-	series, err := data.VisitsPerDay(a.Db, data.GlobalScope(), &start, nil)
+	series, err := data.VisitsPerDay(r.Context(), a.Db, data.GlobalScope(), &start, nil)
 	if err != nil {
 		return err
 	}
 	recentFilters := data.EmptyShortUrlFilters()
 	recentFilters.ItemsPerPage = 5
 	recentFilters.VisibleGroups = user.VisibleGroups()
-	recent, err := data.ListShortUrls(a.Db, recentFilters)
+	recent, err := data.ListShortUrls(r.Context(), a.Db, recentFilters)
 	if err != nil {
 		return err
 	}

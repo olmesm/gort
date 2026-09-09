@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -161,7 +162,7 @@ type suRowView struct {
 	EditUrl     string
 }
 
-func (a *App) suTable(lq suListQuery, page core.Page[data.ShortUrlDetail], tagsByUrl map[int64][]string) suTableView {
+func (a *App) suTable(lq suListQuery, page core.Page[data.ShortUrlDetail], tagsByUrl map[core.ShortUrlID][]string) suTableView {
 	table := suTableView{
 		HeadShortCode: sortHeader(lq, "shortCode", "Short URL"),
 		HeadTitle:     sortHeader(lq, "title", "Title"),
@@ -198,15 +199,15 @@ type suListView struct {
 func (a *App) uiListShortUrls(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 	q := r.URL.Query()
 	lq := readSuListQuery(q)
-	page, err := data.ListShortUrls(a.Db, suFiltersOf(lq, user))
+	page, err := data.ListShortUrls(r.Context(), a.Db, suFiltersOf(lq, user))
 	if err != nil {
 		return err
 	}
 	ids := make([]core.ShortUrlID, len(page.Items))
 	for i, d := range page.Items {
-		ids[i] = core.ShortUrlID(d.Id)
+		ids[i] = d.Id
 	}
-	tagsByUrl, err := data.TagsForShortUrls(a.Db, ids)
+	tagsByUrl, err := data.TagsForShortUrls(r.Context(), a.Db, ids)
 	if err != nil {
 		return err
 	}
@@ -216,11 +217,11 @@ func (a *App) uiListShortUrls(user *CurrentUser, w http.ResponseWriter, r *http.
 		return a.renderShared(w, http.StatusOK, "su-table", table)
 	}
 
-	allTags, err := data.ListAllTagNames(a.Db)
+	allTags, err := data.ListAllTagNames(r.Context(), a.Db)
 	if err != nil {
 		return err
 	}
-	filterGroups, err := a.groupChoices(user)
+	filterGroups, err := a.groupChoices(r.Context(), user)
 	if err != nil {
 		return err
 	}
@@ -280,9 +281,9 @@ func readSuCreateForm(r *http.Request) suCreateForm {
 
 // groupChoices lists the groups a user may pick from: admins see every group
 // referenced so far, others their own token groups.
-func (a *App) groupChoices(user *CurrentUser) ([]string, error) {
+func (a *App) groupChoices(ctx context.Context, user *CurrentUser) ([]string, error) {
 	if user.IsAdmin() {
-		return data.ListGroupNames(a.Db)
+		return data.ListGroupNames(ctx, a.Db)
 	}
 	return user.Groups, nil
 }
@@ -376,7 +377,7 @@ func (a *App) uiCreateShortUrl(user *CurrentUser, w http.ResponseWriter, r *http
 			"You can only assign groups you are a member of.")
 	}
 	if serr == nil {
-		_, serr = a.CreateShortUrl(UserAuthor(user.Id), spec)
+		_, serr = a.CreateShortUrl(r.Context(), UserAuthor(user.Id), spec)
 	}
 	if serr == nil {
 		return redirect(w, r, "/admin/short-urls")
@@ -451,7 +452,7 @@ func (a *App) loadDetailFromPath(user *CurrentUser, r *http.Request) (*data.Shor
 	if err != nil {
 		return nil, errPageNotFound
 	}
-	detail, err := data.ShortUrlDetailByID(a.Db, core.ShortUrlID(id))
+	detail, err := data.ShortUrlDetailByID(r.Context(), a.Db, core.ShortUrlID(id))
 	if err != nil {
 		return nil, err
 	}
@@ -461,12 +462,12 @@ func (a *App) loadDetailFromPath(user *CurrentUser, r *http.Request) (*data.Shor
 	return detail, nil
 }
 
-func (a *App) respondEditPage(w http.ResponseWriter, status int, user *CurrentUser, detail *data.ShortUrlDetail, errorMessage string) error {
-	tags, err := data.TagsForShortUrl(a.Db, core.ShortUrlID(detail.Id))
+func (a *App) respondEditPage(ctx context.Context, w http.ResponseWriter, status int, user *CurrentUser, detail *data.ShortUrlDetail, errorMessage string) error {
+	tags, err := data.TagsForShortUrl(ctx, a.Db, detail.Id)
 	if err != nil {
 		return err
 	}
-	rules, err := data.RedirectRules(a.Db, core.ShortUrlID(detail.Id))
+	rules, err := data.RedirectRules(ctx, a.Db, detail.Id)
 	if err != nil {
 		return err
 	}
@@ -513,7 +514,7 @@ func (a *App) uiEditShortUrlForm(user *CurrentUser, w http.ResponseWriter, r *ht
 	if err != nil {
 		return err
 	}
-	return a.respondEditPage(w, http.StatusOK, user, detail, "")
+	return a.respondEditPage(r.Context(), w, http.StatusOK, user, detail, "")
 }
 
 // POST /admin/short-urls/{id}/edit
@@ -558,9 +559,9 @@ func (a *App) uiEditShortUrl(user *CurrentUser, w http.ResponseWriter, r *http.R
 			"You can only assign groups you are a member of.")
 	}
 	if serr != nil {
-		return a.respondEditPage(w, http.StatusBadRequest, user, detail, serr.Error())
+		return a.respondEditPage(r.Context(), w, http.StatusBadRequest, user, detail, serr.Error())
 	}
-	if _, err := a.EditShortUrl(core.ShortUrlID(detail.Id), detail, edit); err != nil {
+	if _, err := a.EditShortUrl(r.Context(), detail.Id, detail, edit); err != nil {
 		return err
 	}
 	return redirect(w, r, fmt.Sprintf("/admin/short-urls/%d/edit", detail.Id))
@@ -593,14 +594,14 @@ func (a *App) uiAddRule(user *CurrentUser, w http.ResponseWriter, r *http.Reques
 
 	target, err := core.NewLongUrl(get("ruleLongUrl"))
 	if err != nil {
-		return a.respondEditPage(w, http.StatusBadRequest, user, detail, "Could not add rule: "+err.Error())
+		return a.respondEditPage(r.Context(), w, http.StatusBadRequest, user, detail, "Could not add rule: "+err.Error())
 	}
 	if len(conditions) == 0 {
-		return a.respondEditPage(w, http.StatusBadRequest, user, detail,
+		return a.respondEditPage(r.Context(), w, http.StatusBadRequest, user, detail,
 			"A rule needs at least one condition (device, language, query param or IP).")
 	}
 
-	rules, err := data.RedirectRules(a.Db, core.ShortUrlID(detail.Id))
+	rules, err := data.RedirectRules(r.Context(), a.Db, detail.Id)
 	if err != nil {
 		return err
 	}
@@ -609,7 +610,7 @@ func (a *App) uiAddRule(user *CurrentUser, w http.ResponseWriter, r *http.Reques
 		LongUrl:    target.Value(),
 		Conditions: conditions,
 	}
-	if err := data.SetRedirectRules(a.Db, core.ShortUrlID(detail.Id), append(rules, newRule)); err != nil {
+	if err := data.SetRedirectRules(r.Context(), a.Db, detail.Id, append(rules, newRule)); err != nil {
 		return err
 	}
 	return redirect(w, r, fmt.Sprintf("/admin/short-urls/%d/edit", detail.Id))
@@ -628,7 +629,7 @@ func (a *App) uiDeleteRule(user *CurrentUser, w http.ResponseWriter, r *http.Req
 	if err != nil {
 		priority = -1
 	}
-	rules, err := data.RedirectRules(a.Db, core.ShortUrlID(detail.Id))
+	rules, err := data.RedirectRules(r.Context(), a.Db, detail.Id)
 	if err != nil {
 		return err
 	}
@@ -638,7 +639,7 @@ func (a *App) uiDeleteRule(user *CurrentUser, w http.ResponseWriter, r *http.Req
 			remaining = append(remaining, rule)
 		}
 	}
-	if err := data.SetRedirectRules(a.Db, core.ShortUrlID(detail.Id), remaining); err != nil {
+	if err := data.SetRedirectRules(r.Context(), a.Db, detail.Id, remaining); err != nil {
 		return err
 	}
 	return redirect(w, r, fmt.Sprintf("/admin/short-urls/%d/edit", detail.Id))
@@ -650,7 +651,7 @@ func (a *App) uiDeleteShortUrl(user *CurrentUser, w http.ResponseWriter, r *http
 	if err != nil {
 		return err
 	}
-	if _, err := data.DeleteShortUrl(a.Db, core.ShortUrlID(detail.Id)); err != nil {
+	if _, err := data.DeleteShortUrl(r.Context(), a.Db, detail.Id); err != nil {
 		return err
 	}
 	return redirect(w, r, "/admin/short-urls")
@@ -662,7 +663,7 @@ func (a *App) uiDeleteShortUrlVisits(user *CurrentUser, w http.ResponseWriter, r
 	if err != nil {
 		return err
 	}
-	if _, err := data.DeleteVisitsForShortUrl(a.Db, core.ShortUrlID(detail.Id)); err != nil {
+	if _, err := data.DeleteVisitsForShortUrl(r.Context(), a.Db, detail.Id); err != nil {
 		return err
 	}
 	return redirect(w, r, fmt.Sprintf("/admin/short-urls/%d/edit", detail.Id))
