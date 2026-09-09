@@ -47,10 +47,23 @@ jobs:
       - name: Test
         run: go test ./...
 
+      # The release notes are the CHANGELOG.md section for this version; a
+      # missing section fails the release so nothing ships undocumented.
+      - name: Extract release notes
+        env:
+          VERSION: ${{ inputs.version || github.ref_name }}
+        run: |
+          awk -v v="${VERSION#v}" '$0 ~ "^## \\[" v "\\]" {f=1; next} /^## / {f=0} f' CHANGELOG.md > release-notes.md
+          if ! grep -q '[^[:space:]]' release-notes.md; then
+            echo "CHANGELOG.md has no section for $VERSION" >&2
+            exit 1
+          fi
+          cat release-notes.md
+
       - uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean
+          args: release --clean --release-notes=release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
