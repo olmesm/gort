@@ -51,6 +51,30 @@ same dashboard UI, same behavior — different runtime.
 
 ## Quick start
 
+### Prebuilt binary
+
+Gort ships as a single static binary — no libsqlite3, no libpq, no runtime
+dependencies. Grab the archive for your platform from the
+[releases page](https://github.com/olmesm/gort/releases) (Linux and macOS,
+amd64 and arm64):
+
+```sh
+# example: v0.1.0 on Linux x86-64 (other targets: linux_arm64, darwin_amd64, darwin_arm64)
+VERSION=0.1.0
+curl -sSL "https://github.com/olmesm/gort/releases/download/v${VERSION}/gort_${VERSION}_linux_amd64.tar.gz" | tar xz
+./gort -version
+GORT_INITIAL_ADMIN_PASSWORD=change-me ./gort
+```
+
+`checksums.txt` on each release carries SHA-256 sums of the archives.
+
+SQLite is used by default (`./data/gort.db`). The same binary talks to
+PostgreSQL when told to:
+
+```sh
+GORT_DB_DRIVER=postgres GORT_DB_CONNECTION="postgres://gort:gort@localhost/gort" ./gort
+```
+
 ### Docker
 
 ```sh
@@ -71,7 +95,7 @@ and un-comment the `GORT_DB_*` variables in `docker-compose.yml`.
 
 ### From source
 
-Requires Go 1.24+.
+Requires Go 1.25+.
 
 ```sh
 go run ./cmd/gort

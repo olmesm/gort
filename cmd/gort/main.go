@@ -14,10 +14,19 @@ import (
 	"github.com/olmesm/gort/internal/web"
 )
 
+// version is stamped by the release build via -ldflags "-X main.version=…".
+var version = "dev"
+
 func main() {
 	healthcheck := flag.Bool("healthcheck", false,
 		"probe the local /rest/health endpoint and exit (for container health checks)")
+	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println("gort", version)
+		return
+	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
