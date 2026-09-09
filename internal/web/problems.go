@@ -2,46 +2,62 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 )
 
-// RFC 7807 problem+json error responses.
+// Problem is an RFC 7807 problem+json response, carried as an error value
+// from a handler to the adapter that writes it.
+type Problem struct {
+	Status int
+	Type   string
+	Title  string
+	Detail string
+}
 
-type ProblemDetails struct {
+func (p *Problem) Error() string { return fmt.Sprintf("%d %s: %s", p.Status, p.Title, p.Detail) }
+
+type problemDetails struct {
 	Type   string `json:"type"`
 	Title  string `json:"title"`
 	Detail string `json:"detail"`
 	Status int    `json:"status"`
 }
 
-func Problem(w http.ResponseWriter, status int, problemType, title, detail string) {
-	body, _ := json.Marshal(ProblemDetails{
-		Type:   "https://gort.dev/errors/" + problemType,
-		Title:  title,
-		Detail: detail,
-		Status: status,
+func writeProblem(w http.ResponseWriter, p *Problem) {
+	body, _ := json.Marshal(problemDetails{
+		Type:   "https://gort.dev/errors/" + p.Type,
+		Title:  p.Title,
+		Detail: p.Detail,
+		Status: p.Status,
 	})
 	w.Header().Set("Content-Type", "application/problem+json; charset=utf-8")
-	w.WriteHeader(status)
+	w.WriteHeader(p.Status)
 	_, _ = w.Write(body)
 }
 
-func BadRequest(w http.ResponseWriter, detail string) {
-	Problem(w, 400, "invalid-data", "Invalid data", detail)
+var internalProblem = &Problem{500, "internal", "Internal server error", "Something went wrong handling the request."}
+
+func NewProblem(status int, problemType, title, detail string) error {
+	return &Problem{Status: status, Type: problemType, Title: title, Detail: detail}
 }
 
-func Unauthorized(w http.ResponseWriter, detail string) {
-	Problem(w, 401, "missing-authentication", "Authentication required", detail)
+func BadRequest(detail string) error {
+	return NewProblem(400, "invalid-data", "Invalid data", detail)
 }
 
-func Forbidden(w http.ResponseWriter, detail string) {
-	Problem(w, 403, "forbidden", "Forbidden", detail)
+func Unauthorized(detail string) error {
+	return NewProblem(401, "missing-authentication", "Authentication required", detail)
 }
 
-func NotFound(w http.ResponseWriter, detail string) {
-	Problem(w, 404, "not-found", "Not found", detail)
+func Forbidden(detail string) error {
+	return NewProblem(403, "forbidden", "Forbidden", detail)
 }
 
-func Conflict(w http.ResponseWriter, problemType, detail string) {
-	Problem(w, 409, problemType, "Conflict", detail)
+func NotFound(detail string) error {
+	return NewProblem(404, "not-found", "Not found", detail)
+}
+
+func Conflict(problemType, detail string) error {
+	return NewProblem(409, problemType, "Conflict", detail)
 }

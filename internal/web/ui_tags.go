@@ -49,31 +49,29 @@ type tagsView struct {
 }
 
 // GET /admin/tags
-func (a *App) uiListTags(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
+func (a *App) uiListTags(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 	q := r.URL.Query()
 	search := q.Get("search")
 	result, err := data.ListTags(a.Db, search, queryIntDefault(q, "page", 1), 25)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	table := tagTable(result)
 
 	if isHtmx(r) {
-		a.renderShared(w, http.StatusOK, "tag-table", table)
-		return
+		return a.renderShared(w, http.StatusOK, "tag-table", table)
 	}
 	a.renderPage(w, http.StatusOK, "tags", user, "/admin/tags", "Tags", tagsView{
 		Search: search,
 		Table:  table,
 	})
+	return nil
 }
 
 // POST /admin/tags/rename
-func (a *App) uiRenameTag(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
+func (a *App) uiRenameTag(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 	if err := r.ParseForm(); err != nil {
-		BadRequest(w, "Invalid form submission.")
-		return
+		return BadRequest("Invalid form submission.")
 	}
 	oldName := r.PostFormValue("oldName")
 
@@ -86,36 +84,33 @@ func (a *App) uiRenameTag(user *CurrentUser, w http.ResponseWriter, r *http.Requ
 		if errors.As(err, &renameErr) {
 			message = renameErr.Error()
 		} else {
-			a.serverError(w, err)
-			return
+			return err
 		}
 	}
 
 	if message == "" {
-		http.Redirect(w, r, "/admin/tags", http.StatusFound)
-		return
+		return redirect(w, r, "/admin/tags")
 	}
 
 	result, err := data.ListTags(a.Db, "", 1, 25)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	a.renderPage(w, http.StatusBadRequest, "tags", user, "/admin/tags", "Tags", tagsView{
 		Error: message,
 		Table: tagTable(result),
 	})
+	return nil
 }
 
 // POST /admin/tags/delete
-func (a *App) uiDeleteTag(_ *CurrentUser, w http.ResponseWriter, r *http.Request) {
+func (a *App) uiDeleteTag(_ *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 	if err := r.ParseForm(); err == nil {
 		if name := r.PostFormValue("name"); name != "" {
 			if _, err := data.DeleteTags(a.Db, []string{name}); err != nil {
-				a.serverError(w, err)
-				return
+				return err
 			}
 		}
 	}
-	http.Redirect(w, r, "/admin/tags", http.StatusFound)
+	return redirect(w, r, "/admin/tags")
 }

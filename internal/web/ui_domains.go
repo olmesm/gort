@@ -33,11 +33,10 @@ type messageView struct {
 }
 
 // GET /admin/domains (admin)
-func (a *App) uiListDomains(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
+func (a *App) uiListDomains(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 	domains, err := data.ListDomainsWithStats(a.Db)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	model := domainsView{}
 	for _, d := range domains {
@@ -53,11 +52,11 @@ func (a *App) uiListDomains(user *CurrentUser, w http.ResponseWriter, r *http.Re
 			DeleteAction:            fmt.Sprintf("/admin/domains/%d/delete", d.Id),
 		})
 	}
-	a.renderPage(w, http.StatusOK, "domains", user, "/admin/domains", "Domains", model)
+	return a.renderPage(w, http.StatusOK, "domains", user, "/admin/domains", "Domains", model)
 }
 
-func (a *App) renderDomainsMessage(w http.ResponseWriter, status int, user *CurrentUser, message string) {
-	a.renderPage(w, status, "message", user, "/admin/domains", "Domains", messageView{
+func (a *App) renderDomainsMessage(w http.ResponseWriter, status int, user *CurrentUser, message string) error {
+	return a.renderPage(w, status, "message", user, "/admin/domains", "Domains", messageView{
 		Error:     message,
 		BackUrl:   "/admin/domains",
 		BackLabel: "← Back to domains",
@@ -65,39 +64,33 @@ func (a *App) renderDomainsMessage(w http.ResponseWriter, status int, user *Curr
 }
 
 // POST /admin/domains (admin)
-func (a *App) uiCreateDomain(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
+func (a *App) uiCreateDomain(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 	if err := r.ParseForm(); err != nil {
-		BadRequest(w, "Invalid form submission.")
-		return
+		return BadRequest("Invalid form submission.")
 	}
 	authority, err := core.NewDomainAuthority(r.PostFormValue("authority"))
 	if err != nil {
-		a.renderDomainsMessage(w, http.StatusBadRequest, user, err.Error())
-		return
+		return a.renderDomainsMessage(w, http.StatusBadRequest, user, err.Error())
 	}
 	created, err := data.CreateDomain(a.Db, authority)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	if created == nil {
-		a.renderDomainsMessage(w, http.StatusOK, user,
+		return a.renderDomainsMessage(w, http.StatusOK, user,
 			fmt.Sprintf("Domain '%s' is already registered.", authority.Value()))
-		return
 	}
-	http.Redirect(w, r, "/admin/domains", http.StatusFound)
+	return redirect(w, r, "/admin/domains")
 }
 
 // POST /admin/domains/{id}/redirects (admin)
-func (a *App) uiSetDomainRedirects(_ *CurrentUser, w http.ResponseWriter, r *http.Request) {
+func (a *App) uiSetDomainRedirects(_ *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		respondPlainNotFound(w)
-		return
+		return errPageNotFound
 	}
 	if err := r.ParseForm(); err != nil {
-		BadRequest(w, "Invalid form submission.")
-		return
+		return BadRequest("Invalid form submission.")
 	}
 	getOpt := func(name string) *string {
 		if v := strings.TrimSpace(r.PostFormValue(name)); v != "" {
@@ -107,19 +100,17 @@ func (a *App) uiSetDomainRedirects(_ *CurrentUser, w http.ResponseWriter, r *htt
 	}
 	if _, err := data.UpdateDomainRedirects(a.Db, core.DomainID(id),
 		getOpt("baseUrlRedirect"), getOpt("regular404Redirect"), getOpt("invalidShortUrlRedirect")); err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
-	http.Redirect(w, r, "/admin/domains", http.StatusFound)
+	return redirect(w, r, "/admin/domains")
 }
 
 // POST /admin/domains/{id}/delete (admin)
-func (a *App) uiDeleteDomain(_ *CurrentUser, w http.ResponseWriter, r *http.Request) {
+func (a *App) uiDeleteDomain(_ *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 	if id, err := strconv.ParseInt(r.PathValue("id"), 10, 64); err == nil {
 		if _, err := data.DeleteDomain(a.Db, core.DomainID(id)); err != nil {
-			a.serverError(w, err)
-			return
+			return err
 		}
 	}
-	http.Redirect(w, r, "/admin/domains", http.StatusFound)
+	return redirect(w, r, "/admin/domains")
 }

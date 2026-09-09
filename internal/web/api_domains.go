@@ -45,106 +45,91 @@ func newDomainDto(d *data.DomainRow) domainDto {
 }
 
 // GET /rest/v1/domains
-func (a *App) apiListDomains(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
+func (a *App) apiListDomains(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	domains, err := data.ListDomains(a.Db)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	dtos := make([]domainDto, len(domains))
 	for i := range domains {
 		dtos[i] = newDomainDto(&domains[i])
 	}
-	RespondJSON(w, http.StatusOK, map[string]any{"data": dtos})
+	return RespondJSON(w, http.StatusOK, map[string]any{"data": dtos})
 }
 
 // POST /rest/v1/domains (admin)
-func (a *App) apiCreateDomain(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
+func (a *App) apiCreateDomain(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	body, err := ReadJSON[CreateDomainBody](w, r)
 	if err != nil {
-		BadRequest(w, err.Error())
-		return
+		return BadRequest(err.Error())
 	}
 	authority, err := core.NewDomainAuthority(body.Domain)
 	if err != nil {
-		BadRequest(w, err.Error())
-		return
+		return BadRequest(err.Error())
 	}
 	created, err := data.CreateDomain(a.Db, authority)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	if created == nil {
-		Conflict(w, "domain-exists", fmt.Sprintf("Domain '%s' is already registered.", authority.Value()))
-		return
+		return Conflict("domain-exists", fmt.Sprintf("Domain '%s' is already registered.", authority.Value()))
 	}
-	RespondJSON(w, http.StatusCreated, newDomainDto(created))
+	return RespondJSON(w, http.StatusCreated, newDomainDto(created))
 }
 
 // PATCH /rest/v1/domains/redirects (admin)
-func (a *App) apiSetDomainRedirects(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
+func (a *App) apiSetDomainRedirects(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	body, err := ReadJSON[DomainRedirectsBody](w, r)
 	if err != nil {
-		BadRequest(w, err.Error())
-		return
+		return BadRequest(err.Error())
 	}
 	domain, err := data.DomainByAuthority(a.Db, strings.ToLower(strings.TrimSpace(body.Domain)))
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	if domain == nil {
-		NotFound(w, fmt.Sprintf("Domain '%s' is not registered.", body.Domain))
-		return
+		return NotFound(fmt.Sprintf("Domain '%s' is not registered.", body.Domain))
 	}
 	if _, err := data.UpdateDomainRedirects(a.Db, core.DomainID(domain.Id),
 		body.BaseUrlRedirect, body.Regular404Redirect, body.InvalidShortUrlRedirect); err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	updated, err := data.DomainByID(a.Db, core.DomainID(domain.Id))
 	if err != nil || updated == nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
-	RespondJSON(w, http.StatusOK, newDomainDto(updated))
+	return RespondJSON(w, http.StatusOK, newDomainDto(updated))
 }
 
 // DELETE /rest/v1/domains/{authority} (admin)
-func (a *App) apiDeleteDomain(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
+func (a *App) apiDeleteDomain(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	authority := r.PathValue("authority")
 	domain, err := data.DomainByAuthority(a.Db, strings.ToLower(authority))
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	if domain == nil {
-		NotFound(w, fmt.Sprintf("Domain '%s' is not registered.", authority))
-		return
+		return NotFound(fmt.Sprintf("Domain '%s' is not registered.", authority))
 	}
 	if domain.IsDefault {
-		Forbidden(w, "The default domain cannot be deleted.")
-		return
+		return Forbidden("The default domain cannot be deleted.")
 	}
 	if _, err := data.DeleteDomain(a.Db, core.DomainID(domain.Id)); err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	w.WriteHeader(http.StatusNoContent)
+	return nil
 }
 
 // GET /rest/v1/domains/{authority}/visits
-func (a *App) apiDomainVisits(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
+func (a *App) apiDomainVisits(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	authority := r.PathValue("authority")
 	domain, err := data.DomainByAuthority(a.Db, strings.ToLower(authority))
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	if domain == nil {
-		NotFound(w, fmt.Sprintf("Domain '%s' is not registered.", authority))
-		return
+		return NotFound(fmt.Sprintf("Domain '%s' is not registered.", authority))
 	}
 	allowed := false
 	switch key.Role.Kind {
@@ -154,13 +139,11 @@ func (a *App) apiDomainVisits(key *AuthenticatedKey, w http.ResponseWriter, r *h
 		allowed = key.Role.DomainID.Value() == domain.Id
 	}
 	if !allowed {
-		Forbidden(w, "This API key cannot view visits for this domain.")
-		return
+		return Forbidden("This API key cannot view visits for this domain.")
 	}
 	page, err := data.ListVisitsForDomain(a.Db, core.DomainID(domain.Id), visitFiltersFromQuery(r.URL.Query()))
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
-	RespondJSON(w, http.StatusOK, NewPageDto(page, NewVisitDto))
+	return RespondJSON(w, http.StatusOK, NewPageDto(page, NewVisitDto))
 }

@@ -16,7 +16,7 @@ type RenameTagBody struct {
 }
 
 // GET /rest/v1/tags?withStats=true&searchTerm=&page=&itemsPerPage=
-func (a *App) apiListTags(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
+func (a *App) apiListTags(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	q := r.URL.Query()
 	withStats := queryBool(q, "withStats")
 	page := queryIntDefault(q, "page", 1)
@@ -24,8 +24,7 @@ func (a *App) apiListTags(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Re
 
 	result, err := data.ListTags(a.Db, q.Get("searchTerm"), page, itemsPerPage)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 
 	if withStats {
@@ -37,41 +36,36 @@ func (a *App) apiListTags(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Re
 		RespondJSON(w, http.StatusOK, NewPageDto(result, func(t data.TagStatsRow) tagStatsDto {
 			return tagStatsDto{Tag: t.Name, ShortUrlsCount: t.ShortUrlCount, VisitsCount: t.VisitCount}
 		}))
-		return
+		return nil
 	}
-	RespondJSON(w, http.StatusOK, NewPageDto(result, func(t data.TagStatsRow) string { return t.Name }))
+	return RespondJSON(w, http.StatusOK, NewPageDto(result, func(t data.TagStatsRow) string { return t.Name }))
 }
 
 // PUT /rest/v1/tags — rename
-func (a *App) apiRenameTag(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
+func (a *App) apiRenameTag(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	body, err := ReadJSON[RenameTagBody](w, r)
 	if err != nil {
-		BadRequest(w, err.Error())
-		return
+		return BadRequest(err.Error())
 	}
 	newName, err := core.NewTagName(body.NewName)
 	if err != nil {
-		BadRequest(w, err.Error())
-		return
+		return BadRequest(err.Error())
 	}
 	if err := data.RenameTag(a.Db, body.OldName, newName); err != nil {
 		var renameErr *data.TagRenameError
 		if errors.As(err, &renameErr) {
 			if renameErr.NameTaken {
-				Conflict(w, "tag-conflict", fmt.Sprintf("A tag named '%s' already exists.", renameErr.Name))
-			} else {
-				NotFound(w, fmt.Sprintf("Tag '%s' was not found.", renameErr.Name))
+				return Conflict("tag-conflict", fmt.Sprintf("A tag named '%s' already exists.", renameErr.Name))
 			}
-			return
+			return NotFound(fmt.Sprintf("Tag '%s' was not found.", renameErr.Name))
 		}
-		a.serverError(w, err)
-		return
+		return err
 	}
-	RespondJSON(w, http.StatusOK, map[string]string{"oldName": body.OldName, "newName": newName.Value()})
+	return RespondJSON(w, http.StatusOK, map[string]string{"oldName": body.OldName, "newName": newName.Value()})
 }
 
 // DELETE /rest/v1/tags?tags[]=a&tags[]=b (also accepts tags=a,b)
-func (a *App) apiDeleteTags(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
+func (a *App) apiDeleteTags(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	var tags []string
 	for _, listed := range queryStringList(r.URL.Query(), "tags") {
 		for _, tag := range strings.Split(listed, ",") {
@@ -81,33 +75,28 @@ func (a *App) apiDeleteTags(_ *AuthenticatedKey, w http.ResponseWriter, r *http.
 		}
 	}
 	if len(tags) == 0 {
-		BadRequest(w, "Provide at least one tag to delete via ?tags[]=.")
-		return
+		return BadRequest("Provide at least one tag to delete via ?tags[]=.")
 	}
 	deleted, err := data.DeleteTags(a.Db, tags)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
-	RespondJSON(w, http.StatusOK, map[string]int{"deletedTags": deleted})
+	return RespondJSON(w, http.StatusOK, map[string]int{"deletedTags": deleted})
 }
 
 // GET /rest/v1/tags/{tag}/visits
-func (a *App) apiTagVisits(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
+func (a *App) apiTagVisits(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	tag := r.PathValue("tag")
 	exists, err := data.TagExists(a.Db, tag)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	if !exists {
-		NotFound(w, fmt.Sprintf("Tag '%s' was not found.", tag))
-		return
+		return NotFound(fmt.Sprintf("Tag '%s' was not found.", tag))
 	}
 	page, err := data.ListVisitsForTag(a.Db, tag, visitFiltersFromQuery(r.URL.Query()))
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
-	RespondJSON(w, http.StatusOK, NewPageDto(page, NewVisitDto))
+	return RespondJSON(w, http.StatusOK, NewPageDto(page, NewVisitDto))
 }

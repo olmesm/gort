@@ -2,7 +2,6 @@ package web
 
 import (
 	"fmt"
-	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -178,25 +177,21 @@ func canAccessShortUrl(key *AuthenticatedKey, detail *data.ShortUrlDetail) bool 
 // findAccessibleShortUrl resolves a short URL by code (+ optional ?domain=)
 // and checks key access. On failure it writes the error response and returns
 // nil.
-func (a *App) findAccessibleShortUrl(w http.ResponseWriter, key *AuthenticatedKey, code, domainAuthority string) *data.ShortUrlDetail {
+func (a *App) findAccessibleShortUrl(key *AuthenticatedKey, code, domainAuthority string) (*data.ShortUrlDetail, error) {
 	domain, err := a.ResolveNamedDomain(domainAuthority)
 	if err != nil {
-		a.serverError(w, err)
-		return nil
+		return nil, err
 	}
 	if domain == nil {
-		NotFound(w, fmt.Sprintf("Domain '%s' is not registered.", domainAuthority))
-		return nil
+		return nil, NotFound(fmt.Sprintf("Domain '%s' is not registered.", domainAuthority))
 	}
 	detail, err := data.ShortUrlDetailByCode(a.Db, core.DomainID(domain.Id), code)
 	if err != nil {
-		a.serverError(w, err)
-		return nil
+		return nil, err
 	}
 	if detail == nil || !canAccessShortUrl(key, detail) {
 		// Do not leak existence to keys that cannot see the URL.
-		NotFound(w, fmt.Sprintf("No short URL found for code '%s'.", code))
-		return nil
+		return nil, NotFound(fmt.Sprintf("No short URL found for code '%s'.", code))
 	}
-	return detail
+	return detail, nil
 }

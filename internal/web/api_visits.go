@@ -13,65 +13,53 @@ import (
 // scopeFromQuery builds a stats scope from query params
 // (?shortCode=&domain=&tag=&orphan=true). On failure it writes the error
 // response and returns nil.
-func (a *App) scopeFromQuery(w http.ResponseWriter, key *AuthenticatedKey, q url.Values) *data.VisitScope {
+func (a *App) scopeFromQuery(key *AuthenticatedKey, q url.Values) (data.VisitScope, error) {
 	if queryBool(q, "orphan") {
 		if key.Role.Kind != core.RoleAdmin {
-			Forbidden(w, "Only admin keys can query orphan visit stats.")
-			return nil
+			return data.VisitScope{}, Forbidden("Only admin keys can query orphan visit stats.")
 		}
-		scope := data.OrphanScope()
-		return &scope
+		return data.OrphanScope(), nil
 	}
 
 	if code := q.Get("shortCode"); code != "" {
-		detail := a.findAccessibleShortUrl(w, key, code, q.Get("domain"))
-		if detail == nil {
-			return nil
+		detail, err := a.findAccessibleShortUrl(key, code, q.Get("domain"))
+		if err != nil {
+			return data.VisitScope{}, err
 		}
-		scope := data.ShortUrlScope(core.ShortUrlID(detail.Id))
-		return &scope
+		return data.ShortUrlScope(core.ShortUrlID(detail.Id)), nil
 	}
 	if tag := q.Get("tag"); tag != "" {
-		scope := data.TagScope(tag)
-		return &scope
+		return data.TagScope(tag), nil
 	}
 	if authority := q.Get("domain"); authority != "" {
 		d, err := data.DomainByAuthority(a.Db, strings.ToLower(authority))
 		if err != nil {
-			a.serverError(w, err)
-			return nil
+			return data.VisitScope{}, err
 		}
 		if d == nil {
-			NotFound(w, fmt.Sprintf("Domain '%s' is not registered.", authority))
-			return nil
+			return data.VisitScope{}, NotFound(fmt.Sprintf("Domain '%s' is not registered.", authority))
 		}
-		scope := data.DomainScope(core.DomainID(d.Id))
-		return &scope
+		return data.DomainScope(core.DomainID(d.Id)), nil
 	}
 
 	switch key.Role.Kind {
 	case core.RoleAdmin:
-		scope := data.GlobalScope()
-		return &scope
+		return data.GlobalScope(), nil
 	case core.RoleDomain:
-		scope := data.DomainScope(key.Role.DomainID)
-		return &scope
+		return data.DomainScope(key.Role.DomainID), nil
 	default:
-		Forbidden(w, "Author keys must scope stats to a shortCode.")
-		return nil
+		return data.VisitScope{}, Forbidden("Author keys must scope stats to a shortCode.")
 	}
 }
 
 // GET /rest/v1/visits — global counters.
-func (a *App) apiVisitsOverview(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
+func (a *App) apiVisitsOverview(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	if key.Role.Kind != core.RoleAdmin {
-		Forbidden(w, "Only admin keys can view the global visit summary.")
-		return
+		return Forbidden("Only admin keys can view the global visit summary.")
 	}
 	o, err := data.Overview(a.Db)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	RespondJSON(w, http.StatusOK, map[string]int64{
 		"visitsCount":       o.VisitCount,
@@ -80,27 +68,25 @@ func (a *App) apiVisitsOverview(key *AuthenticatedKey, w http.ResponseWriter, r 
 		"tagsCount":         o.TagCount,
 		"botVisitsCount":    o.BotVisitCount,
 	})
+	return nil
 }
 
 // GET /rest/v1/visits/non-orphan
-func (a *App) apiListNonOrphanVisits(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
+func (a *App) apiListNonOrphanVisits(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	if key.Role.Kind != core.RoleAdmin {
-		Forbidden(w, "Only admin keys can list all visits.")
-		return
+		return Forbidden("Only admin keys can list all visits.")
 	}
 	page, err := data.ListNonOrphanVisits(a.Db, visitFiltersFromQuery(r.URL.Query()))
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
-	RespondJSON(w, http.StatusOK, NewPageDto(page, NewVisitDto))
+	return RespondJSON(w, http.StatusOK, NewPageDto(page, NewVisitDto))
 }
 
 // GET /rest/v1/visits/orphan?type=
-func (a *App) apiListOrphanVisits(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
+func (a *App) apiListOrphanVisits(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	if key.Role.Kind != core.RoleAdmin {
-		Forbidden(w, "Only admin keys can list orphan visits.")
-		return
+		return Forbidden("Only admin keys can list orphan visits.")
 	}
 	q := r.URL.Query()
 	var visitType *core.VisitType
@@ -109,37 +95,33 @@ func (a *App) apiListOrphanVisits(key *AuthenticatedKey, w http.ResponseWriter, 
 	}
 	page, err := data.ListOrphanVisits(a.Db, visitType, visitFiltersFromQuery(q))
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
-	RespondJSON(w, http.StatusOK, NewPageDto(page, NewVisitDto))
+	return RespondJSON(w, http.StatusOK, NewPageDto(page, NewVisitDto))
 }
 
 // DELETE /rest/v1/visits/orphan
-func (a *App) apiDeleteOrphanVisits(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
+func (a *App) apiDeleteOrphanVisits(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	if key.Role.Kind != core.RoleAdmin {
-		Forbidden(w, "Only admin keys can delete orphan visits.")
-		return
+		return Forbidden("Only admin keys can delete orphan visits.")
 	}
 	deleted, err := data.DeleteOrphanVisits(a.Db)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
-	RespondJSON(w, http.StatusOK, map[string]int{"deletedVisits": deleted})
+	return RespondJSON(w, http.StatusOK, map[string]int{"deletedVisits": deleted})
 }
 
 // GET /rest/v1/stats/visits-per-day
-func (a *App) apiVisitsPerDay(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
+func (a *App) apiVisitsPerDay(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	q := r.URL.Query()
-	scope := a.scopeFromQuery(w, key, q)
-	if scope == nil {
-		return
-	}
-	series, err := data.VisitsPerDay(a.Db, *scope, queryDate(q, "startDate"), queryDate(q, "endDate"))
+	scope, err := a.scopeFromQuery(key, q)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
+	}
+	series, err := data.VisitsPerDay(a.Db, scope, queryDate(q, "startDate"), queryDate(q, "endDate"))
+	if err != nil {
+		return err
 	}
 	type dayDto struct {
 		Date  string `json:"date"`
@@ -149,11 +131,11 @@ func (a *App) apiVisitsPerDay(key *AuthenticatedKey, w http.ResponseWriter, r *h
 	for i, d := range series {
 		days[i] = dayDto{Date: d.Day, Count: d.Count}
 	}
-	RespondJSON(w, http.StatusOK, map[string]any{"data": days})
+	return RespondJSON(w, http.StatusOK, map[string]any{"data": days})
 }
 
 // GET /rest/v1/stats/breakdown?by=country|city|browser|os|referer|device
-func (a *App) apiBreakdown(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
+func (a *App) apiBreakdown(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	q := r.URL.Query()
 
 	var column string
@@ -173,13 +155,15 @@ func (a *App) apiBreakdown(key *AuthenticatedKey, w http.ResponseWriter, r *http
 	case "device":
 		column = "device"
 	default:
-		BadRequest(w, "Provide ?by= one of: country, countryCode, city, browser, os, referer, device.")
-		return
+		return BadRequest("Provide ?by= one of: country, countryCode, city, browser, os, referer, device.")
 	}
 
-	scope := a.scopeFromQuery(w, key, q)
-	if scope == nil {
-		return
+	scope, err := a.scopeFromQuery(key, q)
+
+	if err != nil {
+
+		return err
+
 	}
 
 	limit := queryIntDefault(q, "limit", 25)
@@ -190,10 +174,9 @@ func (a *App) apiBreakdown(key *AuthenticatedKey, w http.ResponseWriter, r *http
 		limit = 100
 	}
 
-	rows, err := data.Breakdown(a.Db, *scope, column, queryDate(q, "startDate"), queryDate(q, "endDate"), limit)
+	rows, err := data.Breakdown(a.Db, scope, column, queryDate(q, "startDate"), queryDate(q, "endDate"), limit)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	type breakdownDto struct {
 		Value string `json:"value"`
@@ -207,5 +190,5 @@ func (a *App) apiBreakdown(key *AuthenticatedKey, w http.ResponseWriter, r *http
 		}
 		items[i] = breakdownDto{Value: value, Count: row.Count}
 	}
-	RespondJSON(w, http.StatusOK, map[string]any{"data": items})
+	return RespondJSON(w, http.StatusOK, map[string]any{"data": items})
 }

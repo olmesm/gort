@@ -87,41 +87,37 @@ func generateWebhookSecret() string {
 }
 
 // GET /rest/v1/webhooks (admin)
-func (a *App) apiListWebhooks(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
+func (a *App) apiListWebhooks(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	hooks, err := data.ListWebhooks(a.Db)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	dtos := make([]webhookDto, len(hooks))
 	for i := range hooks {
 		dtos[i] = newWebhookDto(&hooks[i])
 	}
-	RespondJSON(w, http.StatusOK, map[string]any{"data": dtos})
+	return RespondJSON(w, http.StatusOK, map[string]any{"data": dtos})
 }
 
 // POST /rest/v1/webhooks (admin) — the signing secret is returned exactly
 // once.
-func (a *App) apiCreateWebhook(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
+func (a *App) apiCreateWebhook(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	body, err := ReadJSON[CreateWebhookBody](w, r)
 	if err != nil {
-		BadRequest(w, err.Error())
-		return
+		return BadRequest(err.Error())
 	}
 	name, hookUrl, events, err := parseWebhookBody(body)
 	if err != nil {
-		BadRequest(w, err.Error())
-		return
+		return BadRequest(err.Error())
 	}
 	secret := generateWebhookSecret()
 	row, err := data.InsertWebhook(a.Db, name, hookUrl, secret, events)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	dto := newWebhookDto(row)
 	dto.Secret = secret
-	RespondJSON(w, http.StatusCreated, dto)
+	return RespondJSON(w, http.StatusCreated, dto)
 }
 
 func webhookIdFromPath(r *http.Request) (core.WebhookID, bool) {
@@ -130,44 +126,38 @@ func webhookIdFromPath(r *http.Request) (core.WebhookID, bool) {
 }
 
 // PATCH /rest/v1/webhooks/{id} (admin)
-func (a *App) apiPatchWebhook(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
+func (a *App) apiPatchWebhook(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	body, err := ReadJSON[PatchWebhookBody](w, r)
 	if err != nil {
-		BadRequest(w, err.Error())
-		return
+		return BadRequest(err.Error())
 	}
 	id, ok := webhookIdFromPath(r)
 	if !ok {
-		NotFound(w, "Webhook was not found.")
-		return
+		return NotFound("Webhook was not found.")
 	}
 	updated, err := data.SetWebhookEnabled(a.Db, id, body.Enabled)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	if !updated {
-		NotFound(w, fmt.Sprintf("Webhook %d was not found.", id.Value()))
-		return
+		return NotFound(fmt.Sprintf("Webhook %d was not found.", id.Value()))
 	}
-	RespondJSON(w, http.StatusOK, map[string]any{"id": id.Value(), "enabled": body.Enabled})
+	return RespondJSON(w, http.StatusOK, map[string]any{"id": id.Value(), "enabled": body.Enabled})
 }
 
 // DELETE /rest/v1/webhooks/{id} (admin)
-func (a *App) apiDeleteWebhook(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
+func (a *App) apiDeleteWebhook(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	id, ok := webhookIdFromPath(r)
 	if !ok {
-		NotFound(w, "Webhook was not found.")
-		return
+		return NotFound("Webhook was not found.")
 	}
 	deleted, err := data.DeleteWebhook(a.Db, id)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	if !deleted {
-		NotFound(w, fmt.Sprintf("Webhook %d was not found.", id.Value()))
-		return
+		return NotFound(fmt.Sprintf("Webhook %d was not found.", id.Value()))
 	}
 	w.WriteHeader(http.StatusNoContent)
+	return nil
 }

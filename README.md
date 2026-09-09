@@ -363,6 +363,14 @@ the original F# codebase:
   (`core.ErrSlugInUse` and friends, matched with `errors.Is`); the
   persistence edge translates driver errors immediately (e.g. duplicate key
   → slug-in-use conflict).
+- **Handlers return errors.** Every route is a
+  `func(w, r) error` (plus the authenticated key or user for the `require*`
+  middleware); `App.handle` adapts it to `http.HandlerFunc`. Returning a
+  `*Problem` (`BadRequest(...)`, `NotFound(...)`, …) writes that RFC 7807
+  reply, any other error is logged and answered with a generic 500, and the
+  terminal writes (`RespondJSON`, `renderPage`, `redirect`) return `error` so
+  a handler ends in `return RespondJSON(w, 200, dto)`. No framework, just
+  the stdlib mux.
 - **Atomic writes.** A short URL and its tag links are inserted in one
   transaction; rules and tag replacements likewise.
 - **Events off the hot path.** The redirect path does one indexed lookup,

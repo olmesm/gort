@@ -90,35 +90,31 @@ func readApiKeyHeader(r *http.Request) string {
 
 // requireApiKey authenticates the request by API key and passes the
 // authenticated key to the handler.
-func (a *App) requireApiKey(handler func(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func (a *App) requireApiKey(next apiHandler) http.HandlerFunc {
+	return a.handle(func(w http.ResponseWriter, r *http.Request) error {
 		key := readApiKeyHeader(r)
 		if key == "" {
-			Unauthorized(w, "Expected an API key in the X-Api-Key header.")
-			return
+			return Unauthorized("Expected an API key in the X-Api-Key header.")
 		}
 		row, err := data.ApiKeyByHash(a.Db, HashApiKey(key))
 		if err != nil {
-			a.serverError(w, err)
-			return
+			return err
 		}
 		authenticated := AuthenticateApiKey(time.Now().UTC(), row)
 		if authenticated == nil {
-			Unauthorized(w, "The provided API key is not valid.")
-			return
+			return Unauthorized("The provided API key is not valid.")
 		}
-		handler(authenticated, w, r)
-	}
+		return next(authenticated, w, r)
+	})
 }
 
 // requireAdminKey authenticates and requires the admin role.
-func (a *App) requireAdminKey(handler func(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
-	return a.requireApiKey(func(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
+func (a *App) requireAdminKey(next apiHandler) http.HandlerFunc {
+	return a.requireApiKey(func(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 		if key.Role.Kind != core.RoleAdmin {
-			Forbidden(w, "This operation requires an admin API key.")
-			return
+			return Forbidden("This operation requires an admin API key.")
 		}
-		handler(key, w, r)
+		return next(key, w, r)
 	})
 }
 
@@ -295,27 +291,23 @@ func (a *App) currentUser(r *http.Request) *CurrentUser {
 
 // requireUser requires a signed-in user; redirects to the login page
 // otherwise.
-func (a *App) requireUser(handler func(user *CurrentUser, w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func (a *App) requireUser(next userHandler) http.HandlerFunc {
+	return a.handle(func(w http.ResponseWriter, r *http.Request) error {
 		user := a.currentUser(r)
 		if user == nil {
 			returnUrl := url.QueryEscape(r.URL.RequestURI())
-			http.Redirect(w, r, "/admin/login?returnUrl="+returnUrl, http.StatusFound)
-			return
+			return redirect(w, r, "/admin/login?returnUrl="+returnUrl)
 		}
-		handler(user, w, r)
-	}
+		return next(user, w, r)
+	})
 }
 
 // requireAdmin requires a signed-in admin.
-func (a *App) requireAdmin(handler func(user *CurrentUser, w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
-	return a.requireUser(func(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
+func (a *App) requireAdmin(next userHandler) http.HandlerFunc {
+	return a.requireUser(func(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 		if !user.IsAdmin() {
-			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-			w.WriteHeader(http.StatusForbidden)
-			_, _ = w.Write([]byte("Forbidden: admin access required."))
-			return
+			return errAdminOnly
 		}
-		handler(user, w, r)
+		return next(user, w, r)
 	})
 }

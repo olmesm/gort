@@ -25,25 +25,22 @@ type overviewRecentRow struct {
 }
 
 // GET /admin — dashboard overview.
-func (a *App) uiOverview(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
+func (a *App) uiOverview(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 	stats, err := data.Overview(a.Db)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	start := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -29)
 	series, err := data.VisitsPerDay(a.Db, data.GlobalScope(), &start, nil)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	recentFilters := data.EmptyShortUrlFilters()
 	recentFilters.ItemsPerPage = 5
 	recentFilters.VisibleGroups = user.VisibleGroups()
 	recent, err := data.ListShortUrls(a.Db, recentFilters)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 
 	model := overviewView{
@@ -60,5 +57,5 @@ func (a *App) uiOverview(user *CurrentUser, w http.ResponseWriter, r *http.Reque
 			Created: formatDateTime(d.CreatedAt),
 		})
 	}
-	a.renderPage(w, http.StatusOK, "overview", user, "/admin", "Overview", model)
+	return a.renderPage(w, http.StatusOK, "overview", user, "/admin", "Overview", model)
 }

@@ -56,25 +56,23 @@ func (a *App) usersViewModel(currentUser *CurrentUser, errorMessage string) (use
 	return model, nil
 }
 
-func (a *App) renderUsersPage(w http.ResponseWriter, user *CurrentUser, errorMessage string) {
+func (a *App) renderUsersPage(w http.ResponseWriter, user *CurrentUser, errorMessage string) error {
 	model, err := a.usersViewModel(user, errorMessage)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
-	a.renderPage(w, http.StatusOK, "users", user, "/admin/users", "Users", model)
+	return a.renderPage(w, http.StatusOK, "users", user, "/admin/users", "Users", model)
 }
 
 // GET /admin/users (admin)
-func (a *App) uiListUsers(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
-	a.renderUsersPage(w, user, "")
+func (a *App) uiListUsers(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
+	return a.renderUsersPage(w, user, "")
 }
 
 // POST /admin/users (admin)
-func (a *App) uiCreateUser(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
+func (a *App) uiCreateUser(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 	if err := r.ParseForm(); err != nil {
-		BadRequest(w, "Invalid form submission.")
-		return
+		return BadRequest("Invalid form submission.")
 	}
 	username := strings.TrimSpace(r.PostFormValue("username"))
 	password := r.PostFormValue("password")
@@ -83,23 +81,20 @@ func (a *App) uiCreateUser(user *CurrentUser, w http.ResponseWriter, r *http.Req
 		role = core.UserAdmin
 	}
 	if username == "" || len(password) < 8 {
-		a.renderUsersPage(w, user, "Username is required and the password needs at least 8 characters.")
-		return
+		return a.renderUsersPage(w, user, "Username is required and the password needs at least 8 characters.")
 	}
 	created, err := data.InsertUser(a.Db, username, HashPassword(password), role)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	if created == nil {
-		a.renderUsersPage(w, user, fmt.Sprintf("Username '%s' is already taken.", username))
-		return
+		return a.renderUsersPage(w, user, fmt.Sprintf("Username '%s' is already taken.", username))
 	}
-	http.Redirect(w, r, "/admin/users", http.StatusFound)
+	return redirect(w, r, "/admin/users")
 }
 
 // POST /admin/users/{id}/role (admin)
-func (a *App) uiSetUserRole(_ *CurrentUser, w http.ResponseWriter, r *http.Request) {
+func (a *App) uiSetUserRole(_ *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err == nil {
 		if err := r.ParseForm(); err == nil {
@@ -109,71 +104,61 @@ func (a *App) uiSetUserRole(_ *CurrentUser, w http.ResponseWriter, r *http.Reque
 			}
 			target, err := data.UserByID(a.Db, core.UserID(id))
 			if err != nil {
-				a.serverError(w, err)
-				return
+				return err
 			}
 			adminCount, err := data.CountAdmins(a.Db)
 			if err != nil {
-				a.serverError(w, err)
-				return
+				return err
 			}
 			demotingLastAdmin := target != nil &&
 				target.Role == core.UserAdmin.Slug() && role == core.UserRegular && adminCount <= 1
 			if target != nil && !demotingLastAdmin {
 				if _, err := data.UpdateUserRole(a.Db, core.UserID(id), role); err != nil {
-					a.serverError(w, err)
-					return
+					return err
 				}
 			}
 		}
 	}
-	http.Redirect(w, r, "/admin/users", http.StatusFound)
+	return redirect(w, r, "/admin/users")
 }
 
 // POST /admin/users/{id}/password (admin)
-func (a *App) uiSetUserPassword(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
+func (a *App) uiSetUserPassword(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		respondPlainNotFound(w)
-		return
+		return errPageNotFound
 	}
 	if err := r.ParseForm(); err != nil {
-		BadRequest(w, "Invalid form submission.")
-		return
+		return BadRequest("Invalid form submission.")
 	}
 	password := r.PostFormValue("password")
 	if len(password) < 8 {
-		a.renderUsersPage(w, user, "Passwords need at least 8 characters.")
-		return
+		return a.renderUsersPage(w, user, "Passwords need at least 8 characters.")
 	}
 	if _, err := data.UpdateUserPassword(a.Db, core.UserID(id), HashPassword(password)); err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
-	http.Redirect(w, r, "/admin/users", http.StatusFound)
+	return redirect(w, r, "/admin/users")
 }
 
 // POST /admin/users/{id}/delete (admin)
-func (a *App) uiDeleteUser(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
+func (a *App) uiDeleteUser(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 	if id, err := strconv.ParseInt(r.PathValue("id"), 10, 64); err == nil {
 		target, err := data.UserByID(a.Db, core.UserID(id))
 		if err != nil {
-			a.serverError(w, err)
-			return
+			return err
 		}
 		adminCount, err := data.CountAdmins(a.Db)
 		if err != nil {
-			a.serverError(w, err)
-			return
+			return err
 		}
 		isSelf := target != nil && core.UserID(target.Id) == user.Id
 		isLastAdmin := target != nil && target.Role == core.UserAdmin.Slug() && adminCount <= 1
 		if target != nil && !isSelf && !isLastAdmin {
 			if _, err := data.DeleteUser(a.Db, core.UserID(id)); err != nil {
-				a.serverError(w, err)
-				return
+				return err
 			}
 		}
 	}
-	http.Redirect(w, r, "/admin/users", http.StatusFound)
+	return redirect(w, r, "/admin/users")
 }

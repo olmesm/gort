@@ -53,24 +53,27 @@ type view struct {
 	Data  any
 }
 
-func (a *App) render(w http.ResponseWriter, status int, t *template.Template, name string, data any) {
+// render executes a template into a buffer first, so a failure part-way
+// through never leaks half a page; the handler adapter turns the returned
+// error into the 500.
+func (a *App) render(w http.ResponseWriter, status int, t *template.Template, name string, data any) error {
 	var buf bytes.Buffer
 	if err := t.ExecuteTemplate(&buf, name, data); err != nil {
-		a.serverError(w, fmt.Errorf("rendering %s: %w", name, err))
-		return
+		return fmt.Errorf("rendering %s: %w", name, err)
 	}
 	respondHtml(w, status, buf.String())
+	return nil
 }
 
 // renderPage renders a dashboard page inside the layout.
-func (a *App) renderPage(w http.ResponseWriter, status int, page string, user *CurrentUser, path, title string, data any) {
-	a.render(w, status, a.pages[page], "layout", view{Title: title, Path: path, User: user, Data: data})
+func (a *App) renderPage(w http.ResponseWriter, status int, page string, user *CurrentUser, path, title string, data any) error {
+	return a.render(w, status, a.pages[page], "layout", view{Title: title, Path: path, User: user, Data: data})
 }
 
 // renderShared renders a template from the shared set: the standalone
 // login/landing/404 pages and htmx fragments.
-func (a *App) renderShared(w http.ResponseWriter, status int, name string, data any) {
-	a.render(w, status, a.baseTemplates, name, data)
+func (a *App) renderShared(w http.ResponseWriter, status int, name string, data any) error {
+	return a.render(w, status, a.baseTemplates, name, data)
 }
 
 func respondHtml(w http.ResponseWriter, status int, body string) {
@@ -79,10 +82,10 @@ func respondHtml(w http.ResponseWriter, status int, body string) {
 	_, _ = w.Write([]byte(body))
 }
 
-func respondPlainNotFound(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.WriteHeader(http.StatusNotFound)
-	_, _ = w.Write([]byte("Not found"))
+// redirect is http.Redirect (302) shaped as a handler's final statement.
+func redirect(w http.ResponseWriter, r *http.Request, url string) error {
+	http.Redirect(w, r, url, http.StatusFound)
+	return nil
 }
 
 // isHtmx: was this request issued by htmx (so we should render a fragment)?

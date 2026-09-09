@@ -75,25 +75,23 @@ func (a *App) apiKeysViewModel(errorMessage, plainKey string) (apiKeysView, erro
 	return model, nil
 }
 
-func (a *App) renderApiKeysPage(w http.ResponseWriter, user *CurrentUser, errorMessage, plainKey string) {
+func (a *App) renderApiKeysPage(w http.ResponseWriter, user *CurrentUser, errorMessage, plainKey string) error {
 	model, err := a.apiKeysViewModel(errorMessage, plainKey)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
-	a.renderPage(w, http.StatusOK, "apikeys", user, "/admin/api-keys", "API keys", model)
+	return a.renderPage(w, http.StatusOK, "apikeys", user, "/admin/api-keys", "API keys", model)
 }
 
 // GET /admin/api-keys (admin)
-func (a *App) uiListApiKeys(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
-	a.renderApiKeysPage(w, user, "", "")
+func (a *App) uiListApiKeys(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
+	return a.renderApiKeysPage(w, user, "", "")
 }
 
 // POST /admin/api-keys (admin) — shows the plaintext key once.
-func (a *App) uiCreateApiKey(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
+func (a *App) uiCreateApiKey(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 	if err := r.ParseForm(); err != nil {
-		BadRequest(w, "Invalid form submission.")
-		return
+		return BadRequest("Invalid form submission.")
 	}
 	var name *string
 	if n := strings.TrimSpace(r.PostFormValue("name")); n != "" {
@@ -104,8 +102,7 @@ func (a *App) uiCreateApiKey(user *CurrentUser, w http.ResponseWriter, r *http.R
 		var err error
 		domain, err = data.DomainByAuthority(a.Db, strings.ToLower(authority))
 		if err != nil {
-			a.serverError(w, err)
-			return
+			return err
 		}
 	}
 
@@ -115,8 +112,7 @@ func (a *App) uiCreateApiKey(user *CurrentUser, w http.ResponseWriter, r *http.R
 		role = core.AuthorRole()
 	case "domain":
 		if domain == nil {
-			a.renderApiKeysPage(w, user, "Domain-role keys need a domain.", "")
-			return
+			return a.renderApiKeysPage(w, user, "Domain-role keys need a domain.", "")
 		}
 		role = core.DomainRole(core.DomainID(domain.Id))
 	default:
@@ -130,37 +126,33 @@ func (a *App) uiCreateApiKey(user *CurrentUser, w http.ResponseWriter, r *http.R
 
 	plainKey := GenerateApiKey()
 	if _, err := data.InsertApiKey(a.Db, HashApiKey(plainKey), name, role, expiresAt); err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
-	a.renderApiKeysPage(w, user, "", plainKey)
+	return a.renderApiKeysPage(w, user, "", plainKey)
 }
 
 // POST /admin/api-keys/{id}/toggle (admin)
-func (a *App) uiToggleApiKey(_ *CurrentUser, w http.ResponseWriter, r *http.Request) {
+func (a *App) uiToggleApiKey(_ *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 	if id, err := strconv.ParseInt(r.PathValue("id"), 10, 64); err == nil {
 		key, err := data.ApiKeyByID(a.Db, core.ApiKeyID(id))
 		if err != nil {
-			a.serverError(w, err)
-			return
+			return err
 		}
 		if key != nil {
 			if _, err := data.SetApiKeyEnabled(a.Db, core.ApiKeyID(id), !key.Enabled); err != nil {
-				a.serverError(w, err)
-				return
+				return err
 			}
 		}
 	}
-	http.Redirect(w, r, "/admin/api-keys", http.StatusFound)
+	return redirect(w, r, "/admin/api-keys")
 }
 
 // POST /admin/api-keys/{id}/delete (admin)
-func (a *App) uiDeleteApiKey(_ *CurrentUser, w http.ResponseWriter, r *http.Request) {
+func (a *App) uiDeleteApiKey(_ *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 	if id, err := strconv.ParseInt(r.PathValue("id"), 10, 64); err == nil {
 		if _, err := data.DeleteApiKey(a.Db, core.ApiKeyID(id)); err != nil {
-			a.serverError(w, err)
-			return
+			return err
 		}
 	}
-	http.Redirect(w, r, "/admin/api-keys", http.StatusFound)
+	return redirect(w, r, "/admin/api-keys")
 }

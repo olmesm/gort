@@ -11,15 +11,15 @@ import (
 // RespondJSON writes a JSON response. Wire format mirrors the REST spec:
 // camelCase field names (via struct tags) with null fields omitted (via
 // omitempty on pointer fields).
-func RespondJSON(w http.ResponseWriter, status int, value any) {
+func RespondJSON(w http.ResponseWriter, status int, value any) error {
 	body, err := json.Marshal(value)
 	if err != nil {
-		http.Error(w, "serialization error", http.StatusInternalServerError)
-		return
+		return fmt.Errorf("serializing response: %w", err)
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	_, _ = w.Write(body)
+	return nil
 }
 
 // ReadJSON reads and deserializes a JSON request body, capped at 1 MiB.

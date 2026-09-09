@@ -135,11 +135,6 @@ func (a *App) initialize() error {
 	return nil
 }
 
-func (a *App) serverError(w http.ResponseWriter, err error) {
-	a.Logger.Error("request failed", "error", err)
-	Problem(w, 500, "internal", "Internal server error", "Something went wrong handling the request.")
-}
-
 // ---- Rate limiting ----
 
 // rateLimiter is a fixed-window limiter for mutating REST calls, partitioned
@@ -180,7 +175,7 @@ func (a *App) rateLimitMiddleware(next http.Handler) http.Handler {
 				key = "unknown"
 			}
 			if !a.limiter.allow(key) {
-				Problem(w, 429, "rate-limit", "Too many requests", "Rate limit exceeded; retry in a minute.")
+				a.handleError(w, NewProblem(429, "rate-limit", "Too many requests", "Rate limit exceeded; retry in a minute."))
 				return
 			}
 		}
@@ -204,7 +199,7 @@ func (a *App) buildRouter() *http.ServeMux {
 	}
 
 	// REST API
-	mux.HandleFunc("GET /rest/health", a.handleHealth)
+	mux.Handle("GET /rest/health", a.handle(a.handleHealth))
 
 	mux.Handle("GET /rest/v1/short-urls", a.requireApiKey(a.apiListShortUrls))
 	mux.Handle("POST /rest/v1/short-urls", a.requireApiKey(a.apiCreateShortUrl))
@@ -246,11 +241,11 @@ func (a *App) buildRouter() *http.ServeMux {
 
 	// Dashboard
 	mux.Handle("GET /admin", a.requireUser(a.uiOverview))
-	mux.HandleFunc("GET /admin/login", a.uiLoginForm)
-	mux.HandleFunc("POST /admin/login", a.uiLogin)
-	mux.HandleFunc("POST /admin/logout", a.uiLogout)
-	mux.HandleFunc("GET /admin/oidc/login", a.uiOidcLogin)
-	mux.HandleFunc("GET /admin/oidc/callback", a.uiOidcCallback)
+	mux.Handle("GET /admin/login", a.handle(a.uiLoginForm))
+	mux.Handle("POST /admin/login", a.handle(a.uiLogin))
+	mux.Handle("POST /admin/logout", a.handle(a.uiLogout))
+	mux.Handle("GET /admin/oidc/login", a.handle(a.uiOidcLogin))
+	mux.Handle("GET /admin/oidc/callback", a.handle(a.uiOidcCallback))
 
 	mux.Handle("GET /admin/short-urls", a.requireUser(a.uiListShortUrls))
 	mux.Handle("GET /admin/short-urls/new", a.requireUser(a.uiCreateShortUrlForm))
@@ -292,11 +287,11 @@ func (a *App) buildRouter() *http.ServeMux {
 	mux.Handle("POST /admin/webhooks/{id}/delete", a.requireAdmin(a.uiDeleteWebhook))
 
 	// Public
-	mux.HandleFunc("GET /robots.txt", a.handleRobots)
-	mux.HandleFunc("GET /{code}/qr-code", a.handleQrCode)
-	mux.HandleFunc("GET /{$}", a.handleBaseUrl)
+	mux.Handle("GET /robots.txt", a.handle(a.handleRobots))
+	mux.Handle("GET /{code}/qr-code", a.handle(a.handleQrCode))
+	mux.Handle("GET /{$}", a.handle(a.handleBaseUrl))
 	// A "GET" pattern also serves HEAD requests.
-	mux.HandleFunc("GET /", a.handleShortUrl)
+	mux.Handle("GET /", a.handle(a.handleShortUrl))
 
 	return mux
 }

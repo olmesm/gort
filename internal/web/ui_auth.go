@@ -19,8 +19,8 @@ type loginView struct {
 	ProviderName     string
 }
 
-func (a *App) renderLogin(w http.ResponseWriter, status int, errorMessage, returnUrl string) {
-	a.renderShared(w, status, "login", loginView{
+func (a *App) renderLogin(w http.ResponseWriter, status int, errorMessage, returnUrl string) error {
+	return a.renderShared(w, status, "login", loginView{
 		Error:            errorMessage,
 		ReturnUrl:        returnUrl,
 		ReturnUrlParam:   url.QueryEscape(returnUrl),
@@ -38,28 +38,25 @@ func safeReturnUrl(url string) string {
 }
 
 // GET /admin/login
-func (a *App) uiLoginForm(w http.ResponseWriter, r *http.Request) {
+func (a *App) uiLoginForm(w http.ResponseWriter, r *http.Request) error {
 	returnUrl := r.URL.Query().Get("returnUrl")
 	if returnUrl == "" {
 		returnUrl = "/admin"
 	}
 	returnUrl = safeReturnUrl(returnUrl)
 	if a.currentUser(r) != nil {
-		http.Redirect(w, r, returnUrl, http.StatusFound)
-		return
+		return redirect(w, r, returnUrl)
 	}
-	a.renderLogin(w, http.StatusOK, "", returnUrl)
+	return a.renderLogin(w, http.StatusOK, "", returnUrl)
 }
 
 // POST /admin/login
-func (a *App) uiLogin(w http.ResponseWriter, r *http.Request) {
+func (a *App) uiLogin(w http.ResponseWriter, r *http.Request) error {
 	if a.Cfg.OidcEnabled() && a.Cfg.OidcOnly {
-		a.renderLogin(w, http.StatusForbidden, "Password login is disabled; use single sign-on.", "/admin")
-		return
+		return a.renderLogin(w, http.StatusForbidden, "Password login is disabled; use single sign-on.", "/admin")
 	}
 	if err := r.ParseForm(); err != nil {
-		a.renderLogin(w, http.StatusBadRequest, "Invalid form submission.", "/admin")
-		return
+		return a.renderLogin(w, http.StatusBadRequest, "Invalid form submission.", "/admin")
 	}
 	username := strings.TrimSpace(r.PostFormValue("username"))
 	password := r.PostFormValue("password")
@@ -67,19 +64,17 @@ func (a *App) uiLogin(w http.ResponseWriter, r *http.Request) {
 
 	user, err := data.UserByUsername(a.Db, username)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	if user != nil && VerifyPassword(password, user.PasswordHash) {
 		a.SignIn(w, user)
-		http.Redirect(w, r, returnUrl, http.StatusFound)
-		return
+		return redirect(w, r, returnUrl)
 	}
-	a.renderLogin(w, http.StatusUnauthorized, "Invalid username or password.", returnUrl)
+	return a.renderLogin(w, http.StatusUnauthorized, "Invalid username or password.", returnUrl)
 }
 
 // POST /admin/logout
-func (a *App) uiLogout(w http.ResponseWriter, r *http.Request) {
+func (a *App) uiLogout(w http.ResponseWriter, r *http.Request) error {
 	a.SignOut(w)
-	http.Redirect(w, r, "/admin/login", http.StatusFound)
+	return redirect(w, r, "/admin/login")
 }

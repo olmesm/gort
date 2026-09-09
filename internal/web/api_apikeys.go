@@ -46,16 +46,14 @@ func newApiKeyDto(k *data.ApiKeyRow, domainAuthority *string) apiKeyDto {
 }
 
 // GET /rest/v1/api-keys (admin)
-func (a *App) apiListApiKeys(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
+func (a *App) apiListApiKeys(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	keys, err := data.ListApiKeys(a.Db)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	domains, err := data.ListDomains(a.Db)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	authorityOf := func(id *int64) *string {
 		if id == nil {
@@ -73,24 +71,22 @@ func (a *App) apiListApiKeys(_ *AuthenticatedKey, w http.ResponseWriter, r *http
 	for i := range keys {
 		dtos[i] = newApiKeyDto(&keys[i], authorityOf(keys[i].DomainId))
 	}
-	RespondJSON(w, http.StatusOK, map[string]any{"data": dtos})
+	return RespondJSON(w, http.StatusOK, map[string]any{"data": dtos})
 }
 
 // POST /rest/v1/api-keys (admin) — the plaintext key is returned exactly
 // once.
-func (a *App) apiCreateApiKey(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
+func (a *App) apiCreateApiKey(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	body, err := ReadJSON[CreateApiKeyBody](w, r)
 	if err != nil {
-		BadRequest(w, err.Error())
-		return
+		return BadRequest(err.Error())
 	}
 
 	var domain *data.DomainRow
 	if body.Domain != nil {
 		domain, err = data.DomainByAuthority(a.Db, strings.ToLower(strings.TrimSpace(*body.Domain)))
 		if err != nil {
-			a.serverError(w, err)
-			return
+			return err
 		}
 	}
 
@@ -106,25 +102,21 @@ func (a *App) apiCreateApiKey(_ *AuthenticatedKey, w http.ResponseWriter, r *htt
 		role = core.AuthorRole()
 	case "domain":
 		if domain == nil {
-			BadRequest(w, "domain-role keys need an existing 'domain'.")
-			return
+			return BadRequest("domain-role keys need an existing 'domain'.")
 		}
 		role = core.DomainRole(core.DomainID(domain.Id))
 	default:
-		BadRequest(w, fmt.Sprintf("Unknown role '%s'. Use admin, author or domain.", roleSlug))
-		return
+		return BadRequest(fmt.Sprintf("Unknown role '%s'. Use admin, author or domain.", roleSlug))
 	}
 
 	if body.ExpiresAt != nil && !body.ExpiresAt.After(time.Now().UTC()) {
-		BadRequest(w, "expiresAt must be in the future.")
-		return
+		return BadRequest("expiresAt must be in the future.")
 	}
 
 	plainKey := GenerateApiKey()
 	row, err := data.InsertApiKey(a.Db, HashApiKey(plainKey), body.Name, role, body.ExpiresAt)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	var domainAuthority *string
 	if domain != nil {
@@ -132,7 +124,7 @@ func (a *App) apiCreateApiKey(_ *AuthenticatedKey, w http.ResponseWriter, r *htt
 	}
 	dto := newApiKeyDto(row, domainAuthority)
 	dto.ApiKey = plainKey
-	RespondJSON(w, http.StatusCreated, dto)
+	return RespondJSON(w, http.StatusCreated, dto)
 }
 
 func apiKeyIdFromPath(r *http.Request) (core.ApiKeyID, bool) {
@@ -141,44 +133,38 @@ func apiKeyIdFromPath(r *http.Request) (core.ApiKeyID, bool) {
 }
 
 // PATCH /rest/v1/api-keys/{id} (admin)
-func (a *App) apiPatchApiKey(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
+func (a *App) apiPatchApiKey(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	body, err := ReadJSON[PatchApiKeyBody](w, r)
 	if err != nil {
-		BadRequest(w, err.Error())
-		return
+		return BadRequest(err.Error())
 	}
 	id, ok := apiKeyIdFromPath(r)
 	if !ok {
-		NotFound(w, "API key was not found.")
-		return
+		return NotFound("API key was not found.")
 	}
 	updated, err := data.SetApiKeyEnabled(a.Db, id, body.Enabled)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	if !updated {
-		NotFound(w, fmt.Sprintf("API key %d was not found.", id.Value()))
-		return
+		return NotFound(fmt.Sprintf("API key %d was not found.", id.Value()))
 	}
-	RespondJSON(w, http.StatusOK, map[string]any{"id": id.Value(), "enabled": body.Enabled})
+	return RespondJSON(w, http.StatusOK, map[string]any{"id": id.Value(), "enabled": body.Enabled})
 }
 
 // DELETE /rest/v1/api-keys/{id} (admin)
-func (a *App) apiDeleteApiKey(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) {
+func (a *App) apiDeleteApiKey(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	id, ok := apiKeyIdFromPath(r)
 	if !ok {
-		NotFound(w, "API key was not found.")
-		return
+		return NotFound("API key was not found.")
 	}
 	deleted, err := data.DeleteApiKey(a.Db, id)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	if !deleted {
-		NotFound(w, fmt.Sprintf("API key %d was not found.", id.Value()))
-		return
+		return NotFound(fmt.Sprintf("API key %d was not found.", id.Value()))
 	}
 	w.WriteHeader(http.StatusNoContent)
+	return nil
 }

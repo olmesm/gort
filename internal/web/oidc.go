@@ -103,17 +103,15 @@ func randomToken() string {
 }
 
 // GET /admin/oidc/login — start the authorization-code flow.
-func (a *App) uiOidcLogin(w http.ResponseWriter, r *http.Request) {
+func (a *App) uiOidcLogin(w http.ResponseWriter, r *http.Request) error {
 	if !a.Cfg.OidcEnabled() {
-		respondPlainNotFound(w)
-		return
+		return errPageNotFound
 	}
 	provider, _, err := a.oidc.get(r.Context())
 	if err != nil {
 		a.Logger.Error("OIDC login failed", "error", err)
-		a.renderLogin(w, http.StatusBadGateway,
+		return a.renderLogin(w, http.StatusBadGateway,
 			"Single sign-on is unavailable: the identity provider could not be reached.", "/admin")
-		return
 	}
 
 	returnUrl := safeReturnUrl(r.URL.Query().Get("returnUrl"))
@@ -137,7 +135,7 @@ func (a *App) uiOidcLogin(w http.ResponseWriter, r *http.Request) {
 	authUrl := a.oauth2Config(r, provider).AuthCodeURL(state.State,
 		gooidc.Nonce(state.Nonce),
 		oauth2.S256ChallengeOption(state.Verifier))
-	http.Redirect(w, r, authUrl, http.StatusFound)
+	return redirect(w, r, authUrl)
 }
 
 func (a *App) readOidcState(r *http.Request) *oidcState {
@@ -171,37 +169,33 @@ func (a *App) clearOidcState(w http.ResponseWriter) {
 	})
 }
 
-func (a *App) oidcLoginError(w http.ResponseWriter, message string) {
-	a.renderLogin(w, http.StatusUnauthorized, message, "/admin")
+func (a *App) oidcLoginError(w http.ResponseWriter, message string) error {
+	return a.renderLogin(w, http.StatusUnauthorized, message, "/admin")
 }
 
 // GET /admin/oidc/callback — exchange the code, verify the ID token, map
 // claims and sign the user in.
-func (a *App) uiOidcCallback(w http.ResponseWriter, r *http.Request) {
+func (a *App) uiOidcCallback(w http.ResponseWriter, r *http.Request) error {
 	if !a.Cfg.OidcEnabled() {
-		respondPlainNotFound(w)
-		return
+		return errPageNotFound
 	}
 	state := a.readOidcState(r)
 	a.clearOidcState(w)
 	q := r.URL.Query()
 
 	if state == nil || q.Get("state") == "" || q.Get("state") != state.State {
-		a.oidcLoginError(w, "Sign-on failed: the login attempt expired or was tampered with. Try again.")
-		return
+		return a.oidcLoginError(w, "Sign-on failed: the login attempt expired or was tampered with. Try again.")
 	}
 	if errCode := q.Get("error"); errCode != "" {
 		a.Logger.Warn("OIDC callback returned an error", "error", errCode,
 			"description", q.Get("error_description"))
-		a.oidcLoginError(w, "Sign-on failed: the identity provider rejected the login.")
-		return
+		return a.oidcLoginError(w, "Sign-on failed: the identity provider rejected the login.")
 	}
 
 	provider, verifier, err := a.oidc.get(r.Context())
 	if err != nil {
 		a.Logger.Error("OIDC callback failed", "error", err)
-		a.oidcLoginError(w, "Sign-on failed: the identity provider could not be reached.")
-		return
+		return a.oidcLoginError(w, "Sign-on failed: the identity provider could not be reached.")
 	}
 
 	ctx := a.oidc.wrapContext(r.Context())
@@ -209,40 +203,34 @@ func (a *App) uiOidcCallback(w http.ResponseWriter, r *http.Request) {
 		oauth2.VerifierOption(state.Verifier))
 	if err != nil {
 		a.Logger.Warn("OIDC code exchange failed", "error", err)
-		a.oidcLoginError(w, "Sign-on failed: the authorization code could not be exchanged.")
-		return
+		return a.oidcLoginError(w, "Sign-on failed: the authorization code could not be exchanged.")
 	}
 	rawIDToken, ok := token.Extra("id_token").(string)
 	if !ok {
-		a.oidcLoginError(w, "Sign-on failed: the identity provider returned no ID token.")
-		return
+		return a.oidcLoginError(w, "Sign-on failed: the identity provider returned no ID token.")
 	}
 	idToken, err := verifier.Verify(ctx, rawIDToken)
 	if err != nil {
 		a.Logger.Warn("OIDC ID token verification failed", "error", err)
-		a.oidcLoginError(w, "Sign-on failed: the ID token could not be verified.")
-		return
+		return a.oidcLoginError(w, "Sign-on failed: the ID token could not be verified.")
 	}
 	if idToken.Nonce != state.Nonce {
-		a.oidcLoginError(w, "Sign-on failed: the login attempt expired or was tampered with. Try again.")
-		return
+		return a.oidcLoginError(w, "Sign-on failed: the login attempt expired or was tampered with. Try again.")
 	}
 
 	identity, err := a.identityFromToken(idToken)
 	if err != nil {
 		a.Logger.Warn("OIDC claims could not be read", "error", err)
-		a.oidcLoginError(w, "Sign-on failed: the ID token carried unreadable claims.")
-		return
+		return a.oidcLoginError(w, "Sign-on failed: the ID token carried unreadable claims.")
 	}
 
 	user, err := data.UpsertOidcUser(a.Db, identity.Subject, identity.Username, identity.Role)
 	if err != nil || user == nil {
-		a.serverError(w, fmt.Errorf("provisioning OIDC user: %w", err))
-		return
+		return fmt.Errorf("provisioning OIDC user: %w", err)
 	}
 
 	a.SignInWithGroups(w, user, identity.Groups)
-	http.Redirect(w, r, state.ReturnUrl, http.StatusFound)
+	return redirect(w, r, state.ReturnUrl)
 }
 
 // oidcIdentity is what Gort keeps from a verified ID token.

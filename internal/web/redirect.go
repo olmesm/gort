@@ -13,8 +13,8 @@ import (
 // The public-facing side: short URL redirects, base URL, robots.txt, QR
 // codes.
 
-func (a *App) respondNotFound(w http.ResponseWriter, message string) {
-	a.renderShared(w, http.StatusNotFound, "notfound", message)
+func (a *App) respondNotFound(w http.ResponseWriter, message string) error {
+	return a.renderShared(w, http.StatusNotFound, "notfound", message)
 }
 
 // redirectWith redirects with an arbitrary 3xx status code.
@@ -24,22 +24,20 @@ func redirectWith(w http.ResponseWriter, status core.RedirectStatus, location st
 }
 
 // GET /rest/health — no auth; checks database connectivity.
-func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
+func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) error {
 	const version = "1.0.0"
 	var one int64
 	if err := a.Db.QueryRow("SELECT 1").Scan(&one); err != nil {
-		RespondJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "fail", "version": version})
-		return
+		return RespondJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "fail", "version": version})
 	}
-	RespondJSON(w, http.StatusOK, map[string]string{"status": "pass", "version": version})
+	return RespondJSON(w, http.StatusOK, map[string]string{"status": "pass", "version": version})
 }
 
 // GET / — orphan-tracked; redirects when a base-url redirect is configured.
-func (a *App) handleBaseUrl(w http.ResponseWriter, r *http.Request) {
+func (a *App) handleBaseUrl(w http.ResponseWriter, r *http.Request) error {
 	domain, err := a.ResolveRequestDomain(r.Host)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	a.RecordVisit(r, core.VisitOrphanBaseUrl, nil, nil)
 
@@ -50,19 +48,17 @@ func (a *App) handleBaseUrl(w http.ResponseWriter, r *http.Request) {
 		target = a.Cfg.BaseUrlRedirect
 	}
 	if target != "" {
-		http.Redirect(w, r, target, http.StatusFound)
-		return
+		return redirect(w, r, target)
 	}
-	a.renderShared(w, http.StatusOK, "landing", nil)
+	return a.renderShared(w, http.StatusOK, "landing", nil)
 }
 
 // GET /robots.txt — disallow everything except crawlable short URLs and the
 // base URL.
-func (a *App) handleRobots(w http.ResponseWriter, r *http.Request) {
+func (a *App) handleRobots(w http.ResponseWriter, r *http.Request) error {
 	crawlable, err := data.ListCrawlable(a.Db)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	lines := []string{"User-agent: *"}
 	for _, code := range crawlable {
@@ -71,30 +67,29 @@ func (a *App) handleRobots(w http.ResponseWriter, r *http.Request) {
 	lines = append(lines, "Allow: /$", "Disallow: /")
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	_, _ = w.Write([]byte(strings.Join(lines, "\n") + "\n"))
+	return nil
 }
 
 // GET /{code}/qr-code — public QR code for an existing short URL.
-func (a *App) handleQrCode(w http.ResponseWriter, r *http.Request) {
+func (a *App) handleQrCode(w http.ResponseWriter, r *http.Request) error {
 	code := r.PathValue("code")
 	domain, err := a.ResolveRequestDomain(r.Host)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	shortUrl, err := data.ShortUrlByCode(a.Db, core.DomainID(domain.Id), code)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	if shortUrl == nil {
-		a.respondNotFound(w, "There is no short URL to encode.")
-		return
+		return a.respondNotFound(w, "There is no short URL to encode.")
 	}
 	q := r.URL.Query()
 	opts := ParseQrOptions(queryInt(q, "size"), queryInt(q, "margin"),
 		q.Get("errorCorrection"), q.Get("format"))
 	content := ShortUrlFor(a.Cfg, domain.Authority, shortUrl.ShortCode)
 	RespondQr(w, content, opts)
+	return nil
 }
 
 func visitorContextOf(r *http.Request) core.VisitorContext {
@@ -126,11 +121,10 @@ func looksLikeShortCode(slug string) bool {
 
 // handleInvalid handles a missing/inactive short URL: orphan tracking +
 // configured fallbacks.
-func (a *App) handleInvalid(w http.ResponseWriter, r *http.Request, slug string) {
+func (a *App) handleInvalid(w http.ResponseWriter, r *http.Request, slug string) error {
 	domain, err := a.ResolveRequestDomain(r.Host)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	isCodeLike := looksLikeShortCode(slug)
 
@@ -155,33 +149,29 @@ func (a *App) handleInvalid(w http.ResponseWriter, r *http.Request, slug string)
 		}
 	}
 	if target != "" {
-		http.Redirect(w, r, target, http.StatusFound)
-		return
+		return redirect(w, r, target)
 	}
-	a.respondNotFound(w, "This short URL does not exist.")
+	return a.respondNotFound(w, "This short URL does not exist.")
 }
 
 // GET /{...} — the redirect hot path.
-func (a *App) handleShortUrl(w http.ResponseWriter, r *http.Request) {
+func (a *App) handleShortUrl(w http.ResponseWriter, r *http.Request) error {
 	slug := strings.Trim(r.URL.Path, "/")
 	if slug == "" {
 		a.handleBaseUrl(w, r)
-		return
+		return nil
 	}
 
 	domain, err := a.ResolveRequestDomain(r.Host)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	found, err := data.ShortUrlByCode(a.Db, core.DomainID(domain.Id), slug)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	if found == nil {
-		a.handleInvalid(w, r, slug)
-		return
+		return a.handleInvalid(w, r, slug)
 	}
 
 	id := core.ShortUrlID(found.Id)
@@ -191,21 +181,18 @@ func (a *App) handleShortUrl(w http.ResponseWriter, r *http.Request) {
 	if lifetime.MaxVisits != nil {
 		visitCount, err = data.CountValidVisits(a.Db, id)
 		if err != nil {
-			a.serverError(w, err)
-			return
+			return err
 		}
 	}
 
 	if active, _ := lifetime.CheckActive(time.Now().UTC(), visitCount); !active {
-		a.handleInvalid(w, r, slug)
-		return
+		return a.handleInvalid(w, r, slug)
 	}
 
 	visitor := visitorContextOf(r)
 	rules, err := data.RedirectRules(a.Db, id)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	target := core.ResolveTarget(found.LongUrl, rules, visitor)
 
@@ -235,6 +222,7 @@ func (a *App) handleShortUrl(w http.ResponseWriter, r *http.Request) {
 		status = a.Cfg.DefaultRedirectStatus
 	}
 	redirectWith(w, status, finalUrl)
+	return nil
 }
 
 // queryKeysInOrder preserves the query string's parameter order (url.Values

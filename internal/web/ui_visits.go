@@ -151,20 +151,17 @@ type shortUrlVisitsView struct {
 }
 
 // GET /admin/short-urls/{id}/visits
-func (a *App) uiShortUrlVisits(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
+func (a *App) uiShortUrlVisits(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		respondPlainNotFound(w)
-		return
+		return errPageNotFound
 	}
 	detail, err := data.ShortUrlDetailByID(a.Db, core.ShortUrlID(id))
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	if detail == nil || !user.CanSeeGroup(detail.GroupName) {
-		respondPlainNotFound(w)
-		return
+		return errPageNotFound
 	}
 	shortUrlId := core.ShortUrlID(detail.Id)
 	analytics, err := a.analyticsContent(false, data.ShortUrlScope(shortUrlId),
@@ -173,8 +170,7 @@ func (a *App) uiShortUrlVisits(user *CurrentUser, w http.ResponseWriter, r *http
 		},
 		fmt.Sprintf("/admin/short-urls/%d/visits", detail.Id), r.URL.Query())
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 
 	a.renderPage(w, http.StatusOK, "visits_shorturl", user, "/admin/short-urls", "Visits", shortUrlVisitsView{
@@ -184,6 +180,7 @@ func (a *App) uiShortUrlVisits(user *CurrentUser, w http.ResponseWriter, r *http
 		LongUrl:   detail.LongUrl,
 		Analytics: analytics,
 	})
+	return nil
 }
 
 type orphanVisitsView struct {
@@ -192,7 +189,7 @@ type orphanVisitsView struct {
 }
 
 // GET /admin/visits/orphan
-func (a *App) uiOrphanVisits(user *CurrentUser, w http.ResponseWriter, r *http.Request) {
+func (a *App) uiOrphanVisits(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 	q := r.URL.Query()
 	var visitType *core.VisitType
 	if vt, ok := core.VisitTypeOfSlug(q.Get("type")); ok {
@@ -204,20 +201,19 @@ func (a *App) uiOrphanVisits(user *CurrentUser, w http.ResponseWriter, r *http.R
 		},
 		"/admin/visits/orphan", q)
 	if err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
 	a.renderPage(w, http.StatusOK, "visits_orphan", user, "/admin/visits/orphan", "Orphan visits", orphanVisitsView{
 		ShowDelete: user.IsAdmin(),
 		Analytics:  analytics,
 	})
+	return nil
 }
 
 // POST /admin/visits/orphan/delete (admin)
-func (a *App) uiDeleteOrphanVisits(_ *CurrentUser, w http.ResponseWriter, r *http.Request) {
+func (a *App) uiDeleteOrphanVisits(_ *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 	if _, err := data.DeleteOrphanVisits(a.Db); err != nil {
-		a.serverError(w, err)
-		return
+		return err
 	}
-	http.Redirect(w, r, "/admin/visits/orphan", http.StatusFound)
+	return redirect(w, r, "/admin/visits/orphan")
 }
