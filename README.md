@@ -51,25 +51,65 @@ same dashboard UI, same behavior — different runtime.
 
 ## Quick start
 
-### Prebuilt binary
+### Prebuilt binary (no dependencies, no config)
 
-Gort ships as a single static binary — no libsqlite3, no libpq, no runtime
-dependencies. Grab the archive for your platform from the
-[releases page](https://github.com/olmesm/gort/releases) (Linux and macOS,
-amd64 and arm64):
+Gort is a single static binary — no libsqlite3, no libpq, nothing to
+install. Download the archive for your platform from the
+[releases page](https://github.com/olmesm/gort/releases) and run it:
 
 ```sh
-# example: v0.1.0 on Linux x86-64 (other targets: linux_arm64, darwin_amd64, darwin_arm64)
+# pick one: linux_amd64, linux_arm64, darwin_amd64, darwin_arm64
 VERSION=0.1.0
 curl -sSL "https://github.com/olmesm/gort/releases/download/v${VERSION}/gort_${VERSION}_linux_amd64.tar.gz" | tar xz
-./gort -version
-GORT_INITIAL_ADMIN_PASSWORD=change-me ./gort
+./gort
 ```
 
-`checksums.txt` on each release carries SHA-256 sums of the archives.
+That's it. With no environment variables set, Gort:
 
-SQLite is used by default (`./data/gort.db`). The same binary talks to
-PostgreSQL when told to:
+- listens on <http://localhost:8080>;
+- creates `./data/` next to you, holding the SQLite database
+  (`data/gort.db`) and the session-signing key;
+- creates an `admin` user and **prints its generated password in the log**:
+
+  ```
+  level=WARN msg="Created initial admin user 'admin' with generated password: I1OVTMBoW8NAfXMF — log in at /admin/login and change it."
+  level=INFO msg="Gort listening on http://0.0.0.0:8080"
+  ```
+
+Set `GORT_INITIAL_ADMIN_PASSWORD=…` before the first start if you'd rather
+choose it. `checksums.txt` on each release carries SHA-256 sums of the
+archives. (macOS: if you downloaded through a browser rather than `curl`,
+Gatekeeper may quarantine the binary — `xattr -d com.apple.quarantine gort`
+clears it.)
+
+#### Try it out manually
+
+1. Open <http://localhost:8080/admin> and log in as `admin` with the printed
+   password.
+2. *Short URLs → New*: paste any long URL, optionally a custom slug such as
+   `godoc`, and save.
+3. Visit <http://localhost:8080/godoc> — you're redirected, and the visit
+   shows up under the link's *Analytics*.
+4. <http://localhost:8080/godoc/qr-code> gives you a PNG QR code.
+5. *API keys → New* (role *admin*) shows a `gort_…` key once; use it against
+   the REST API:
+
+   ```sh
+   KEY=gort_...
+   curl -H "X-Api-Key: $KEY" -H 'Content-Type: application/json' \
+        -d '{"longUrl":"https://example.com","tags":["demo"]}' \
+        http://localhost:8080/rest/v1/short-urls
+
+   curl -H "X-Api-Key: $KEY" http://localhost:8080/rest/v1/short-urls
+   curl -H "X-Api-Key: $KEY" http://localhost:8080/rest/v1/short-urls/godoc/visits
+   ```
+
+Stop it with Ctrl-C; the state lives entirely in `./data/`, so `rm -rf data`
+resets everything. To serve real short links, set `GORT_DEFAULT_DOMAIN` to
+the public hostname (e.g. `go.example.com`) and `GORT_USE_HTTPS=true` behind
+your TLS-terminating proxy.
+
+The same binary talks to PostgreSQL when told to:
 
 ```sh
 GORT_DB_DRIVER=postgres GORT_DB_CONNECTION="postgres://gort:gort@localhost/gort" ./gort
