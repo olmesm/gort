@@ -30,6 +30,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         env:
           VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
             echo "version must look like v1.2.3 (got '$VERSION')" >&2
@@ -37,6 +38,16 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # A tag left behind by a failed attempt (no release published for
+          # it) is moved to this commit; a tag that has a release is final.
+          if git ls-remote --exit-code --tags origin "refs/tags/$VERSION" >/dev/null; then
+            if gh release view "$VERSION" >/dev/null 2>&1; then
+              echo "$VERSION already has a published release" >&2
+              exit 1
+            fi
+            echo "tag $VERSION exists from an unpublished attempt; re-tagging HEAD"
+            git push --delete origin "refs/tags/$VERSION"
+          fi
           git tag -a "$VERSION" -m "$VERSION"
           git push origin "refs/tags/$VERSION"
 
@@ -53,17 +64,19 @@ jobs:
         env:
           VERSION: ${{ inputs.version || github.ref_name }}
         run: |
-          awk -v v="${VERSION#v}" '$0 ~ "^## \\[" v "\\]" {f=1; next} /^## / {f=0} f' CHANGELOG.md > release-notes.md
-          if ! grep -q '[^[:space:]]' release-notes.md; then
+          # Written outside the checkout: GoReleaser refuses a dirty work tree.
+          NOTES="$RUNNER_TEMP/release-notes.md"
+          awk -v v="${VERSION#v}" '$0 ~ "^## \\[" v "\\]" {f=1; next} /^## / {f=0} f' CHANGELOG.md > "$NOTES"
+          if ! grep -q '[^[:space:]]' "$NOTES"; then
             echo "CHANGELOG.md has no section for $VERSION" >&2
             exit 1
           fi
-          cat release-notes.md
+          cat "$NOTES"
 
       - uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean --release-notes=release-notes.md
+          args: release --clean --release-notes=${{ runner.temp }}/release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
