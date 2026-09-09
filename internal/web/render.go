@@ -21,6 +21,17 @@ var templateFuncs = template.FuncMap{
 		return currentPath == href ||
 			(href != "/admin" && strings.HasPrefix(currentPath, href+"/"))
 	},
+	"fmtDate":  formatDateTime,
+	"fmtCount": formatCount,
+	"orDash":   orDash,
+	"deref":    valueOrEmpty,
+	"csv": func(s string) []string {
+		parts := strings.Split(s, ",")
+		for i, p := range parts {
+			parts[i] = strings.TrimSpace(p)
+		}
+		return parts
+	},
 }
 
 // pageTemplateNames lists the dashboard pages; each defines "content" and is

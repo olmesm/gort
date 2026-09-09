@@ -12,22 +12,13 @@ import (
 
 type usersView struct {
 	Error string
-	Rows  []userRowView
+	Users []data.UserRow
+	// LastAdminId is the sole admin's id when only one is left (0 otherwise);
+	// that account can be neither demoted nor deleted.
+	LastAdminId core.UserID
 }
 
-type userRowView struct {
-	Username       string
-	Role           string
-	IsSelf         bool
-	IsLastAdmin    bool
-	CanDelete      bool
-	Created        string
-	RoleAction     string
-	PasswordAction string
-	DeleteAction   string
-}
-
-func (a *App) usersViewModel(ctx context.Context, currentUser *CurrentUser, errorMessage string) (usersView, error) {
+func (a *App) usersViewModel(ctx context.Context, errorMessage string) (usersView, error) {
 	users, err := data.ListUsers(ctx, a.Db)
 	if err != nil {
 		return usersView{}, err
@@ -37,27 +28,19 @@ func (a *App) usersViewModel(ctx context.Context, currentUser *CurrentUser, erro
 		return usersView{}, err
 	}
 
-	model := usersView{Error: errorMessage}
-	for _, u := range users {
-		isSelf := u.Id == currentUser.Id
-		isLastAdmin := u.Role == core.UserAdmin.Slug() && adminCount <= 1
-		model.Rows = append(model.Rows, userRowView{
-			Username:       u.Username,
-			Role:           u.Role,
-			IsSelf:         isSelf,
-			IsLastAdmin:    isLastAdmin,
-			CanDelete:      !isSelf && !isLastAdmin,
-			Created:        formatDateTime(u.CreatedAt),
-			RoleAction:     fmt.Sprintf("/admin/users/%d/role", u.Id),
-			PasswordAction: fmt.Sprintf("/admin/users/%d/password", u.Id),
-			DeleteAction:   fmt.Sprintf("/admin/users/%d/delete", u.Id),
-		})
+	model := usersView{Error: errorMessage, Users: users}
+	if adminCount <= 1 {
+		for _, u := range users {
+			if u.Role == core.UserAdmin.Slug() {
+				model.LastAdminId = u.Id
+			}
+		}
 	}
 	return model, nil
 }
 
 func (a *App) renderUsersPage(ctx context.Context, w http.ResponseWriter, user *CurrentUser, errorMessage string) error {
-	model, err := a.usersViewModel(ctx, user, errorMessage)
+	model, err := a.usersViewModel(ctx, errorMessage)
 	if err != nil {
 		return err
 	}

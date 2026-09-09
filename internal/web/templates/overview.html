@@ -23,10 +23,10 @@
     <tbody>
       {{- range .Recent}}
       <tr>
-        <td><a class="mono" href="{{.EditUrl}}">{{.Display}}</a></td>
+        <td><a class="mono" href="/admin/short-urls/{{.Id}}/edit">{{.Authority}}/{{.ShortCode}}</a></td>
         <td><span class="truncate">{{.LongUrl}}</span></td>
-        <td>{{.Visits}}</td>
-        <td class="muted">{{.Created}}</td>
+        <td>{{.VisitCount}}</td>
+        <td class="muted">{{fmtDate .CreatedAt}}</td>
       </tr>
       {{- end}}
     </tbody>

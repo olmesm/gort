@@ -2,7 +2,6 @@ package web
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -19,17 +18,8 @@ func webhookEventFieldName(e core.WebhookEvent) string {
 type webhooksView struct {
 	Error       string
 	Secret      string
-	Rows        []webhookRowView
+	Webhooks    []data.WebhookRow
 	EventChecks []eventCheckView
-}
-
-type webhookRowView struct {
-	Name         string
-	Url          string
-	Events       []string
-	Enabled      bool
-	ToggleAction string
-	DeleteAction string
 }
 
 type eventCheckView struct {
@@ -43,21 +33,7 @@ func (a *App) webhooksViewModel(ctx context.Context, errorMessage, secret string
 	if err != nil {
 		return webhooksView{}, err
 	}
-	model := webhooksView{Error: errorMessage, Secret: secret}
-	for _, hook := range hooks {
-		var events []string
-		for _, e := range strings.Split(hook.Events, ",") {
-			events = append(events, strings.TrimSpace(e))
-		}
-		model.Rows = append(model.Rows, webhookRowView{
-			Name:         hook.Name,
-			Url:          hook.Url,
-			Events:       events,
-			Enabled:      hook.Enabled,
-			ToggleAction: fmt.Sprintf("/admin/webhooks/%d/toggle", hook.Id),
-			DeleteAction: fmt.Sprintf("/admin/webhooks/%d/delete", hook.Id),
-		})
-	}
+	model := webhooksView{Error: errorMessage, Secret: secret, Webhooks: hooks}
 	for _, e := range core.AllWebhookEvents {
 		model.EventChecks = append(model.EventChecks, eventCheckView{
 			Field:   webhookEventFieldName(e),

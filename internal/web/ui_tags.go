@@ -4,26 +4,19 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 
 	"github.com/olmesm/gort/internal/core"
 	"github.com/olmesm/gort/internal/data"
 )
 
 type tagTableView struct {
-	Rows  []tagRowView
+	Tags  []data.TagStatsRow
 	Pager pagerView
 }
 
-type tagRowView struct {
-	Name          string
-	FilterUrl     string
-	ShortUrlCount int64
-	VisitCount    int64
-}
-
 func tagTable(page core.Page[data.TagStatsRow]) tagTableView {
-	table := tagTableView{
+	return tagTableView{
+		Tags: page.Items,
 		Pager: newPager(page, func(p int) string {
 			if p == 1 {
 				return "/admin/tags"
@@ -31,15 +24,6 @@ func tagTable(page core.Page[data.TagStatsRow]) tagTableView {
 			return fmt.Sprintf("/admin/tags?page=%d", p)
 		}),
 	}
-	for _, t := range page.Items {
-		table.Rows = append(table.Rows, tagRowView{
-			Name:          t.Name,
-			FilterUrl:     "/admin/short-urls?tag=" + url.QueryEscape(t.Name),
-			ShortUrlCount: t.ShortUrlCount,
-			VisitCount:    t.VisitCount,
-		})
-	}
-	return table
 }
 
 type tagsView struct {

@@ -10,19 +10,7 @@ import (
 )
 
 type domainsView struct {
-	Rows []domainRowView
-}
-
-type domainRowView struct {
-	Authority               string
-	IsDefault               bool
-	ShortUrlCount           int64
-	VisitCount              int64
-	BaseUrlRedirect         string
-	Regular404Redirect      string
-	InvalidShortUrlRedirect string
-	RedirectsAction         string
-	DeleteAction            string
+	Domains []data.DomainStatsRow
 }
 
 type messageView struct {
@@ -37,21 +25,7 @@ func (a *App) uiListDomains(user *CurrentUser, w http.ResponseWriter, r *http.Re
 	if err != nil {
 		return err
 	}
-	model := domainsView{}
-	for _, d := range domains {
-		model.Rows = append(model.Rows, domainRowView{
-			Authority:               d.Authority,
-			IsDefault:               d.IsDefault,
-			ShortUrlCount:           d.ShortUrlCount,
-			VisitCount:              d.VisitCount,
-			BaseUrlRedirect:         valueOrEmpty(d.BaseUrlRedirect),
-			Regular404Redirect:      valueOrEmpty(d.Regular404Redirect),
-			InvalidShortUrlRedirect: valueOrEmpty(d.InvalidShortUrlRedirect),
-			RedirectsAction:         fmt.Sprintf("/admin/domains/%d/redirects", d.Id),
-			DeleteAction:            fmt.Sprintf("/admin/domains/%d/delete", d.Id),
-		})
-	}
-	return a.renderPage(w, http.StatusOK, "domains", user, "/admin/domains", "Domains", model)
+	return a.renderPage(w, http.StatusOK, "domains", user, "/admin/domains", "Domains", domainsView{Domains: domains})
 }
 
 func (a *App) renderDomainsMessage(w http.ResponseWriter, status int, user *CurrentUser, message string) error {
