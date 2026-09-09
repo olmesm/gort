@@ -12,26 +12,26 @@
     <tbody>
       {{- range .Users}}
       <tr>
-        <td>{{.Username}}{{if eq .Id $.User.Id}} <span class="badge gray">you</span>{{end}}</td>
+        <td>{{.Username}}{{if eq .ID $.User.ID}} <span class="badge gray">you</span>{{end}}</td>
         <td>
-          <form class="inline" method="post" action="/admin/users/{{.Id}}/role">
-            <select name="role"{{if eq .Id $.Data.LastAdminId}} disabled{{end}}>
+          <form class="inline" method="post" action="/admin/users/{{.ID}}/role">
+            <select name="role"{{if eq .ID $.Data.LastAdminID}} disabled{{end}}>
               <option value="user"{{if eq .Role "user"}} selected{{end}}>user</option>
               <option value="admin"{{if eq .Role "admin"}} selected{{end}}>admin</option>
             </select>
-            {{if ne .Id $.Data.LastAdminId}}<button class="secondary small">Set</button>{{end}}
+            {{if ne .ID $.Data.LastAdminID}}<button class="secondary small">Set</button>{{end}}
           </form>
         </td>
         <td class="muted">{{fmtDate .CreatedAt}}</td>
         <td>
-          <form class="inline" method="post" action="/admin/users/{{.Id}}/password">
+          <form class="inline" method="post" action="/admin/users/{{.ID}}/password">
             <input type="password" name="password" placeholder="New password" style="width:11rem">
             <button class="secondary small">Update</button>
           </form>
         </td>
         <td class="actions">
-          {{- if and (ne .Id $.User.Id) (ne .Id $.Data.LastAdminId)}}
-          <form class="inline" method="post" action="/admin/users/{{.Id}}/delete" onsubmit="return confirm('Delete this user?')">
+          {{- if and (ne .ID $.User.ID) (ne .ID $.Data.LastAdminID)}}
+          <form class="inline" method="post" action="/admin/users/{{.ID}}/delete" onsubmit="return confirm('Delete this user?')">
             <button class="danger small">Delete</button>
           </form>
           {{- end}}

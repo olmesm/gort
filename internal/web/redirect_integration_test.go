@@ -13,7 +13,7 @@ func createShort(t *testing.T, client *testClient, body string) string {
 	if resp.Code != http.StatusCreated {
 		t.Fatalf("create status %d: %s", resp.Code, resp.Body.String())
 	}
-	return parseJson(t, resp.Body.String())["shortCode"].(string)
+	return parseJSON(t, resp.Body.String())["shortCode"].(string)
 }
 
 func (c *testClient) getWithHeaders(target string, headers map[string]string) *httptest.ResponseRecorder {
@@ -33,7 +33,7 @@ func (c *testClient) getWithHeaders(target string, headers map[string]string) *h
 	return rec
 }
 
-func TestValidShortUrlsRedirectAndRecordAVisit(t *testing.T) {
+func TestValidShortURLsRedirectAndRecordAVisit(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.adminClient(t)
 	code := createShort(t, admin, `{"longUrl":"https://example.com/target"}`)
@@ -50,7 +50,7 @@ func TestValidShortUrlsRedirectAndRecordAVisit(t *testing.T) {
 		t.Fatalf("location %q", loc)
 	}
 
-	visits := parseJson(t, admin.get("/rest/v1/short-urls/"+code+"/visits").Body.String())
+	visits := parseJSON(t, admin.get("/rest/v1/short-urls/"+code+"/visits").Body.String())
 	visit := visits["data"].([]any)[0].(map[string]any)
 	if visit["referer"] != "https://google.com/" {
 		t.Errorf("referer: %v", visit["referer"])
@@ -109,7 +109,7 @@ func TestDeviceRulesPickTheRightTarget(t *testing.T) {
 	}
 }
 
-func TestMaxVisitsExhaustsTheShortUrl(t *testing.T) {
+func TestMaxVisitsExhaustsTheShortURL(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.adminClient(t)
 	code := createShort(t, admin, `{"longUrl":"https://example.com/limited","maxVisits":2}`)
@@ -146,7 +146,7 @@ func TestShortCodesAreScopedToTheirDomain(t *testing.T) {
 	admin := app.adminClient(t)
 	resp := admin.post("/rest/v1/short-urls",
 		`{"longUrl":"https://example.com/other-domain","customSlug":"scoped","domain":"links.test"}`)
-	doc := parseJson(t, resp.Body.String())
+	doc := parseJSON(t, resp.Body.String())
 	if doc["domain"] != "links.test" {
 		t.Fatalf("domain: %v", doc["domain"])
 	}
@@ -175,7 +175,7 @@ func TestUnknownShortCodesAreTrackedAsOrphanVisits(t *testing.T) {
 	}
 	visitor.get("/")
 
-	orphans := parseJson(t, admin.get("/rest/v1/visits/orphan").Body.String())
+	orphans := parseJSON(t, admin.get("/rest/v1/visits/orphan").Body.String())
 	items := orphans["data"].([]any)
 	if len(items) < 2 {
 		t.Fatalf("orphan count: %d", len(items))
@@ -192,7 +192,7 @@ func TestUnknownShortCodesAreTrackedAsOrphanVisits(t *testing.T) {
 	}
 }
 
-func TestDomainLevelBaseUrlRedirectWinsOverTheLandingPage(t *testing.T) {
+func TestDomainLevelBaseURLRedirectWinsOverTheLandingPage(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.adminClient(t)
 	admin.patch("/rest/v1/domains/redirects",
@@ -207,7 +207,7 @@ func TestDomainLevelBaseUrlRedirectWinsOverTheLandingPage(t *testing.T) {
 	}
 }
 
-func TestRobotsTxtListsCrawlableShortUrls(t *testing.T) {
+func TestRobotsTxtListsCrawlableShortURLs(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.adminClient(t)
 	code := createShort(t, admin, `{"longUrl":"https://example.com/crawl","crawlable":true}`)
@@ -221,7 +221,7 @@ func TestRobotsTxtListsCrawlableShortUrls(t *testing.T) {
 	}
 }
 
-func TestQrCodesAreServedInPngAndSvg(t *testing.T) {
+func TestQRCodesAreServedInPNGAndSVG(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.adminClient(t)
 	code := createShort(t, admin, `{"longUrl":"https://example.com/qr"}`)
@@ -250,7 +250,7 @@ func TestVisitsAreCountedPerRequest(t *testing.T) {
 	code := createShort(t, admin, `{"longUrl":"https://example.com/counted"}`)
 
 	app.client(t).get("/" + code)
-	doc := parseJson(t, admin.get("/rest/v1/short-urls/"+code).Body.String())
+	doc := parseJSON(t, admin.get("/rest/v1/short-urls/"+code).Body.String())
 	total := doc["visitsSummary"].(map[string]any)["total"].(float64)
 	if total != 1 {
 		t.Errorf("total visits: %v", total)

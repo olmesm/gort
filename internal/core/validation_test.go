@@ -5,17 +5,17 @@ import (
 	"testing"
 )
 
-func TestValidLongUrlsAreAccepted(t *testing.T) {
+func TestValidLongURLsAreAccepted(t *testing.T) {
 	for _, url := range []string{"https://example.com", "http://example.com/path?q=1#frag"} {
-		if _, err := NewLongUrl(url); err != nil {
+		if _, err := NewLongURL(url); err != nil {
 			t.Errorf("url %q rejected: %s", url, err)
 		}
 	}
 }
 
-func TestInvalidLongUrlsAreRejected(t *testing.T) {
+func TestInvalidLongURLsAreRejected(t *testing.T) {
 	for _, url := range []string{"", "nope", "ftp://example.com", "//relative", "example.com"} {
-		if _, err := NewLongUrl(url); err == nil {
+		if _, err := NewLongURL(url); err == nil {
 			t.Errorf("url %q accepted", url)
 		}
 	}
@@ -74,7 +74,7 @@ func TestQueryForwardingKeepsTheFragmentLast(t *testing.T) {
 	}
 }
 
-func TestQueryForwardingUrlEncodesValues(t *testing.T) {
+func TestQueryForwardingURLEncodesValues(t *testing.T) {
 	got := ForwardQuery("https://example.com/p", [][2]string{{"q", "a b&c"}})
 	if got != "https://example.com/p?q=a%20b%26c" {
 		t.Errorf("got %q", got)

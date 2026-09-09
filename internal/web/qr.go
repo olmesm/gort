@@ -14,22 +14,22 @@ import (
 
 // QR code rendering for short URLs.
 
-type QrFormat int
+type QRFormat int
 
 const (
-	QrPng QrFormat = iota
-	QrSvg
+	QRPNG QRFormat = iota
+	QRSVG
 )
 
-type QrOptions struct {
+type QROptions struct {
 	Size            int
 	Margin          int
 	ErrorCorrection qrcode.RecoveryLevel
-	Format          QrFormat
+	Format          QRFormat
 }
 
-func DefaultQrOptions() QrOptions {
-	return QrOptions{Size: 300, Margin: 1, ErrorCorrection: qrcode.Low, Format: QrPng}
+func DefaultQROptions() QROptions {
+	return QROptions{Size: 300, Margin: 1, ErrorCorrection: qrcode.Low, Format: QRPNG}
 }
 
 func clamp(v, lo, hi int) int {
@@ -42,8 +42,8 @@ func clamp(v, lo, hi int) int {
 	return v
 }
 
-func ParseQrOptions(size, margin *int, level, format string) QrOptions {
-	opts := DefaultQrOptions()
+func ParseQROptions(size, margin *int, level, format string) QROptions {
+	opts := DefaultQROptions()
 	if size != nil {
 		opts.Size = clamp(*size, 50, 1000)
 	}
@@ -59,7 +59,7 @@ func ParseQrOptions(size, margin *int, level, format string) QrOptions {
 		opts.ErrorCorrection = qrcode.Highest
 	}
 	if strings.ToLower(format) == "svg" {
-		opts.Format = QrSvg
+		opts.Format = QRSVG
 	}
 	return opts
 }
@@ -76,7 +76,7 @@ func qrModules(content string, level qrcode.RecoveryLevel) ([][]bool, error) {
 }
 
 // RespondQr renders a QR code for the given content as an HTTP response.
-func RespondQr(w http.ResponseWriter, content string, opts QrOptions) {
+func RespondQR(w http.ResponseWriter, content string, opts QROptions) {
 	modules, err := qrModules(content, opts.ErrorCorrection)
 	if err != nil {
 		http.Error(w, "could not generate QR code", http.StatusInternalServerError)
@@ -86,7 +86,7 @@ func RespondQr(w http.ResponseWriter, content string, opts QrOptions) {
 	total := n + opts.Margin*2
 
 	switch opts.Format {
-	case QrSvg:
+	case QRSVG:
 		var b strings.Builder
 		fmt.Fprintf(&b,
 			`<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d" shape-rendering="crispEdges">`,

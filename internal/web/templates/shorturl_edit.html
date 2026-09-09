@@ -5,14 +5,14 @@
 {{- end}}
 <div class="card">
   <p>
-    <a class="mono" href="{{.ShortUrl}}" target="_blank" rel="noreferrer">{{.ShortUrl}}</a> ·
-    <a href="{{.QrUrl}}" target="_blank">QR code</a> ·
-    <a href="{{.VisitsUrl}}">{{.VisitCount}} visits</a>
+    <a class="mono" href="{{.ShortURL}}" target="_blank" rel="noreferrer">{{.ShortURL}}</a> ·
+    <a href="{{.QRURL}}" target="_blank">QR code</a> ·
+    <a href="{{.VisitsURL}}">{{.VisitCount}} visits</a>
   </p>
   <form class="stack" method="post" action="{{.EditAction}}">
     <div>
       <label>Long URL *</label>
-      <input type="url" name="longUrl" value="{{.LongUrl}}" required>
+      <input type="url" name="longUrl" value="{{.LongURL}}" required>
     </div>
     <div>
       <label>Title</label>
@@ -69,7 +69,7 @@
         <tr>
           <td>{{.Priority}}</td>
           <td><ul class="rule-conditions">{{range .Conditions}}<li>{{.}}</li>{{end}}</ul></td>
-          <td><span class="truncate">{{.LongUrl}}</span></td>
+          <td><span class="truncate">{{.LongURL}}</span></td>
           <td class="actions">
             <form class="inline" method="post" action="{{$.Data.RuleDeleteAction}}">
               <input type="hidden" name="priority" value="{{.Priority}}">

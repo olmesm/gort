@@ -25,9 +25,9 @@ var staticFiles embed.FS
 // together and exposes the HTTP handler.
 type App struct {
 	Cfg    *AppConfig
-	Db     *data.Db
+	DB     *data.DB
 	Queues *WorkQueues
-	Geo    *GeoIpService
+	Geo    *GeoIPService
 	Logger *slog.Logger
 
 	sessionKey    []byte
@@ -52,7 +52,7 @@ func NewApp(cfg *AppConfig, logger *slog.Logger) (*App, error) {
 		return nil, err
 	}
 
-	db, err := data.Open(cfg.DbDialect, cfg.ConnectionString)
+	db, err := data.Open(cfg.DBDialect, cfg.ConnectionString)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func NewApp(cfg *AppConfig, logger *slog.Logger) (*App, error) {
 
 	a := &App{
 		Cfg:           cfg,
-		Db:            db,
+		DB:            db,
 		Queues:        NewWorkQueues(),
 		Logger:        logger,
 		sessionKey:    sessionKey,
@@ -73,13 +73,13 @@ func NewApp(cfg *AppConfig, logger *slog.Logger) (*App, error) {
 		geoClient:     &http.Client{Timeout: 5 * time.Minute},
 		limiter:       newRateLimiter(cfg.RateLimitPerMinute),
 	}
-	a.Geo = NewGeoIpService(cfg, logger)
+	a.Geo = NewGeoIPService(cfg, logger)
 	a.baseTemplates, a.pages = parseTemplates()
-	if cfg.OidcEnabled() {
-		if cfg.OidcClientID == "" {
+	if cfg.OIDCEnabled() {
+		if cfg.OIDCClientID == "" {
 			return nil, fmt.Errorf("GORT_OIDC_ISSUER is set but GORT_OIDC_CLIENT_ID is empty")
 		}
-		a.oidc = newOidcClient(cfg)
+		a.oidc = newOIDCClient(cfg)
 	}
 
 	if err := a.initialize(context.Background()); err != nil {
@@ -92,14 +92,14 @@ func NewApp(cfg *AppConfig, logger *slog.Logger) (*App, error) {
 // initialize runs migrations, registers the default domain and bootstraps
 // the first admin user.
 func (a *App) initialize(ctx context.Context) error {
-	if err := data.Migrate(ctx, a.Db); err != nil {
+	if err := data.Migrate(ctx, a.DB); err != nil {
 		return err
 	}
-	if _, err := data.EnsureDefaultDomain(ctx, a.Db, a.Cfg.DefaultDomain); err != nil {
+	if _, err := data.EnsureDefaultDomain(ctx, a.DB, a.Cfg.DefaultDomain); err != nil {
 		return err
 	}
 
-	userCount, err := data.CountUsers(ctx, a.Db)
+	userCount, err := data.CountUsers(ctx, a.DB)
 	if err != nil {
 		return err
 	}
@@ -118,7 +118,7 @@ func (a *App) initialize(ctx context.Context) error {
 			password = base64.RawURLEncoding.EncodeToString(bytes)
 			generated = true
 		}
-		created, err := data.InsertUser(ctx, a.Db, username, HashPassword(password), core.UserAdmin)
+		created, err := data.InsertUser(ctx, a.DB, username, HashPassword(password), core.UserAdmin)
 		if err != nil {
 			return err
 		}
@@ -201,38 +201,38 @@ func (a *App) buildRouter() *http.ServeMux {
 	// REST API
 	mux.Handle("GET /rest/health", a.handle(a.handleHealth))
 
-	mux.Handle("GET /rest/v1/short-urls", a.requireApiKey(a.apiListShortUrls))
-	mux.Handle("POST /rest/v1/short-urls", a.requireApiKey(a.apiCreateShortUrl))
-	mux.Handle("GET /rest/v1/short-urls/{code}", a.requireApiKey(a.apiGetShortUrl))
-	mux.Handle("PATCH /rest/v1/short-urls/{code}", a.requireApiKey(a.apiEditShortUrl))
-	mux.Handle("DELETE /rest/v1/short-urls/{code}", a.requireApiKey(a.apiDeleteShortUrl))
-	mux.Handle("GET /rest/v1/short-urls/{code}/redirect-rules", a.requireApiKey(a.apiGetRules))
-	mux.Handle("POST /rest/v1/short-urls/{code}/redirect-rules", a.requireApiKey(a.apiSetRules))
-	mux.Handle("GET /rest/v1/short-urls/{code}/visits", a.requireApiKey(a.apiListShortUrlVisits))
-	mux.Handle("DELETE /rest/v1/short-urls/{code}/visits", a.requireApiKey(a.apiDeleteShortUrlVisits))
+	mux.Handle("GET /rest/v1/short-urls", a.requireAPIKey(a.apiListShortURLs))
+	mux.Handle("POST /rest/v1/short-urls", a.requireAPIKey(a.apiCreateShortURL))
+	mux.Handle("GET /rest/v1/short-urls/{code}", a.requireAPIKey(a.apiGetShortURL))
+	mux.Handle("PATCH /rest/v1/short-urls/{code}", a.requireAPIKey(a.apiEditShortURL))
+	mux.Handle("DELETE /rest/v1/short-urls/{code}", a.requireAPIKey(a.apiDeleteShortURL))
+	mux.Handle("GET /rest/v1/short-urls/{code}/redirect-rules", a.requireAPIKey(a.apiGetRules))
+	mux.Handle("POST /rest/v1/short-urls/{code}/redirect-rules", a.requireAPIKey(a.apiSetRules))
+	mux.Handle("GET /rest/v1/short-urls/{code}/visits", a.requireAPIKey(a.apiListShortURLVisits))
+	mux.Handle("DELETE /rest/v1/short-urls/{code}/visits", a.requireAPIKey(a.apiDeleteShortURLVisits))
 
-	mux.Handle("GET /rest/v1/tags", a.requireApiKey(a.apiListTags))
-	mux.Handle("PUT /rest/v1/tags", a.requireApiKey(a.apiRenameTag))
-	mux.Handle("DELETE /rest/v1/tags", a.requireApiKey(a.apiDeleteTags))
-	mux.Handle("GET /rest/v1/tags/{tag}/visits", a.requireApiKey(a.apiTagVisits))
+	mux.Handle("GET /rest/v1/tags", a.requireAPIKey(a.apiListTags))
+	mux.Handle("PUT /rest/v1/tags", a.requireAPIKey(a.apiRenameTag))
+	mux.Handle("DELETE /rest/v1/tags", a.requireAPIKey(a.apiDeleteTags))
+	mux.Handle("GET /rest/v1/tags/{tag}/visits", a.requireAPIKey(a.apiTagVisits))
 
-	mux.Handle("GET /rest/v1/domains", a.requireApiKey(a.apiListDomains))
+	mux.Handle("GET /rest/v1/domains", a.requireAPIKey(a.apiListDomains))
 	mux.Handle("POST /rest/v1/domains", a.requireAdminKey(a.apiCreateDomain))
 	mux.Handle("PATCH /rest/v1/domains/redirects", a.requireAdminKey(a.apiSetDomainRedirects))
 	mux.Handle("DELETE /rest/v1/domains/{authority}", a.requireAdminKey(a.apiDeleteDomain))
-	mux.Handle("GET /rest/v1/domains/{authority}/visits", a.requireApiKey(a.apiDomainVisits))
+	mux.Handle("GET /rest/v1/domains/{authority}/visits", a.requireAPIKey(a.apiDomainVisits))
 
-	mux.Handle("GET /rest/v1/visits", a.requireApiKey(a.apiVisitsOverview))
-	mux.Handle("GET /rest/v1/visits/non-orphan", a.requireApiKey(a.apiListNonOrphanVisits))
-	mux.Handle("GET /rest/v1/visits/orphan", a.requireApiKey(a.apiListOrphanVisits))
-	mux.Handle("DELETE /rest/v1/visits/orphan", a.requireApiKey(a.apiDeleteOrphanVisits))
-	mux.Handle("GET /rest/v1/stats/visits-per-day", a.requireApiKey(a.apiVisitsPerDay))
-	mux.Handle("GET /rest/v1/stats/breakdown", a.requireApiKey(a.apiBreakdown))
+	mux.Handle("GET /rest/v1/visits", a.requireAPIKey(a.apiVisitsOverview))
+	mux.Handle("GET /rest/v1/visits/non-orphan", a.requireAPIKey(a.apiListNonOrphanVisits))
+	mux.Handle("GET /rest/v1/visits/orphan", a.requireAPIKey(a.apiListOrphanVisits))
+	mux.Handle("DELETE /rest/v1/visits/orphan", a.requireAPIKey(a.apiDeleteOrphanVisits))
+	mux.Handle("GET /rest/v1/stats/visits-per-day", a.requireAPIKey(a.apiVisitsPerDay))
+	mux.Handle("GET /rest/v1/stats/breakdown", a.requireAPIKey(a.apiBreakdown))
 
-	mux.Handle("GET /rest/v1/api-keys", a.requireAdminKey(a.apiListApiKeys))
-	mux.Handle("POST /rest/v1/api-keys", a.requireAdminKey(a.apiCreateApiKey))
-	mux.Handle("PATCH /rest/v1/api-keys/{id}", a.requireAdminKey(a.apiPatchApiKey))
-	mux.Handle("DELETE /rest/v1/api-keys/{id}", a.requireAdminKey(a.apiDeleteApiKey))
+	mux.Handle("GET /rest/v1/api-keys", a.requireAdminKey(a.apiListAPIKeys))
+	mux.Handle("POST /rest/v1/api-keys", a.requireAdminKey(a.apiCreateAPIKey))
+	mux.Handle("PATCH /rest/v1/api-keys/{id}", a.requireAdminKey(a.apiPatchAPIKey))
+	mux.Handle("DELETE /rest/v1/api-keys/{id}", a.requireAdminKey(a.apiDeleteAPIKey))
 
 	mux.Handle("GET /rest/v1/webhooks", a.requireAdminKey(a.apiListWebhooks))
 	mux.Handle("POST /rest/v1/webhooks", a.requireAdminKey(a.apiCreateWebhook))
@@ -244,19 +244,19 @@ func (a *App) buildRouter() *http.ServeMux {
 	mux.Handle("GET /admin/login", a.handle(a.uiLoginForm))
 	mux.Handle("POST /admin/login", a.handle(a.uiLogin))
 	mux.Handle("POST /admin/logout", a.handle(a.uiLogout))
-	mux.Handle("GET /admin/oidc/login", a.handle(a.uiOidcLogin))
-	mux.Handle("GET /admin/oidc/callback", a.handle(a.uiOidcCallback))
+	mux.Handle("GET /admin/oidc/login", a.handle(a.uiOIDCLogin))
+	mux.Handle("GET /admin/oidc/callback", a.handle(a.uiOIDCCallback))
 
-	mux.Handle("GET /admin/short-urls", a.requireUser(a.uiListShortUrls))
-	mux.Handle("GET /admin/short-urls/new", a.requireUser(a.uiCreateShortUrlForm))
-	mux.Handle("POST /admin/short-urls/new", a.requireUser(a.uiCreateShortUrl))
-	mux.Handle("GET /admin/short-urls/{id}/edit", a.requireUser(a.uiEditShortUrlForm))
-	mux.Handle("POST /admin/short-urls/{id}/edit", a.requireUser(a.uiEditShortUrl))
+	mux.Handle("GET /admin/short-urls", a.requireUser(a.uiListShortURLs))
+	mux.Handle("GET /admin/short-urls/new", a.requireUser(a.uiCreateShortURLForm))
+	mux.Handle("POST /admin/short-urls/new", a.requireUser(a.uiCreateShortURL))
+	mux.Handle("GET /admin/short-urls/{id}/edit", a.requireUser(a.uiEditShortURLForm))
+	mux.Handle("POST /admin/short-urls/{id}/edit", a.requireUser(a.uiEditShortURL))
 	mux.Handle("POST /admin/short-urls/{id}/rules/add", a.requireUser(a.uiAddRule))
 	mux.Handle("POST /admin/short-urls/{id}/rules/delete", a.requireUser(a.uiDeleteRule))
-	mux.Handle("POST /admin/short-urls/{id}/delete", a.requireUser(a.uiDeleteShortUrl))
-	mux.Handle("POST /admin/short-urls/{id}/visits/delete", a.requireUser(a.uiDeleteShortUrlVisits))
-	mux.Handle("GET /admin/short-urls/{id}/visits", a.requireUser(a.uiShortUrlVisits))
+	mux.Handle("POST /admin/short-urls/{id}/delete", a.requireUser(a.uiDeleteShortURL))
+	mux.Handle("POST /admin/short-urls/{id}/visits/delete", a.requireUser(a.uiDeleteShortURLVisits))
+	mux.Handle("GET /admin/short-urls/{id}/visits", a.requireUser(a.uiShortURLVisits))
 
 	mux.Handle("GET /admin/visits/orphan", a.requireUser(a.uiOrphanVisits))
 	mux.Handle("POST /admin/visits/orphan/delete", a.requireAdmin(a.uiDeleteOrphanVisits))
@@ -270,10 +270,10 @@ func (a *App) buildRouter() *http.ServeMux {
 	mux.Handle("POST /admin/domains/{id}/redirects", a.requireAdmin(a.uiSetDomainRedirects))
 	mux.Handle("POST /admin/domains/{id}/delete", a.requireAdmin(a.uiDeleteDomain))
 
-	mux.Handle("GET /admin/api-keys", a.requireAdmin(a.uiListApiKeys))
-	mux.Handle("POST /admin/api-keys", a.requireAdmin(a.uiCreateApiKey))
-	mux.Handle("POST /admin/api-keys/{id}/toggle", a.requireAdmin(a.uiToggleApiKey))
-	mux.Handle("POST /admin/api-keys/{id}/delete", a.requireAdmin(a.uiDeleteApiKey))
+	mux.Handle("GET /admin/api-keys", a.requireAdmin(a.uiListAPIKeys))
+	mux.Handle("POST /admin/api-keys", a.requireAdmin(a.uiCreateAPIKey))
+	mux.Handle("POST /admin/api-keys/{id}/toggle", a.requireAdmin(a.uiToggleAPIKey))
+	mux.Handle("POST /admin/api-keys/{id}/delete", a.requireAdmin(a.uiDeleteAPIKey))
 
 	mux.Handle("GET /admin/users", a.requireAdmin(a.uiListUsers))
 	mux.Handle("POST /admin/users", a.requireAdmin(a.uiCreateUser))
@@ -288,10 +288,10 @@ func (a *App) buildRouter() *http.ServeMux {
 
 	// Public
 	mux.Handle("GET /robots.txt", a.handle(a.handleRobots))
-	mux.Handle("GET /{code}/qr-code", a.handle(a.handleQrCode))
-	mux.Handle("GET /{$}", a.handle(a.handleBaseUrl))
+	mux.Handle("GET /{code}/qr-code", a.handle(a.handleQRCode))
+	mux.Handle("GET /{$}", a.handle(a.handleBaseURL))
 	// A "GET" pattern also serves HEAD requests.
-	mux.Handle("GET /", a.handle(a.handleShortUrl))
+	mux.Handle("GET /", a.handle(a.handleShortURL))
 
 	return mux
 }

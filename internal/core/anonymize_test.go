@@ -20,7 +20,7 @@ func TestGarbageInputYieldsEmpty(t *testing.T) {
 	}
 }
 
-func TestCidrMatching(t *testing.T) {
+func TestCIDRMatching(t *testing.T) {
 	cases := []struct {
 		cidr     string
 		ip       string
@@ -38,14 +38,14 @@ func TestCidrMatching(t *testing.T) {
 		{"2001:db8::/32", "2001:db9::1", false},
 	}
 	for _, tc := range cases {
-		if got := IPInCidr(tc.cidr, tc.ip); got != tc.expected {
+		if got := IPInCIDR(tc.cidr, tc.ip); got != tc.expected {
 			t.Errorf("IPInCidr(%q, %q) = %v, want %v", tc.cidr, tc.ip, got, tc.expected)
 		}
 	}
 }
 
 func TestMixedFamiliesNeverMatch(t *testing.T) {
-	if IPInCidr("10.0.0.0/8", "2001:db8::1") {
+	if IPInCIDR("10.0.0.0/8", "2001:db8::1") {
 		t.Error("ipv6 address must not match ipv4 cidr")
 	}
 }

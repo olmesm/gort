@@ -13,7 +13,7 @@ import (
 )
 
 // PaginationDto is the paged REST response envelope.
-type PaginationDto struct {
+type PaginationDTO struct {
 	CurrentPage        int   `json:"currentPage"`
 	PagesCount         int   `json:"pagesCount"`
 	ItemsPerPage       int   `json:"itemsPerPage"`
@@ -21,19 +21,19 @@ type PaginationDto struct {
 	TotalItems         int64 `json:"totalItems"`
 }
 
-type PageDto[T any] struct {
+type PageDTO[T any] struct {
 	Data       []T           `json:"data"`
-	Pagination PaginationDto `json:"pagination"`
+	Pagination PaginationDTO `json:"pagination"`
 }
 
-func NewPageDto[A, B any](page core.Page[A], mapItem func(A) B) PageDto[B] {
+func NewPageDTO[A, B any](page core.Page[A], mapItem func(A) B) PageDTO[B] {
 	items := make([]B, len(page.Items))
 	for i, item := range page.Items {
 		items[i] = mapItem(item)
 	}
-	return PageDto[B]{
+	return PageDTO[B]{
 		Data: items,
-		Pagination: PaginationDto{
+		Pagination: PaginationDTO{
 			CurrentPage:        page.CurrentPage,
 			PagesCount:         page.TotalPages(),
 			ItemsPerPage:       page.ItemsPerPage,
@@ -43,15 +43,15 @@ func NewPageDto[A, B any](page core.Page[A], mapItem func(A) B) PageDto[B] {
 	}
 }
 
-type VisitDto struct {
+type VisitDTO struct {
 	Date         time.Time `json:"date"`
 	Referer      *string   `json:"referer,omitempty"`
 	UserAgent    *string   `json:"userAgent,omitempty"`
 	Browser      *string   `json:"browser,omitempty"`
-	Os           *string   `json:"os,omitempty"`
+	OS           *string   `json:"os,omitempty"`
 	Device       *string   `json:"device,omitempty"`
 	PotentialBot bool      `json:"potentialBot"`
-	VisitedUrl   *string   `json:"visitedUrl,omitempty"`
+	VisitedURL   *string   `json:"visitedUrl,omitempty"`
 	CountryCode  *string   `json:"countryCode,omitempty"`
 	Country      *string   `json:"country,omitempty"`
 	City         *string   `json:"city,omitempty"`
@@ -59,16 +59,16 @@ type VisitDto struct {
 	Longitude    *float64  `json:"longitude,omitempty"`
 }
 
-func NewVisitDto(v data.VisitRow) VisitDto {
-	return VisitDto{
+func NewVisitDTO(v data.VisitRow) VisitDTO {
+	return VisitDTO{
 		Date:         v.VisitedAt,
 		Referer:      v.Referer,
 		UserAgent:    v.UserAgent,
 		Browser:      v.Browser,
-		Os:           v.Os,
+		OS:           v.OS,
 		Device:       v.Device,
 		PotentialBot: v.IsBot,
-		VisitedUrl:   v.VisitedUrl,
+		VisitedURL:   v.VisitedURL,
 		CountryCode:  v.CountryCode,
 		Country:      v.CountryName,
 		City:         v.City,
@@ -148,28 +148,28 @@ func visitFiltersFromQuery(q url.Values) data.VisitFilters {
 // ---- API key scoping ----
 
 // applyKeyScope restricts list filters to what an API key may see.
-func applyKeyScope(key *AuthenticatedKey, filters data.ShortUrlFilters) data.ShortUrlFilters {
+func applyKeyScope(key *AuthenticatedKey, filters data.ShortURLFilters) data.ShortURLFilters {
 	switch key.Role.Kind {
 	case core.RoleAuthor:
-		id := key.Id()
-		filters.AuthorApiKeyId = &id
+		id := key.ID()
+		filters.AuthorAPIKeyID = &id
 	case core.RoleDomain:
 		id := key.Role.DomainID
-		filters.DomainId = &id
+		filters.DomainID = &id
 	}
 	return filters
 }
 
 // canAccessShortUrl says whether this key may see/manipulate the given short
 // URL.
-func canAccessShortUrl(key *AuthenticatedKey, detail *data.ShortUrlDetail) bool {
+func canAccessShortURL(key *AuthenticatedKey, detail *data.ShortURLDetail) bool {
 	switch key.Role.Kind {
 	case core.RoleAdmin:
 		return true
 	case core.RoleAuthor:
-		return detail.AuthorApiKeyId != nil && *detail.AuthorApiKeyId == key.Row.Id
+		return detail.AuthorAPIKeyID != nil && *detail.AuthorAPIKeyID == key.Row.ID
 	case core.RoleDomain:
-		return detail.DomainId == key.Role.DomainID
+		return detail.DomainID == key.Role.DomainID
 	default:
 		return false
 	}
@@ -178,7 +178,7 @@ func canAccessShortUrl(key *AuthenticatedKey, detail *data.ShortUrlDetail) bool 
 // findAccessibleShortUrl resolves a short URL by code (+ optional ?domain=)
 // and checks key access. On failure it writes the error response and returns
 // nil.
-func (a *App) findAccessibleShortUrl(ctx context.Context, key *AuthenticatedKey, code, domainAuthority string) (*data.ShortUrlDetail, error) {
+func (a *App) findAccessibleShortURL(ctx context.Context, key *AuthenticatedKey, code, domainAuthority string) (*data.ShortURLDetail, error) {
 	domain, err := a.ResolveNamedDomain(ctx, domainAuthority)
 	if err != nil {
 		return nil, err
@@ -186,11 +186,11 @@ func (a *App) findAccessibleShortUrl(ctx context.Context, key *AuthenticatedKey,
 	if domain == nil {
 		return nil, NotFound(fmt.Sprintf("Domain '%s' is not registered.", domainAuthority))
 	}
-	detail, err := data.ShortUrlDetailByCode(ctx, a.Db, domain.Id, code)
+	detail, err := data.ShortURLDetailByCode(ctx, a.DB, domain.ID, code)
 	if err != nil {
 		return nil, err
 	}
-	if detail == nil || !canAccessShortUrl(key, detail) {
+	if detail == nil || !canAccessShortURL(key, detail) {
 		// Do not leak existence to keys that cannot see the URL.
 		return nil, NotFound(fmt.Sprintf("No short URL found for code '%s'.", code))
 	}

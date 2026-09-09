@@ -8,24 +8,24 @@ import (
 
 // LongUrl is an absolute http(s) URL that has passed validation. The zero
 // value is invalid; values come only from NewLongUrl.
-type LongUrl struct{ value string }
+type LongURL struct{ value string }
 
-func (u LongUrl) Value() string { return u.value }
+func (u LongURL) Value() string { return u.value }
 
 // NewLongUrl parses and validates a long URL.
-func NewLongUrl(raw string) (LongUrl, error) {
+func NewLongURL(raw string) (LongURL, error) {
 	if strings.TrimSpace(raw) == "" {
-		return LongUrl{}, errors.New("The long URL is required.")
+		return LongURL{}, errors.New("The long URL is required.")
 	}
 	raw = strings.TrimSpace(raw)
 	parsed, err := url.Parse(raw)
 	if err != nil || !parsed.IsAbs() || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
-		return LongUrl{}, errors.New("The long URL must be an absolute http(s) URL.")
+		return LongURL{}, errors.New("The long URL must be an absolute http(s) URL.")
 	}
 	if len(raw) > 2048 {
-		return LongUrl{}, errors.New("The long URL cannot be longer than 2048 characters.")
+		return LongURL{}, errors.New("The long URL cannot be longer than 2048 characters.")
 	}
-	return LongUrl{value: raw}, nil
+	return LongURL{value: raw}, nil
 }
 
 // TagName is a normalized tag name: trimmed, lowercase, comma-free.
@@ -66,7 +66,7 @@ func NewTagNames(tags []string) ([]TagName, error) {
 }
 
 // ParseTagCsv splits a comma-separated form field into tags.
-func ParseTagCsv(csv string) ([]TagName, error) {
+func ParseTagCSV(csv string) ([]TagName, error) {
 	var parts []string
 	for _, p := range strings.Split(csv, ",") {
 		if p = strings.TrimSpace(p); p != "" {
@@ -115,9 +115,9 @@ func NewDomainAuthority(authority string) (DomainAuthority, error) {
 // string, when query forwarding is enabled. Params already present in the
 // target are kept; incoming params are appended. Operates on the resolved
 // target (which may come from a redirect rule), hence plain strings.
-func ForwardQuery(targetUrl string, incoming [][2]string) string {
+func ForwardQuery(targetURL string, incoming [][2]string) string {
 	if len(incoming) == 0 {
-		return targetUrl
+		return targetURL
 	}
 	var encoded []string
 	for _, kv := range incoming {
@@ -130,9 +130,9 @@ func ForwardQuery(targetUrl string, incoming [][2]string) string {
 	}
 	joined := strings.Join(encoded, "&")
 
-	base, fragment := targetUrl, ""
-	if idx := strings.IndexByte(targetUrl, '#'); idx >= 0 {
-		base, fragment = targetUrl[:idx], targetUrl[idx:]
+	base, fragment := targetURL, ""
+	if idx := strings.IndexByte(targetURL, '#'); idx >= 0 {
+		base, fragment = targetURL[:idx], targetURL[idx:]
 	}
 	sep := "?"
 	if strings.Contains(base, "?") {

@@ -39,17 +39,17 @@ func newTestApp(t *testing.T) *App {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = app.Db.Close() })
+	t.Cleanup(func() { _ = app.DB.Close() })
 	return app
 }
 
 // createApiKey seeds an API key with the given role and returns the
 // plaintext key.
-func createApiKey(t *testing.T, app *App, role core.ApiKeyRole) string {
+func createAPIKey(t *testing.T, app *App, role core.APIKeyRole) string {
 	t.Helper()
-	plain := GenerateApiKey()
+	plain := GenerateAPIKey()
 	name := "test"
-	if _, err := data.InsertApiKey(t.Context(), app.Db, HashApiKey(plain), &name, role, nil); err != nil {
+	if _, err := data.InsertAPIKey(t.Context(), app.DB, HashAPIKey(plain), &name, role, nil); err != nil {
 		t.Fatal(err)
 	}
 	return plain
@@ -67,7 +67,7 @@ func (app *App) client(t *testing.T) *testClient {
 
 func (app *App) adminClient(t *testing.T) *testClient {
 	c := app.client(t)
-	c.headers["X-Api-Key"] = createApiKey(t, app, core.AdminRole())
+	c.headers["X-Api-Key"] = createAPIKey(t, app, core.AdminRole())
 	return c
 }
 

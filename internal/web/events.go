@@ -8,17 +8,17 @@ import (
 )
 
 // VisitedShortUrl is the short URL a visit event refers to.
-type VisitedShortUrl struct {
+type VisitedShortURL struct {
 	ShortCode string `json:"shortCode"`
 	Domain    string `json:"domain"`
-	LongUrl   string `json:"longUrl"`
+	LongURL   string `json:"longUrl"`
 }
 
 // VisitEventPayload is what a visit event carries to webhook subscribers.
 type VisitEventPayload struct {
 	VisitType    string           `json:"visitType"`
-	ShortUrl     *VisitedShortUrl `json:"shortUrl,omitempty"`
-	VisitedUrl   *string          `json:"visitedUrl,omitempty"`
+	ShortURL     *VisitedShortURL `json:"shortUrl,omitempty"`
+	VisitedURL   *string          `json:"visitedUrl,omitempty"`
 	Referer      *string          `json:"referer,omitempty"`
 	UserAgent    *string          `json:"userAgent,omitempty"`
 	PotentialBot bool             `json:"potentialBot"`
@@ -30,12 +30,12 @@ type VisitEventPayload struct {
 type DomainEvent struct {
 	kind core.WebhookEvent
 	// Exactly one of these is set, matching the kind.
-	urlCreated *ShortUrlDto
+	urlCreated *ShortURLDTO
 	visit      *VisitEventPayload
 }
 
-func UrlCreatedEvent(dto ShortUrlDto) DomainEvent {
-	return DomainEvent{kind: core.EventUrlCreated, urlCreated: &dto}
+func URLCreatedEvent(dto ShortURLDTO) DomainEvent {
+	return DomainEvent{kind: core.EventURLCreated, urlCreated: &dto}
 }
 
 func VisitRecordedEvent(payload VisitEventPayload) DomainEvent {

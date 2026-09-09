@@ -36,7 +36,7 @@ type tagsView struct {
 func (a *App) uiListTags(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 	q := r.URL.Query()
 	search := q.Get("search")
-	result, err := data.ListTags(r.Context(), a.Db, search, queryIntDefault(q, "page", 1), 25)
+	result, err := data.ListTags(r.Context(), a.DB, search, queryIntDefault(q, "page", 1), 25)
 	if err != nil {
 		return err
 	}
@@ -60,7 +60,7 @@ func (a *App) uiRenameTag(user *CurrentUser, w http.ResponseWriter, r *http.Requ
 	newName, err := core.NewTagName(r.PostFormValue("newName"))
 	if err != nil {
 		message = err.Error()
-	} else if err := data.RenameTag(r.Context(), a.Db, oldName, newName); err != nil {
+	} else if err := data.RenameTag(r.Context(), a.DB, oldName, newName); err != nil {
 		var renameErr *data.TagRenameError
 		if errors.As(err, &renameErr) {
 			message = renameErr.Error()
@@ -73,7 +73,7 @@ func (a *App) uiRenameTag(user *CurrentUser, w http.ResponseWriter, r *http.Requ
 		return redirect(w, r, "/admin/tags")
 	}
 
-	result, err := data.ListTags(r.Context(), a.Db, "", 1, 25)
+	result, err := data.ListTags(r.Context(), a.DB, "", 1, 25)
 	if err != nil {
 		return err
 	}
@@ -87,7 +87,7 @@ func (a *App) uiRenameTag(user *CurrentUser, w http.ResponseWriter, r *http.Requ
 // POST /admin/tags/delete
 func (a *App) uiDeleteTag(_ *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 	if name := r.PostFormValue("name"); name != "" {
-		if _, err := data.DeleteTags(r.Context(), a.Db, []string{name}); err != nil {
+		if _, err := data.DeleteTags(r.Context(), a.DB, []string{name}); err != nil {
 			return err
 		}
 	}

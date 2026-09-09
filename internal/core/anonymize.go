@@ -31,7 +31,7 @@ func AnonymizeIP(ip string) string {
 // IPInCidr checks whether an IP falls in a CIDR range (used by redirect
 // rules). A bare address means exact match. Mixed address families never
 // match.
-func IPInCidr(cidr, ip string) bool {
+func IPInCIDR(cidr, ip string) bool {
 	addr := net.ParseIP(ip)
 	if addr == nil {
 		return false

@@ -1,12 +1,12 @@
 {{define "pager"}}
 <div class="pager">
-  {{- if .PrevUrl}}<a class="btn secondary small" href="{{.PrevUrl}}">← Prev</a>{{end}}
+  {{- if .PrevURL}}<a class="btn secondary small" href="{{.PrevURL}}">← Prev</a>{{end}}
   <span class="info">Page {{.CurrentPage}} of {{.TotalPages}} · {{.TotalItems}} items</span>
-  {{- if .NextUrl}}<a class="btn secondary small" href="{{.NextUrl}}">Next →</a>{{end}}
+  {{- if .NextURL}}<a class="btn secondary small" href="{{.NextURL}}">Next →</a>{{end}}
 </div>
 {{end}}
 
-{{define "sort-header"}}<th><a href="{{.Url}}" hx-get="{{.Url}}" hx-target="#su-table" hx-swap="outerHTML" hx-push-url="true">{{.Label}}</a></th>{{end}}
+{{define "sort-header"}}<th><a href="{{.URL}}" hx-get="{{.URL}}" hx-target="#su-table" hx-swap="outerHTML" hx-push-url="true">{{.Label}}</a></th>{{end}}
 
 {{define "su-table"}}
 <div id="su-table">
@@ -16,7 +16,7 @@
         <tr>
           {{template "sort-header" .HeadShortCode}}
           {{template "sort-header" .HeadTitle}}
-          {{template "sort-header" .HeadLongUrl}}
+          {{template "sort-header" .HeadLongURL}}
           <th>Tags</th>
           <th>Group</th>
           {{template "sort-header" .HeadVisits}}
@@ -27,14 +27,14 @@
       <tbody>
         {{- range .Rows}}
         <tr>
-          <td><a class="mono" href="{{.ShortUrl}}" target="_blank" rel="noreferrer">{{.Display}}</a></td>
+          <td><a class="mono" href="{{.ShortURL}}" target="_blank" rel="noreferrer">{{.Display}}</a></td>
           <td><span class="truncate" style="max-width:200px">{{.Title}}</span></td>
-          <td><a class="truncate" href="{{.LongUrl}}" target="_blank" rel="noreferrer">{{.LongUrl}}</a></td>
+          <td><a class="truncate" href="{{.LongURL}}" target="_blank" rel="noreferrer">{{.LongURL}}</a></td>
           <td>{{range .Tags}}<span class="badge">{{.}}</span>{{end}}</td>
           <td>{{if .Group}}<span class="badge gray">{{.Group}}</span>{{else}}—{{end}}</td>
-          <td><a href="{{.VisitsUrl}}">{{.VisitsLabel}}</a></td>
+          <td><a href="{{.VisitsURL}}">{{.VisitsLabel}}</a></td>
           <td class="muted">{{.Created}}</td>
-          <td class="actions"><a class="btn secondary small" href="{{.EditUrl}}">Edit</a></td>
+          <td class="actions"><a class="btn secondary small" href="{{.EditURL}}">Edit</a></td>
         </tr>
         {{- end}}
       </tbody>
@@ -55,7 +55,7 @@
         {{- range .Tags}}
         <tr>
           <td><span class="badge">{{.Name}}</span></td>
-          <td><a href="/admin/short-urls?tag={{.Name}}">{{.ShortUrlCount}}</a></td>
+          <td><a href="/admin/short-urls?tag={{.Name}}">{{.ShortURLCount}}</a></td>
           <td>{{.VisitCount}}</td>
           <td>
             <form class="inline" method="post" action="/admin/tags/rename">
@@ -149,7 +149,7 @@
       <thead>
         <tr>
           <th>When (UTC)</th>
-          {{- if .ShowVisitedUrl}}<th>Visited URL</th>{{end}}
+          {{- if .ShowVisitedURL}}<th>Visited URL</th>{{end}}
           <th>Location</th>
           <th>Browser / OS</th>
           <th>Device</th>
@@ -161,9 +161,9 @@
         {{- range .Visits}}
         <tr>
           <td class="muted">{{.When}}</td>
-          {{- if $.ShowVisitedUrl}}<td><span class="truncate mono" style="max-width:260px">{{.VisitedUrl}}</span></td>{{end}}
+          {{- if $.ShowVisitedURL}}<td><span class="truncate mono" style="max-width:260px">{{.VisitedURL}}</span></td>{{end}}
           <td>{{.Location}}</td>
-          <td>{{.BrowserOs}}</td>
+          <td>{{.BrowserOS}}</td>
           <td>{{.Device}}</td>
           <td>{{if .Referer}}<span class="truncate" style="max-width:220px">{{.Referer}}</span>{{else}}—{{end}}</td>
           <td>{{if .IsBot}}<span class="badge red">bot</span>{{end}}</td>

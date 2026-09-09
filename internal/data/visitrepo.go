@@ -10,17 +10,17 @@ import (
 )
 
 type NewVisit struct {
-	ShortUrlId *core.ShortUrlID
+	ShortURLID *core.ShortURLID
 	VisitType  core.VisitType
 	VisitedAt  time.Time
 	Referer    *string
 	UserAgent  *string
 	Browser    *string
-	Os         *string
+	OS         *string
 	Device     core.Device
 	IsBot      bool
-	RemoteIp   *string
-	VisitedUrl *string
+	RemoteIP   *string
+	VisitedURL *string
 }
 
 // GeoInfo is the geolocation result for one visit. All nil = lookup found
@@ -50,19 +50,19 @@ const visitSelectCols = `id, short_url_id, visit_type, visited_at, referer, user
 
 func scanVisitRow(r rowScanner) (*VisitRow, error) {
 	var v VisitRow
-	err := r.Scan(&v.Id, &v.ShortUrlId, &v.VisitType, asTime(&v.VisitedAt), &v.Referer, &v.UserAgent,
-		&v.Browser, &v.Os, &v.Device, &v.IsBot, &v.RemoteIp, &v.CountryCode, &v.CountryName, &v.City,
-		&v.Latitude, &v.Longitude, &v.VisitedUrl, &v.GeoResolved)
+	err := r.Scan(&v.ID, &v.ShortURLID, &v.VisitType, asTime(&v.VisitedAt), &v.Referer, &v.UserAgent,
+		&v.Browser, &v.OS, &v.Device, &v.IsBot, &v.RemoteIP, &v.CountryCode, &v.CountryName, &v.City,
+		&v.Latitude, &v.Longitude, &v.VisitedURL, &v.GeoResolved)
 	if err != nil {
 		return nil, err
 	}
 	return &v, nil
 }
 
-func InsertVisit(ctx context.Context, db *Db, v NewVisit) (core.VisitID, error) {
-	var shortUrlId any
-	if v.ShortUrlId != nil {
-		shortUrlId = v.ShortUrlId.Value()
+func InsertVisit(ctx context.Context, db *DB, v NewVisit) (core.VisitID, error) {
+	var shortURLID any
+	if v.ShortURLID != nil {
+		shortURLID = v.ShortURLID.Value()
 	}
 	var id int64
 	err := db.QueryRow(ctx,
@@ -71,35 +71,35 @@ func InsertVisit(ctx context.Context, db *Db, v NewVisit) (core.VisitID, error) 
 		    is_bot, remote_ip, visited_url, geo_resolved)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 RETURNING id`,
-		shortUrlId, v.VisitType.Slug(), db.BindTime(v.VisitedAt), v.Referer, v.UserAgent,
-		v.Browser, v.Os, v.Device.Slug(), v.IsBot, v.RemoteIp, v.VisitedUrl, false).Scan(&id)
+		shortURLID, v.VisitType.Slug(), db.BindTime(v.VisitedAt), v.Referer, v.UserAgent,
+		v.Browser, v.OS, v.Device.Slug(), v.IsBot, v.RemoteIP, v.VisitedURL, false).Scan(&id)
 	return core.VisitID(id), err
 }
 
-func SetVisitGeo(ctx context.Context, db *Db, visitId core.VisitID, geo GeoInfo) error {
+func SetVisitGeo(ctx context.Context, db *DB, visitID core.VisitID, geo GeoInfo) error {
 	_, err := db.Exec(ctx,
 		`UPDATE visits SET country_code = ?, country_name = ?, city = ?,
 		                   latitude = ?, longitude = ?, geo_resolved = ?
 		 WHERE id = ?`,
-		geo.CountryCode, geo.CountryName, geo.City, geo.Latitude, geo.Longitude, true, visitId.Value())
+		geo.CountryCode, geo.CountryName, geo.City, geo.Latitude, geo.Longitude, true, visitID.Value())
 	return err
 }
 
-func MarkGeoResolved(ctx context.Context, db *Db, visitId core.VisitID) error {
-	_, err := db.Exec(ctx, "UPDATE visits SET geo_resolved = ? WHERE id = ?", true, visitId.Value())
+func MarkGeoResolved(ctx context.Context, db *DB, visitID core.VisitID) error {
+	_, err := db.Exec(ctx, "UPDATE visits SET geo_resolved = ? WHERE id = ?", true, visitID.Value())
 	return err
 }
 
 // PendingGeoRow is a visit still awaiting geolocation (with a usable IP).
 type PendingGeoRow struct {
-	Id core.VisitID
-	Ip string
+	ID core.VisitID
+	IP string
 }
 
-func ListPendingGeo(ctx context.Context, db *Db, limit int) ([]PendingGeoRow, error) {
+func ListPendingGeo(ctx context.Context, db *DB, limit int) ([]PendingGeoRow, error) {
 	return queryAll(ctx, db, func(r rowScanner) (*PendingGeoRow, error) {
 		var p PendingGeoRow
-		if err := r.Scan(&p.Id, &p.Ip); err != nil {
+		if err := r.Scan(&p.ID, &p.IP); err != nil {
 			return nil, err
 		}
 		return &p, nil
@@ -108,7 +108,7 @@ func ListPendingGeo(ctx context.Context, db *Db, limit int) ([]PendingGeoRow, er
 	                ORDER BY id LIMIT ?`, db.BoolLiteral(false)), limit)
 }
 
-func buildVisitFilterSql(db *Db, filters VisitFilters) ([]string, []any) {
+func buildVisitFilterSQL(db *DB, filters VisitFilters) ([]string, []any) {
 	var conditions []string
 	var args []any
 	if filters.StartDate != nil {
@@ -125,10 +125,10 @@ func buildVisitFilterSql(db *Db, filters VisitFilters) ([]string, []any) {
 	return conditions, args
 }
 
-func pageVisitQuery(ctx context.Context, db *Db, baseWhere string, baseArgs []any, filters VisitFilters) (core.Page[VisitRow], error) {
+func pageVisitQuery(ctx context.Context, db *DB, baseWhere string, baseArgs []any, filters VisitFilters) (core.Page[VisitRow], error) {
 	empty := core.Page[VisitRow]{}
 	page, size := core.NormalizePaging(filters.Page, filters.ItemsPerPage)
-	extra, extraArgs := buildVisitFilterSql(db, filters)
+	extra, extraArgs := buildVisitFilterSQL(db, filters)
 
 	whereClause := baseWhere
 	if len(extra) > 0 {
@@ -161,18 +161,18 @@ func visitSelectColsAliased() string {
 	return strings.Join(cols, ", ")
 }
 
-func ListVisitsForShortUrl(ctx context.Context, db *Db, shortUrlId core.ShortUrlID, filters VisitFilters) (core.Page[VisitRow], error) {
+func ListVisitsForShortURL(ctx context.Context, db *DB, shortURLID core.ShortURLID, filters VisitFilters) (core.Page[VisitRow], error) {
 	return pageVisitQuery(ctx, db,
 		fmt.Sprintf("vi.short_url_id = ? AND %s", IsValidVisit("vi")),
-		[]any{shortUrlId.Value()}, filters)
+		[]any{shortURLID.Value()}, filters)
 }
 
 // ListNonOrphanVisits lists all non-orphan visits, optionally filtered.
-func ListNonOrphanVisits(ctx context.Context, db *Db, filters VisitFilters) (core.Page[VisitRow], error) {
+func ListNonOrphanVisits(ctx context.Context, db *DB, filters VisitFilters) (core.Page[VisitRow], error) {
 	return pageVisitQuery(ctx, db, IsValidVisit("vi"), nil, filters)
 }
 
-func ListOrphanVisits(ctx context.Context, db *Db, visitType *core.VisitType, filters VisitFilters) (core.Page[VisitRow], error) {
+func ListOrphanVisits(ctx context.Context, db *DB, visitType *core.VisitType, filters VisitFilters) (core.Page[VisitRow], error) {
 	if visitType != nil {
 		return pageVisitQuery(ctx, db,
 			fmt.Sprintf("vi.visit_type = ? AND %s", IsOrphanVisit("vi")),
@@ -181,7 +181,7 @@ func ListOrphanVisits(ctx context.Context, db *Db, visitType *core.VisitType, fi
 	return pageVisitQuery(ctx, db, IsOrphanVisit("vi"), nil, filters)
 }
 
-func ListVisitsForTag(ctx context.Context, db *Db, tagName string, filters VisitFilters) (core.Page[VisitRow], error) {
+func ListVisitsForTag(ctx context.Context, db *DB, tagName string, filters VisitFilters) (core.Page[VisitRow], error) {
 	return pageVisitQuery(ctx, db,
 		fmt.Sprintf(`%s AND EXISTS (
 		     SELECT 1 FROM short_url_tags st JOIN tags t ON t.id = st.tag_id
@@ -189,18 +189,18 @@ func ListVisitsForTag(ctx context.Context, db *Db, tagName string, filters Visit
 		[]any{tagName}, filters)
 }
 
-func ListVisitsForDomain(ctx context.Context, db *Db, domainId core.DomainID, filters VisitFilters) (core.Page[VisitRow], error) {
+func ListVisitsForDomain(ctx context.Context, db *DB, domainID core.DomainID, filters VisitFilters) (core.Page[VisitRow], error) {
 	return pageVisitQuery(ctx, db,
 		fmt.Sprintf(`%s AND EXISTS (
 		     SELECT 1 FROM short_urls su WHERE su.id = vi.short_url_id AND su.domain_id = ?)`,
 			IsValidVisit("vi")),
-		[]any{domainId.Value()}, filters)
+		[]any{domainID.Value()}, filters)
 }
 
-func DeleteVisitsForShortUrl(ctx context.Context, db *Db, shortUrlId core.ShortUrlID) (int, error) {
-	return execCount(ctx, db, "DELETE FROM visits WHERE short_url_id = ?", shortUrlId.Value())
+func DeleteVisitsForShortURL(ctx context.Context, db *DB, shortURLID core.ShortURLID) (int, error) {
+	return execCount(ctx, db, "DELETE FROM visits WHERE short_url_id = ?", shortURLID.Value())
 }
 
-func DeleteOrphanVisits(ctx context.Context, db *Db) (int, error) {
+func DeleteOrphanVisits(ctx context.Context, db *DB) (int, error) {
 	return execCount(ctx, db, fmt.Sprintf("DELETE FROM visits WHERE %s", IsOrphanVisit("visits")))
 }

@@ -11,7 +11,7 @@ import (
 	"github.com/olmesm/gort/internal/core"
 )
 
-func parseJson(t *testing.T, body string) map[string]any {
+func parseJSON(t *testing.T, body string) map[string]any {
 	t.Helper()
 	var doc map[string]any
 	if err := json.Unmarshal([]byte(body), &doc); err != nil {
@@ -31,7 +31,7 @@ func TestHealthEndpointNeedsNoAuth(t *testing.T) {
 	}
 }
 
-func TestApiRequestsWithoutAKeyGetProblemDetails401(t *testing.T) {
+func TestAPIRequestsWithoutAKeyGetProblemDetails401(t *testing.T) {
 	app := newTestApp(t)
 	resp := app.client(t).get("/rest/v1/short-urls")
 	if resp.Code != http.StatusUnauthorized {
@@ -40,13 +40,13 @@ func TestApiRequestsWithoutAKeyGetProblemDetails401(t *testing.T) {
 	if ct := resp.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/problem+json") {
 		t.Errorf("content type: %s", ct)
 	}
-	doc := parseJson(t, resp.Body.String())
+	doc := parseJSON(t, resp.Body.String())
 	if doc["status"].(float64) != 401 {
 		t.Errorf("problem status: %v", doc["status"])
 	}
 }
 
-func TestShortUrlRoundTrip(t *testing.T) {
+func TestShortURLRoundTrip(t *testing.T) {
 	app := newTestApp(t)
 	client := app.adminClient(t)
 
@@ -56,7 +56,7 @@ func TestShortUrlRoundTrip(t *testing.T) {
 	if create.Code != http.StatusCreated {
 		t.Fatalf("create status %d: %s", create.Code, create.Body.String())
 	}
-	created := parseJson(t, create.Body.String())
+	created := parseJSON(t, create.Body.String())
 	code := created["shortCode"].(string)
 	if created["domain"] != "example.test" {
 		t.Errorf("domain: %v", created["domain"])
@@ -70,7 +70,7 @@ func TestShortUrlRoundTrip(t *testing.T) {
 	if get.Code != http.StatusOK {
 		t.Fatalf("get status %d", get.Code)
 	}
-	fetched := parseJson(t, get.Body.String())
+	fetched := parseJSON(t, get.Body.String())
 	if fetched["title"] != "Round trip" {
 		t.Errorf("title: %v", fetched["title"])
 	}
@@ -80,7 +80,7 @@ func TestShortUrlRoundTrip(t *testing.T) {
 
 	// list with search
 	list := client.get("/rest/v1/short-urls?searchTerm=round-trip")
-	listed := parseJson(t, list.Body.String())
+	listed := parseJSON(t, list.Body.String())
 	if items := listed["data"].([]any); len(items) != 1 {
 		t.Errorf("list items: %d", len(items))
 	}
@@ -91,7 +91,7 @@ func TestShortUrlRoundTrip(t *testing.T) {
 	if edit.Code != http.StatusOK {
 		t.Fatalf("edit status %d: %s", edit.Code, edit.Body.String())
 	}
-	edited := parseJson(t, edit.Body.String())
+	edited := parseJSON(t, edit.Body.String())
 	if edited["longUrl"] != "https://example.com/edited" {
 		t.Errorf("longUrl: %v", edited["longUrl"])
 	}
@@ -136,16 +136,16 @@ func TestFindIfExistsReturnsTheExistingMapping(t *testing.T) {
 	app := newTestApp(t)
 	client := app.adminClient(t)
 
-	first := parseJson(t, client.post("/rest/v1/short-urls",
+	first := parseJSON(t, client.post("/rest/v1/short-urls",
 		`{"longUrl":"https://example.com/find-me"}`).Body.String())
-	second := parseJson(t, client.post("/rest/v1/short-urls",
+	second := parseJSON(t, client.post("/rest/v1/short-urls",
 		`{"longUrl":"https://example.com/find-me","findIfExists":true}`).Body.String())
 	if first["shortCode"] != second["shortCode"] {
 		t.Errorf("codes differ: %v vs %v", first["shortCode"], second["shortCode"])
 	}
 }
 
-func TestInvariantsHoldAtTheApiBoundaryToo(t *testing.T) {
+func TestInvariantsHoldAtTheAPIBoundaryToo(t *testing.T) {
 	app := newTestApp(t)
 	client := app.adminClient(t)
 
@@ -179,7 +179,7 @@ func TestInvariantsHoldAtTheApiBoundaryToo(t *testing.T) {
 	}
 
 	// PATCH validates the merged result, not just the patch.
-	created := parseJson(t, client.post("/rest/v1/short-urls",
+	created := parseJSON(t, client.post("/rest/v1/short-urls",
 		`{"longUrl":"https://example.com/patch-me"}`).Body.String())
 	code := created["shortCode"].(string)
 	patch := client.patch("/rest/v1/short-urls/"+code, `{"maxVisits":-3}`)
@@ -192,11 +192,11 @@ func TestKeysWithUnparseableStoredRolesAreRejectedNotAdmin(t *testing.T) {
 	app := newTestApp(t)
 
 	// Simulate a corrupt row: role text nothing recognizes.
-	plain := GenerateApiKey()
-	_, err := app.Db.Exec(t.Context(),
+	plain := GenerateAPIKey()
+	_, err := app.DB.Exec(t.Context(),
 		`INSERT INTO api_keys (key_hash, name, role, domain_id, enabled, expires_at, created_at)
 		 VALUES (?, 'corrupt', 'superuser', NULL, 1, NULL, ?)`,
-		HashApiKey(plain), app.Db.BindTime(time.Now()))
+		HashAPIKey(plain), app.DB.BindTime(time.Now()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func TestKeysWithUnparseableStoredRolesAreRejectedNotAdmin(t *testing.T) {
 	}
 }
 
-func TestInvalidLongUrlsAreRejectedWith400(t *testing.T) {
+func TestInvalidLongURLsAreRejectedWith400(t *testing.T) {
 	app := newTestApp(t)
 	resp := app.adminClient(t).post("/rest/v1/short-urls", `{"longUrl":"nope"}`)
 	if resp.Code != http.StatusBadRequest {
@@ -220,14 +220,14 @@ func TestInvalidLongUrlsAreRejectedWith400(t *testing.T) {
 	}
 }
 
-func TestAuthorKeysOnlySeeTheirOwnShortUrls(t *testing.T) {
+func TestAuthorKeysOnlySeeTheirOwnShortURLs(t *testing.T) {
 	app := newTestApp(t)
 	authorClient := app.client(t)
-	authorClient.headers["X-Api-Key"] = createApiKey(t, app, core.AuthorRole())
+	authorClient.headers["X-Api-Key"] = createAPIKey(t, app, core.AuthorRole())
 	otherClient := app.client(t)
-	otherClient.headers["X-Api-Key"] = createApiKey(t, app, core.AuthorRole())
+	otherClient.headers["X-Api-Key"] = createAPIKey(t, app, core.AuthorRole())
 
-	created := parseJson(t, authorClient.post("/rest/v1/short-urls",
+	created := parseJSON(t, authorClient.post("/rest/v1/short-urls",
 		`{"longUrl":"https://example.com/mine-only"}`).Body.String())
 	code := created["shortCode"].(string)
 
@@ -236,7 +236,7 @@ func TestAuthorKeysOnlySeeTheirOwnShortUrls(t *testing.T) {
 	if otherGet.Code != http.StatusNotFound {
 		t.Fatalf("other get status %d", otherGet.Code)
 	}
-	otherList := parseJson(t, otherClient.get("/rest/v1/short-urls?searchTerm=mine-only").Body.String())
+	otherList := parseJSON(t, otherClient.get("/rest/v1/short-urls?searchTerm=mine-only").Body.String())
 	if items := otherList["data"].([]any); len(items) != 0 {
 		t.Errorf("other list items: %d", len(items))
 	}
@@ -248,17 +248,17 @@ func TestAuthorKeysOnlySeeTheirOwnShortUrls(t *testing.T) {
 	}
 }
 
-func TestNonAdminKeysCannotManageApiKeys(t *testing.T) {
+func TestNonAdminKeysCannotManageAPIKeys(t *testing.T) {
 	app := newTestApp(t)
 	client := app.client(t)
-	client.headers["X-Api-Key"] = createApiKey(t, app, core.AuthorRole())
+	client.headers["X-Api-Key"] = createAPIKey(t, app, core.AuthorRole())
 	resp := client.get("/rest/v1/api-keys")
 	if resp.Code != http.StatusForbidden {
 		t.Fatalf("status %d", resp.Code)
 	}
 }
 
-func TestApiKeysCanBeMintedOverTheApiAndThenUsed(t *testing.T) {
+func TestAPIKeysCanBeMintedOverTheAPIAndThenUsed(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.adminClient(t)
 
@@ -266,7 +266,7 @@ func TestApiKeysCanBeMintedOverTheApiAndThenUsed(t *testing.T) {
 	if create.Code != http.StatusCreated {
 		t.Fatalf("create status %d: %s", create.Code, create.Body.String())
 	}
-	doc := parseJson(t, create.Body.String())
+	doc := parseJSON(t, create.Body.String())
 	key := doc["apiKey"].(string)
 
 	minted := app.client(t)
@@ -277,11 +277,11 @@ func TestApiKeysCanBeMintedOverTheApiAndThenUsed(t *testing.T) {
 	}
 }
 
-func TestDisabledApiKeysStopWorking(t *testing.T) {
+func TestDisabledAPIKeysStopWorking(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.adminClient(t)
 
-	doc := parseJson(t, admin.post("/rest/v1/api-keys", `{"name":"to-disable","role":"author"}`).Body.String())
+	doc := parseJSON(t, admin.post("/rest/v1/api-keys", `{"name":"to-disable","role":"author"}`).Body.String())
 	key := doc["apiKey"].(string)
 	id := int64(doc["id"].(float64))
 
@@ -310,7 +310,7 @@ func TestTagsCanBeListedRenamedAndDeleted(t *testing.T) {
 		t.Fatalf("rename status %d: %s", rename.Code, rename.Body.String())
 	}
 
-	listed := parseJson(t, client.get("/rest/v1/tags?withStats=true&searchTerm=renamed").Body.String())
+	listed := parseJSON(t, client.get("/rest/v1/tags?withStats=true&searchTerm=renamed").Body.String())
 	if items := listed["data"].([]any); len(items) != 1 {
 		t.Errorf("list items: %d", len(items))
 	}
@@ -319,7 +319,7 @@ func TestTagsCanBeListedRenamedAndDeleted(t *testing.T) {
 	if del.Code != http.StatusOK {
 		t.Fatalf("delete status %d", del.Code)
 	}
-	after := parseJson(t, client.get("/rest/v1/tags?searchTerm=renamed").Body.String())
+	after := parseJSON(t, client.get("/rest/v1/tags?searchTerm=renamed").Body.String())
 	if items := after["data"].([]any); len(items) != 0 {
 		t.Errorf("after items: %d", len(items))
 	}
@@ -329,7 +329,7 @@ func TestRedirectRulesAreValidatedAndPersisted(t *testing.T) {
 	app := newTestApp(t)
 	client := app.adminClient(t)
 
-	created := parseJson(t, client.post("/rest/v1/short-urls",
+	created := parseJSON(t, client.post("/rest/v1/short-urls",
 		`{"longUrl":"https://example.com/ruled"}`).Body.String())
 	code := created["shortCode"].(string)
 
@@ -347,7 +347,7 @@ func TestRedirectRulesAreValidatedAndPersisted(t *testing.T) {
 		t.Fatalf("ok status %d: %s", ok.Code, ok.Body.String())
 	}
 
-	rules := parseJson(t, client.get("/rest/v1/short-urls/"+code+"/redirect-rules").Body.String())
+	rules := parseJSON(t, client.get("/rest/v1/short-urls/"+code+"/redirect-rules").Body.String())
 	if items := rules["redirectRules"].([]any); len(items) != 2 {
 		t.Errorf("rules: %d", len(items))
 	}

@@ -12,25 +12,25 @@ import (
 // button, depending on configuration.
 type loginView struct {
 	Error            string
-	ReturnUrl        string
-	ReturnUrlParam   string
-	OidcEnabled      bool
+	ReturnURL        string
+	ReturnURLParam   string
+	OIDCEnabled      bool
 	ShowPasswordForm bool
 	ProviderName     string
 }
 
-func (a *App) renderLogin(w http.ResponseWriter, status int, errorMessage, returnUrl string) error {
+func (a *App) renderLogin(w http.ResponseWriter, status int, errorMessage, returnURL string) error {
 	return a.renderShared(w, status, "login", loginView{
 		Error:            errorMessage,
-		ReturnUrl:        returnUrl,
-		ReturnUrlParam:   url.QueryEscape(returnUrl),
-		OidcEnabled:      a.Cfg.OidcEnabled(),
-		ShowPasswordForm: !a.Cfg.OidcEnabled() || !a.Cfg.OidcOnly,
-		ProviderName:     a.Cfg.OidcProviderName,
+		ReturnURL:        returnURL,
+		ReturnURLParam:   url.QueryEscape(returnURL),
+		OIDCEnabled:      a.Cfg.OIDCEnabled(),
+		ShowPasswordForm: !a.Cfg.OIDCEnabled() || !a.Cfg.OIDCOnly,
+		ProviderName:     a.Cfg.OIDCProviderName,
 	})
 }
 
-func safeReturnUrl(url string) string {
+func safeReturnURL(url string) string {
 	if strings.HasPrefix(url, "/") && !strings.HasPrefix(url, "//") {
 		return url
 	}
@@ -39,35 +39,35 @@ func safeReturnUrl(url string) string {
 
 // GET /admin/login
 func (a *App) uiLoginForm(w http.ResponseWriter, r *http.Request) error {
-	returnUrl := r.URL.Query().Get("returnUrl")
-	if returnUrl == "" {
-		returnUrl = "/admin"
+	returnURL := r.URL.Query().Get("returnUrl")
+	if returnURL == "" {
+		returnURL = "/admin"
 	}
-	returnUrl = safeReturnUrl(returnUrl)
+	returnURL = safeReturnURL(returnURL)
 	if a.currentUser(r) != nil {
-		return redirect(w, r, returnUrl)
+		return redirect(w, r, returnURL)
 	}
-	return a.renderLogin(w, http.StatusOK, "", returnUrl)
+	return a.renderLogin(w, http.StatusOK, "", returnURL)
 }
 
 // POST /admin/login
 func (a *App) uiLogin(w http.ResponseWriter, r *http.Request) error {
-	if a.Cfg.OidcEnabled() && a.Cfg.OidcOnly {
+	if a.Cfg.OIDCEnabled() && a.Cfg.OIDCOnly {
 		return a.renderLogin(w, http.StatusForbidden, "Password login is disabled; use single sign-on.", "/admin")
 	}
 	username := strings.TrimSpace(r.PostFormValue("username"))
 	password := r.PostFormValue("password")
-	returnUrl := safeReturnUrl(r.PostFormValue("returnUrl"))
+	returnURL := safeReturnURL(r.PostFormValue("returnUrl"))
 
-	user, err := data.UserByUsername(r.Context(), a.Db, username)
+	user, err := data.UserByUsername(r.Context(), a.DB, username)
 	if err != nil {
 		return err
 	}
 	if user != nil && VerifyPassword(password, user.PasswordHash) {
 		a.SignIn(w, user)
-		return redirect(w, r, returnUrl)
+		return redirect(w, r, returnURL)
 	}
-	return a.renderLogin(w, http.StatusUnauthorized, "Invalid username or password.", returnUrl)
+	return a.renderLogin(w, http.StatusUnauthorized, "Invalid username or password.", returnURL)
 }
 
 // POST /admin/logout

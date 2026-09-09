@@ -16,28 +16,28 @@ import (
 // ResolveRequestDomain resolves the domain row for an incoming request Host
 // (falling back to the default domain).
 func (a *App) ResolveRequestDomain(ctx context.Context, hostAuthority string) (*data.DomainRow, error) {
-	byHost, err := data.DomainByAuthority(ctx, a.Db, strings.ToLower(hostAuthority))
+	byHost, err := data.DomainByAuthority(ctx, a.DB, strings.ToLower(hostAuthority))
 	if err != nil {
 		return nil, err
 	}
 	if byHost != nil {
 		return byHost, nil
 	}
-	return data.DefaultDomain(ctx, a.Db)
+	return data.DefaultDomain(ctx, a.DB)
 }
 
 // ResolveNamedDomain resolves an explicitly named domain (API "domain"
 // param). Empty → default domain; unknown → nil.
 func (a *App) ResolveNamedDomain(ctx context.Context, authority string) (*data.DomainRow, error) {
 	if authority == "" {
-		return data.DefaultDomain(ctx, a.Db)
+		return data.DefaultDomain(ctx, a.DB)
 	}
-	return data.DomainByAuthority(ctx, a.Db, strings.ToLower(strings.TrimSpace(authority)))
+	return data.DomainByAuthority(ctx, a.DB, strings.ToLower(strings.TrimSpace(authority)))
 }
 
 // LifetimeOfRow is the lifetime stored on a row. Values were validated on
 // the way in, so this is a plain projection.
-func LifetimeOfRow(row *data.ShortUrlRow) core.Lifetime {
+func LifetimeOfRow(row *data.ShortURLRow) core.Lifetime {
 	return core.Lifetime{
 		ValidSince: row.ValidSince,
 		ValidUntil: row.ValidUntil,
@@ -49,16 +49,16 @@ func LifetimeOfRow(row *data.ShortUrlRow) core.Lifetime {
 // unknown authorities.
 func (a *App) resolveTargetDomain(ctx context.Context, domain *core.DomainAuthority) (*data.DomainRow, error) {
 	if domain == nil {
-		return data.DefaultDomain(ctx, a.Db)
+		return data.DefaultDomain(ctx, a.DB)
 	}
-	existing, err := data.DomainByAuthority(ctx, a.Db, domain.Value())
+	existing, err := data.DomainByAuthority(ctx, a.DB, domain.Value())
 	if err != nil {
 		return nil, err
 	}
 	if existing != nil {
 		return existing, nil
 	}
-	created, err := data.CreateDomain(ctx, a.Db, *domain)
+	created, err := data.CreateDomain(ctx, a.DB, *domain)
 	if err != nil {
 		return nil, err
 	}
@@ -66,23 +66,23 @@ func (a *App) resolveTargetDomain(ctx context.Context, domain *core.DomainAuthor
 		return created, nil
 	}
 	// Lost a race with a concurrent insert; fetch the winner.
-	return data.DomainByAuthority(ctx, a.Db, domain.Value())
+	return data.DomainByAuthority(ctx, a.DB, domain.Value())
 }
 
 // Author says who created a short URL: a dashboard user or an API key.
 type Author struct {
-	UserId   *core.UserID
-	ApiKeyId *core.ApiKeyID
+	UserID   *core.UserID
+	APIKeyID *core.APIKeyID
 }
 
-func UserAuthor(id core.UserID) *Author     { return &Author{UserId: &id} }
-func ApiKeyAuthor(id core.ApiKeyID) *Author { return &Author{ApiKeyId: &id} }
+func UserAuthor(id core.UserID) *Author     { return &Author{UserID: &id} }
+func APIKeyAuthor(id core.APIKeyID) *Author { return &Author{APIKeyID: &id} }
 
 // insertWithCode inserts with the spec's slug, or retries generated codes
 // until one is free.
-func (a *App) insertWithCode(ctx context.Context, spec *core.ShortUrlSpec, domain *data.DomainRow, record func(core.ShortCode) data.NewShortUrl) (core.ShortUrlID, error) {
+func (a *App) insertWithCode(ctx context.Context, spec *core.ShortURLSpec, domain *data.DomainRow, record func(core.ShortCode) data.NewShortURL) (core.ShortURLID, error) {
 	if spec.CustomSlug != nil {
-		id, err := data.CreateShortUrl(ctx, a.Db, record(*spec.CustomSlug), spec.Tags)
+		id, err := data.CreateShortURL(ctx, a.DB, record(*spec.CustomSlug), spec.Tags)
 		if errors.Is(err, data.ErrDuplicateShortCode) {
 			return 0, core.SlugInUseError(spec.CustomSlug.Value(), domain.Authority)
 		}
@@ -101,7 +101,7 @@ func (a *App) insertWithCode(ctx context.Context, spec *core.ShortUrlSpec, domai
 	}
 
 	for attempt := 0; attempt < 10; attempt++ {
-		id, err := data.CreateShortUrl(ctx, a.Db, record(core.GenerateShortCode(codeLength)), spec.Tags)
+		id, err := data.CreateShortURL(ctx, a.DB, record(core.GenerateShortCode(codeLength)), spec.Tags)
 		if errors.Is(err, data.ErrDuplicateShortCode) {
 			continue
 		}
@@ -116,7 +116,7 @@ func (a *App) insertWithCode(ctx context.Context, spec *core.ShortUrlSpec, domai
 // CreateShortUrl creates a short URL from a validated spec: domain resolution
 // (auto-registering unknown domains), code generation with collision retry,
 // atomic insert with tags, async title resolution and event publication.
-func (a *App) CreateShortUrl(ctx context.Context, author *Author, spec *core.ShortUrlSpec) (*ShortUrlDto, error) {
+func (a *App) CreateShortURL(ctx context.Context, author *Author, spec *core.ShortURLSpec) (*ShortURLDTO, error) {
 	domain, err := a.resolveTargetDomain(ctx, spec.Domain)
 	if err != nil {
 		return nil, err
@@ -126,21 +126,21 @@ func (a *App) CreateShortUrl(ctx context.Context, author *Author, spec *core.Sho
 	}
 
 	if spec.FindIfExists {
-		existing, err := data.ShortUrlDetailByLongUrl(ctx, a.Db, domain.Id, spec.LongUrl)
+		existing, err := data.ShortURLDetailByLongURL(ctx, a.DB, domain.ID, spec.LongURL)
 		if err != nil {
 			return nil, err
 		}
 		if existing != nil {
-			tags, err := data.TagsForShortUrl(ctx, a.Db, existing.Id)
+			tags, err := data.TagsForShortURL(ctx, a.DB, existing.ID)
 			if err != nil {
 				return nil, err
 			}
-			dto := NewShortUrlDto(a.Cfg, tags, existing)
+			dto := NewShortURLDTO(a.Cfg, tags, existing)
 			return &dto, nil
 		}
 	}
 
-	record := func(code core.ShortCode) data.NewShortUrl {
+	record := func(code core.ShortCode) data.NewShortURL {
 		status := a.Cfg.DefaultRedirectStatus
 		if spec.RedirectStatus != nil {
 			status = *spec.RedirectStatus
@@ -153,10 +153,10 @@ func (a *App) CreateShortUrl(ctx context.Context, author *Author, spec *core.Sho
 		if spec.Crawlable != nil {
 			crawlable = *spec.Crawlable
 		}
-		nu := data.NewShortUrl{
+		nu := data.NewShortURL{
 			ShortCode:      code,
-			DomainId:       domain.Id,
-			LongUrl:        spec.LongUrl,
+			DomainID:       domain.ID,
+			LongURL:        spec.LongURL,
 			Title:          spec.Title,
 			RedirectStatus: status,
 			ForwardQuery:   forwardQuery,
@@ -168,8 +168,8 @@ func (a *App) CreateShortUrl(ctx context.Context, author *Author, spec *core.Sho
 			nu.GroupName = &group
 		}
 		if author != nil {
-			nu.AuthorUserId = author.UserId
-			nu.AuthorApiKeyId = author.ApiKeyId
+			nu.AuthorUserID = author.UserID
+			nu.AuthorAPIKeyID = author.APIKeyID
 		}
 		return nu
 	}
@@ -180,10 +180,10 @@ func (a *App) CreateShortUrl(ctx context.Context, author *Author, spec *core.Sho
 	}
 
 	if a.Cfg.AutoResolveTitles && spec.Title == nil {
-		a.Queues.enqueueTitle(id, spec.LongUrl)
+		a.Queues.enqueueTitle(id, spec.LongURL)
 	}
 
-	detail, err := data.ShortUrlDetailByID(ctx, a.Db, id)
+	detail, err := data.ShortURLDetailByID(ctx, a.DB, id)
 	if err != nil {
 		return nil, err
 	}
@@ -191,18 +191,18 @@ func (a *App) CreateShortUrl(ctx context.Context, author *Author, spec *core.Sho
 		return nil, errors.New("short URL missing immediately after insert")
 	}
 
-	dto := NewShortUrlDto(a.Cfg, core.TagValues(spec.Tags), detail)
-	a.Queues.PublishEvent(UrlCreatedEvent(dto))
+	dto := NewShortURLDTO(a.Cfg, core.TagValues(spec.Tags), detail)
+	a.Queues.PublishEvent(URLCreatedEvent(dto))
 	return &dto, nil
 }
 
 // EditShortUrl applies a validated edit to an existing short URL.
-func (a *App) EditShortUrl(ctx context.Context, id core.ShortUrlID, current *data.ShortUrlDetail, edit *core.ShortUrlEdit) (*ShortUrlDto, error) {
+func (a *App) EditShortURL(ctx context.Context, id core.ShortURLID, current *data.ShortURLDetail, edit *core.ShortURLEdit) (*ShortURLDTO, error) {
 	titleUnchanged := (edit.Title == nil && current.Title == nil) ||
 		(edit.Title != nil && current.Title != nil && *edit.Title == *current.Title)
 
-	update := data.ShortUrlUpdate{
-		LongUrl:              edit.LongUrl,
+	update := data.ShortURLUpdate{
+		LongURL:              edit.LongURL,
 		Title:                edit.Title,
 		TitleWasAutoResolved: titleUnchanged && current.TitleWasAutoResolved,
 		RedirectStatus:       edit.RedirectStatus,
@@ -215,24 +215,24 @@ func (a *App) EditShortUrl(ctx context.Context, id core.ShortUrlID, current *dat
 		update.GroupName = &group
 	}
 
-	if _, err := data.UpdateShortUrl(ctx, a.Db, id, update); err != nil {
+	if _, err := data.UpdateShortURL(ctx, a.DB, id, update); err != nil {
 		return nil, err
 	}
 	if edit.ChangeTags {
-		if err := data.SetShortUrlTags(ctx, a.Db, id, edit.Tags); err != nil {
+		if err := data.SetShortURLTags(ctx, a.DB, id, edit.Tags); err != nil {
 			return nil, err
 		}
 	}
 
-	updated, err := data.ShortUrlDetailByID(ctx, a.Db, id)
+	updated, err := data.ShortURLDetailByID(ctx, a.DB, id)
 	if err != nil {
 		return nil, err
 	}
-	tagNames, err := data.TagsForShortUrl(ctx, a.Db, id)
+	tagNames, err := data.TagsForShortURL(ctx, a.DB, id)
 	if err != nil {
 		return nil, err
 	}
 	// The row was just updated under this id; absence would be a bug.
-	dto := NewShortUrlDto(a.Cfg, tagNames, updated)
+	dto := NewShortURLDTO(a.Cfg, tagNames, updated)
 	return &dto, nil
 }

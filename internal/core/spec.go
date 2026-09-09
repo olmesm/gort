@@ -47,8 +47,8 @@ func (l Lifetime) CheckActive(now time.Time, validVisitCount int64) (bool, Expir
 // the single sanctioned construction path — the REST API, the dashboard and
 // any future entry point all go through NewShortUrlSpec, so every invariant
 // is enforced exactly once.
-type ShortUrlSpec struct {
-	LongUrl    LongUrl
+type ShortURLSpec struct {
+	LongURL    LongURL
 	CustomSlug *ShortCode
 	CodeLength *int
 	Domain     *DomainAuthority
@@ -65,8 +65,8 @@ type ShortUrlSpec struct {
 
 // ShortUrlSpecInput is raw, unvalidated creation input as it arrives from a
 // JSON body or form.
-type ShortUrlSpecInput struct {
-	LongUrl        string
+type ShortURLSpecInput struct {
+	LongURL        string
 	CustomSlug     *string
 	CodeLength     *int
 	Domain         *string
@@ -105,10 +105,10 @@ func parseStatus(code *int) (*RedirectStatus, error) {
 }
 
 // NewShortUrlSpec parses and validates raw input into a spec.
-func NewShortUrlSpec(input ShortUrlSpecInput) (*ShortUrlSpec, error) {
-	longUrl, err := NewLongUrl(input.LongUrl)
+func NewShortURLSpec(input ShortURLSpecInput) (*ShortURLSpec, error) {
+	longURL, err := NewLongURL(input.LongURL)
 	if err != nil {
-		return nil, NewError(ErrInvalidLongUrl, err.Error())
+		return nil, NewError(ErrInvalidLongURL, err.Error())
 	}
 
 	var customSlug *ShortCode
@@ -149,8 +149,8 @@ func NewShortUrlSpec(input ShortUrlSpecInput) (*ShortUrlSpec, error) {
 		return nil, serr
 	}
 
-	return &ShortUrlSpec{
-		LongUrl:        longUrl,
+	return &ShortURLSpec{
+		LongURL:        longURL,
 		CustomSlug:     customSlug,
 		CodeLength:     input.CodeLength,
 		Domain:         domain,
@@ -181,8 +181,8 @@ func parseGroup(raw *string) (*GroupName, error) {
 // ShortUrlEdit is a fully validated edit: the final values every mutable
 // field should take. PATCH-merging (absent = keep current) happens *before*
 // validation, so the resulting state is checked as a whole.
-type ShortUrlEdit struct {
-	LongUrl LongUrl
+type ShortURLEdit struct {
+	LongURL LongURL
 	Title   *string
 	// Group is the final group of the link; nil = ungrouped.
 	Group          *GroupName
@@ -195,8 +195,8 @@ type ShortUrlEdit struct {
 	ChangeTags bool
 }
 
-type ShortUrlEditInput struct {
-	LongUrl        string
+type ShortURLEditInput struct {
+	LongURL        string
 	Title          *string
 	Group          *string
 	ValidSince     *time.Time
@@ -210,10 +210,10 @@ type ShortUrlEditInput struct {
 	ChangeTags bool
 }
 
-func NewShortUrlEdit(input ShortUrlEditInput) (*ShortUrlEdit, error) {
-	longUrl, err := NewLongUrl(input.LongUrl)
+func NewShortURLEdit(input ShortURLEditInput) (*ShortURLEdit, error) {
+	longURL, err := NewLongURL(input.LongURL)
 	if err != nil {
-		return nil, NewError(ErrInvalidLongUrl, err.Error())
+		return nil, NewError(ErrInvalidLongURL, err.Error())
 	}
 
 	group, gerr := parseGroup(input.Group)
@@ -242,8 +242,8 @@ func NewShortUrlEdit(input ShortUrlEditInput) (*ShortUrlEdit, error) {
 		}
 	}
 
-	return &ShortUrlEdit{
-		LongUrl:        longUrl,
+	return &ShortURLEdit{
+		LongURL:        longURL,
 		Title:          normalizeTitle(input.Title),
 		Group:          group,
 		Lifetime:       lifetime,

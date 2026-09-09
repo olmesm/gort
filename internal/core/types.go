@@ -36,7 +36,7 @@ type Device string
 
 const (
 	DeviceAndroid Device = "android"
-	DeviceIos     Device = "ios"
+	DeviceIOS     Device = "ios"
 	DeviceDesktop Device = "desktop"
 	DeviceMobile  Device = "mobile"
 )
@@ -48,7 +48,7 @@ func DeviceOfSlug(s string) (Device, bool) {
 	case "android":
 		return DeviceAndroid, true
 	case "ios":
-		return DeviceIos, true
+		return DeviceIOS, true
 	case "desktop":
 		return DeviceDesktop, true
 	case "mobile":
@@ -98,7 +98,7 @@ func IPInRange(cidr string) RuleCondition {
 // conditions all match wins.
 type RedirectRule struct {
 	Priority   int
-	LongUrl    string
+	LongURL    string
 	Conditions []RuleCondition
 }
 
@@ -117,21 +117,21 @@ type VisitorContext struct {
 type VisitType string
 
 const (
-	VisitValidShortUrl      VisitType = "valid"
-	VisitOrphanBaseUrl      VisitType = "base_url"
+	VisitValidShortURL      VisitType = "valid"
+	VisitOrphanBaseURL      VisitType = "base_url"
 	VisitOrphanInvalidShort VisitType = "invalid_short_url"
 	VisitOrphanRegular404   VisitType = "regular_404"
 )
 
 func (v VisitType) Slug() string   { return string(v) }
-func (v VisitType) IsOrphan() bool { return v != VisitValidShortUrl }
+func (v VisitType) IsOrphan() bool { return v != VisitValidShortURL }
 
 func VisitTypeOfSlug(s string) (VisitType, bool) {
 	switch s {
 	case "valid":
-		return VisitValidShortUrl, true
+		return VisitValidShortURL, true
 	case "base_url":
-		return VisitOrphanBaseUrl, true
+		return VisitOrphanBaseURL, true
 	case "invalid_short_url":
 		return VisitOrphanInvalidShort, true
 	case "regular_404":
@@ -143,32 +143,32 @@ func VisitTypeOfSlug(s string) (VisitType, bool) {
 
 // ApiKeyRole is the access level attached to an API key. Parsing is partial
 // on purpose: an unrecognized stored role must be rejected, never defaulted.
-type ApiKeyRoleKind string
+type APIKeyRoleKind string
 
 const (
-	RoleAdmin  ApiKeyRoleKind = "admin"
-	RoleAuthor ApiKeyRoleKind = "author"
-	RoleDomain ApiKeyRoleKind = "domain"
+	RoleAdmin  APIKeyRoleKind = "admin"
+	RoleAuthor APIKeyRoleKind = "author"
+	RoleDomain APIKeyRoleKind = "domain"
 )
 
-type ApiKeyRole struct {
-	Kind ApiKeyRoleKind
+type APIKeyRole struct {
+	Kind APIKeyRoleKind
 	// DomainID is only meaningful when Kind == RoleDomain.
 	DomainID DomainID
 }
 
-func AdminRole() ApiKeyRole  { return ApiKeyRole{Kind: RoleAdmin} }
-func AuthorRole() ApiKeyRole { return ApiKeyRole{Kind: RoleAuthor} }
-func DomainRole(id DomainID) ApiKeyRole {
-	return ApiKeyRole{Kind: RoleDomain, DomainID: id}
+func AdminRole() APIKeyRole  { return APIKeyRole{Kind: RoleAdmin} }
+func AuthorRole() APIKeyRole { return APIKeyRole{Kind: RoleAuthor} }
+func DomainRole(id DomainID) APIKeyRole {
+	return APIKeyRole{Kind: RoleDomain, DomainID: id}
 }
 
-func (r ApiKeyRole) Slug() string { return string(r.Kind) }
+func (r APIKeyRole) Slug() string { return string(r.Kind) }
 
 // ApiKeyRoleOfStored reconstructs a role from its stored representation.
 // Returns false for unknown role strings and for a domain role missing its
 // domain id.
-func ApiKeyRoleOfStored(slug string, domainID *DomainID) (ApiKeyRole, bool) {
+func APIKeyRoleOfStored(slug string, domainID *DomainID) (APIKeyRole, bool) {
 	switch slug {
 	case "admin":
 		return AdminRole(), true
@@ -178,9 +178,9 @@ func ApiKeyRoleOfStored(slug string, domainID *DomainID) (ApiKeyRole, bool) {
 		if domainID != nil {
 			return DomainRole(*domainID), true
 		}
-		return ApiKeyRole{}, false
+		return APIKeyRole{}, false
 	default:
-		return ApiKeyRole{}, false
+		return APIKeyRole{}, false
 	}
 }
 
@@ -209,7 +209,7 @@ func UserRoleOfSlug(s string) (UserRole, bool) {
 type WebhookEvent string
 
 const (
-	EventUrlCreated          WebhookEvent = "url.created"
+	EventURLCreated          WebhookEvent = "url.created"
 	EventVisitRecorded       WebhookEvent = "visit.recorded"
 	EventOrphanVisitRecorded WebhookEvent = "orphan_visit.recorded"
 )
@@ -219,7 +219,7 @@ func (e WebhookEvent) Slug() string { return string(e) }
 func WebhookEventOfSlug(s string) (WebhookEvent, bool) {
 	switch s {
 	case "url.created":
-		return EventUrlCreated, true
+		return EventURLCreated, true
 	case "visit.recorded":
 		return EventVisitRecorded, true
 	case "orphan_visit.recorded":
@@ -229,7 +229,7 @@ func WebhookEventOfSlug(s string) (WebhookEvent, bool) {
 	}
 }
 
-var AllWebhookEvents = []WebhookEvent{EventUrlCreated, EventVisitRecorded, EventOrphanVisitRecorded}
+var AllWebhookEvents = []WebhookEvent{EventURLCreated, EventVisitRecorded, EventOrphanVisitRecorded}
 
 // ExpirationReason says why a short URL, although it exists, refuses to
 // redirect right now.
@@ -245,7 +245,7 @@ const (
 // a short URL. Test with errors.Is; the wrapped error's text is the
 // human-readable message for UI banners and problem details.
 var (
-	ErrInvalidLongUrl          = errors.New("invalid long URL")
+	ErrInvalidLongURL          = errors.New("invalid long URL")
 	ErrInvalidSlug             = errors.New("invalid slug")
 	ErrInvalidTag              = errors.New("invalid tag")
 	ErrInvalidGroup            = errors.New("invalid group")

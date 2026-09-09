@@ -31,11 +31,11 @@ type apiKeyRowView struct {
 }
 
 func (a *App) apiKeysViewModel(ctx context.Context, errorMessage, plainKey string) (apiKeysView, error) {
-	keys, err := data.ListApiKeys(ctx, a.Db)
+	keys, err := data.ListAPIKeys(ctx, a.DB)
 	if err != nil {
 		return apiKeysView{}, err
 	}
-	domains, err := data.ListDomains(ctx, a.Db)
+	domains, err := data.ListDomains(ctx, a.DB)
 	if err != nil {
 		return apiKeysView{}, err
 	}
@@ -44,7 +44,7 @@ func (a *App) apiKeysViewModel(ctx context.Context, errorMessage, plainKey strin
 			return "—"
 		}
 		for _, d := range domains {
-			if d.Id == *id {
+			if d.ID == *id {
 				return d.Authority
 			}
 		}
@@ -63,19 +63,19 @@ func (a *App) apiKeysViewModel(ctx context.Context, errorMessage, plainKey strin
 		model.Rows = append(model.Rows, apiKeyRowView{
 			Name:         orDash(k.Name),
 			Role:         k.Role,
-			Domain:       authorityOf(k.DomainId),
+			Domain:       authorityOf(k.DomainID),
 			Expired:      k.ExpiresAt != nil && !k.ExpiresAt.After(time.Now().UTC()),
 			Enabled:      k.Enabled,
 			Expires:      expires,
 			Created:      formatDateTime(k.CreatedAt),
-			ToggleAction: fmt.Sprintf("/admin/api-keys/%d/toggle", k.Id),
-			DeleteAction: fmt.Sprintf("/admin/api-keys/%d/delete", k.Id),
+			ToggleAction: fmt.Sprintf("/admin/api-keys/%d/toggle", k.ID),
+			DeleteAction: fmt.Sprintf("/admin/api-keys/%d/delete", k.ID),
 		})
 	}
 	return model, nil
 }
 
-func (a *App) renderApiKeysPage(ctx context.Context, w http.ResponseWriter, user *CurrentUser, errorMessage, plainKey string) error {
+func (a *App) renderAPIKeysPage(ctx context.Context, w http.ResponseWriter, user *CurrentUser, errorMessage, plainKey string) error {
 	model, err := a.apiKeysViewModel(ctx, errorMessage, plainKey)
 	if err != nil {
 		return err
@@ -84,12 +84,12 @@ func (a *App) renderApiKeysPage(ctx context.Context, w http.ResponseWriter, user
 }
 
 // GET /admin/api-keys (admin)
-func (a *App) uiListApiKeys(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	return a.renderApiKeysPage(r.Context(), w, user, "", "")
+func (a *App) uiListAPIKeys(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
+	return a.renderAPIKeysPage(r.Context(), w, user, "", "")
 }
 
 // POST /admin/api-keys (admin) — shows the plaintext key once.
-func (a *App) uiCreateApiKey(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
+func (a *App) uiCreateAPIKey(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 	var name *string
 	if n := strings.TrimSpace(r.PostFormValue("name")); n != "" {
 		name = &n
@@ -97,21 +97,21 @@ func (a *App) uiCreateApiKey(user *CurrentUser, w http.ResponseWriter, r *http.R
 	var domain *data.DomainRow
 	if authority := r.PostFormValue("domain"); authority != "" {
 		var err error
-		domain, err = data.DomainByAuthority(r.Context(), a.Db, strings.ToLower(authority))
+		domain, err = data.DomainByAuthority(r.Context(), a.DB, strings.ToLower(authority))
 		if err != nil {
 			return err
 		}
 	}
 
-	var role core.ApiKeyRole
+	var role core.APIKeyRole
 	switch r.PostFormValue("role") {
 	case "author":
 		role = core.AuthorRole()
 	case "domain":
 		if domain == nil {
-			return a.renderApiKeysPage(r.Context(), w, user, "Domain-role keys need a domain.", "")
+			return a.renderAPIKeysPage(r.Context(), w, user, "Domain-role keys need a domain.", "")
 		}
-		role = core.DomainRole(domain.Id)
+		role = core.DomainRole(domain.ID)
 	default:
 		role = core.AdminRole()
 	}
@@ -121,25 +121,25 @@ func (a *App) uiCreateApiKey(user *CurrentUser, w http.ResponseWriter, r *http.R
 		expiresAt = TryParseDate(v)
 	}
 
-	plainKey := GenerateApiKey()
-	if _, err := data.InsertApiKey(r.Context(), a.Db, HashApiKey(plainKey), name, role, expiresAt); err != nil {
+	plainKey := GenerateAPIKey()
+	if _, err := data.InsertAPIKey(r.Context(), a.DB, HashAPIKey(plainKey), name, role, expiresAt); err != nil {
 		return err
 	}
-	return a.renderApiKeysPage(r.Context(), w, user, "", plainKey)
+	return a.renderAPIKeysPage(r.Context(), w, user, "", plainKey)
 }
 
 // POST /admin/api-keys/{id}/toggle (admin)
-func (a *App) uiToggleApiKey(_ *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	id, err := pathID[core.ApiKeyID](r, "id")
+func (a *App) uiToggleAPIKey(_ *CurrentUser, w http.ResponseWriter, r *http.Request) error {
+	id, err := pathID[core.APIKeyID](r, "id")
 	if err != nil {
 		return err
 	}
-	key, err := data.ApiKeyByID(r.Context(), a.Db, id)
+	key, err := data.APIKeyByID(r.Context(), a.DB, id)
 	if err != nil {
 		return err
 	}
 	if key != nil {
-		if _, err := data.SetApiKeyEnabled(r.Context(), a.Db, id, !key.Enabled); err != nil {
+		if _, err := data.SetAPIKeyEnabled(r.Context(), a.DB, id, !key.Enabled); err != nil {
 			return err
 		}
 	}
@@ -147,12 +147,12 @@ func (a *App) uiToggleApiKey(_ *CurrentUser, w http.ResponseWriter, r *http.Requ
 }
 
 // POST /admin/api-keys/{id}/delete (admin)
-func (a *App) uiDeleteApiKey(_ *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	id, err := pathID[core.ApiKeyID](r, "id")
+func (a *App) uiDeleteAPIKey(_ *CurrentUser, w http.ResponseWriter, r *http.Request) error {
+	id, err := pathID[core.APIKeyID](r, "id")
 	if err != nil {
 		return err
 	}
-	if _, err := data.DeleteApiKey(r.Context(), a.Db, id); err != nil {
+	if _, err := data.DeleteAPIKey(r.Context(), a.DB, id); err != nil {
 		return err
 	}
 	return redirect(w, r, "/admin/api-keys")

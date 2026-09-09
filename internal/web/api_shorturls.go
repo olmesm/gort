@@ -11,8 +11,8 @@ import (
 	"github.com/olmesm/gort/internal/data"
 )
 
-type CreateShortUrlBody struct {
-	LongUrl         string     `json:"longUrl"`
+type CreateShortURLBody struct {
+	LongURL         string     `json:"longUrl"`
 	CustomSlug      *string    `json:"customSlug"`
 	ShortCodeLength *int       `json:"shortCodeLength"`
 	Domain          *string    `json:"domain"`
@@ -30,8 +30,8 @@ type CreateShortUrlBody struct {
 
 // EditShortUrlBody is the PATCH body: absent = leave unchanged; explicit null
 // clears optional fields.
-type EditShortUrlBody struct {
-	LongUrl        Field[string]    `json:"longUrl"`
+type EditShortURLBody struct {
+	LongURL        Field[string]    `json:"longUrl"`
 	Title          Field[string]    `json:"title"`
 	Tags           Field[[]string]  `json:"tags"`
 	Group          Field[string]    `json:"group"`
@@ -50,7 +50,7 @@ type RuleConditionBody struct {
 }
 
 type RuleBody struct {
-	LongUrl    string              `json:"longUrl"`
+	LongURL    string              `json:"longUrl"`
 	Conditions []RuleConditionBody `json:"conditions"`
 }
 
@@ -96,7 +96,7 @@ func parseConditionBody(c RuleConditionBody) (core.RuleCondition, error) {
 }
 
 func parseRule(index int, rule RuleBody) (core.RedirectRule, error) {
-	longUrl, err := core.NewLongUrl(rule.LongUrl)
+	longURL, err := core.NewLongURL(rule.LongURL)
 	if err != nil {
 		return core.RedirectRule{}, fmt.Errorf("Rule %d: %s", index+1, err)
 	}
@@ -111,15 +111,15 @@ func parseRule(index int, rule RuleBody) (core.RedirectRule, error) {
 	if len(conditions) == 0 {
 		return core.RedirectRule{}, fmt.Errorf("Rule %d needs at least one condition.", index+1)
 	}
-	return core.RedirectRule{Priority: index + 1, LongUrl: longUrl.Value(), Conditions: conditions}, nil
+	return core.RedirectRule{Priority: index + 1, LongURL: longURL.Value(), Conditions: conditions}, nil
 }
 
 // isShortUrlUserError reports whether the error is one of the domain's
 // user-facing categories (bad input), as opposed to an infrastructure
 // failure.
-func isShortUrlUserError(err error) bool {
+func isShortURLUserError(err error) bool {
 	for _, category := range []error{
-		core.ErrInvalidLongUrl, core.ErrInvalidSlug, core.ErrInvalidTag,
+		core.ErrInvalidLongURL, core.ErrInvalidSlug, core.ErrInvalidTag,
 		core.ErrInvalidGroup, core.ErrInvalidLifetime, core.ErrInvalidRedirectStatus,
 		core.ErrSlugInUse, core.ErrUnknownDomain, core.ErrCodeGenerationExhausted,
 	} {
@@ -132,13 +132,13 @@ func isShortUrlUserError(err error) bool {
 
 // shortUrlProblem maps a short-URL domain error to its API reply; errors
 // outside the domain's categories pass through and become a logged 500.
-func shortUrlProblem(err error) error {
+func shortURLProblem(err error) error {
 	switch {
 	case errors.Is(err, core.ErrSlugInUse):
 		return Conflict("non-unique-slug", err.Error())
 	case errors.Is(err, core.ErrCodeGenerationExhausted):
 		return NewProblem(500, "code-generation", "Could not generate a short code", err.Error())
-	case isShortUrlUserError(err):
+	case isShortURLUserError(err):
 		return BadRequest(err.Error())
 	default:
 		return err
@@ -146,19 +146,19 @@ func shortUrlProblem(err error) error {
 }
 
 // GET /rest/v1/short-urls
-func (a *App) apiListShortUrls(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
+func (a *App) apiListShortURLs(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	q := r.URL.Query()
 
 	// An unknown ?domain= filter matches nothing (-1 is an impossible id).
 	var domainFilter *core.DomainID
 	if authority := q.Get("domain"); authority != "" {
-		d, err := data.DomainByAuthority(r.Context(), a.Db, strings.ToLower(authority))
+		d, err := data.DomainByAuthority(r.Context(), a.DB, strings.ToLower(authority))
 		if err != nil {
 			return err
 		}
 		id := core.DomainID(-1)
 		if d != nil {
-			id = d.Id
+			id = d.ID
 		}
 		domainFilter = &id
 	}
@@ -173,7 +173,7 @@ func (a *App) apiListShortUrls(key *AuthenticatedKey, w http.ResponseWriter, r *
 		case "shortCode":
 			orderBy = data.OrderShortCode
 		case "longUrl":
-			orderBy = data.OrderLongUrl
+			orderBy = data.OrderLongURL
 		case "title":
 			orderBy = data.OrderTitle
 		case "visits":
@@ -190,14 +190,14 @@ func (a *App) apiListShortUrls(key *AuthenticatedKey, w http.ResponseWriter, r *
 		groupFilter = &group
 	}
 
-	filters := data.ShortUrlFilters{
+	filters := data.ShortURLFilters{
 		SearchTerm:              q.Get("searchTerm"),
 		Tags:                    queryStringList(q, "tags"),
 		Group:                   groupFilter,
 		TagsMatchAll:            strings.ToLower(q.Get("tagsMode")) == "all",
 		StartDate:               queryDate(q, "startDate"),
 		EndDate:                 queryDate(q, "endDate"),
-		DomainId:                domainFilter,
+		DomainID:                domainFilter,
 		ExcludeMaxVisitsReached: queryBool(q, "excludeMaxVisitsReached"),
 		ExcludePastValidUntil:   queryBool(q, "excludePastValidUntil"),
 		OrderBy:                 orderBy,
@@ -207,35 +207,35 @@ func (a *App) apiListShortUrls(key *AuthenticatedKey, w http.ResponseWriter, r *
 	}
 	filters = applyKeyScope(key, filters)
 
-	page, err := data.ListShortUrls(r.Context(), a.Db, filters)
+	page, err := data.ListShortURLs(r.Context(), a.DB, filters)
 	if err != nil {
 		return err
 	}
-	ids := make([]core.ShortUrlID, len(page.Items))
+	ids := make([]core.ShortURLID, len(page.Items))
 	for i, d := range page.Items {
-		ids[i] = d.Id
+		ids[i] = d.ID
 	}
-	tagsByUrl, err := data.TagsForShortUrls(r.Context(), a.Db, ids)
+	tagsByURL, err := data.TagsForShortURLs(r.Context(), a.DB, ids)
 	if err != nil {
 		return err
 	}
 
-	dto := NewPageDto(page, func(d data.ShortUrlDetail) ShortUrlDto {
-		return NewShortUrlDto(a.Cfg, tagsByUrl[d.Id], &d)
+	dto := NewPageDTO(page, func(d data.ShortURLDetail) ShortURLDTO {
+		return NewShortURLDTO(a.Cfg, tagsByURL[d.ID], &d)
 	})
 	return RespondJSON(w, http.StatusOK, dto)
 }
 
 // POST /rest/v1/short-urls
-func (a *App) apiCreateShortUrl(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
-	body, err := ReadJSON[CreateShortUrlBody](w, r)
+func (a *App) apiCreateShortURL(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
+	body, err := ReadJSON[CreateShortURLBody](w, r)
 	if err != nil {
 		return BadRequest(err.Error())
 	}
 
 	// Domain-scoped keys may only create URLs on their own domain.
 	if key.Role.Kind == core.RoleDomain {
-		d, err := data.DomainByID(r.Context(), a.Db, key.Role.DomainID)
+		d, err := data.DomainByID(r.Context(), a.DB, key.Role.DomainID)
 		if err != nil {
 			return err
 		}
@@ -246,8 +246,8 @@ func (a *App) apiCreateShortUrl(key *AuthenticatedKey, w http.ResponseWriter, r 
 	}
 
 	findIfExists := body.FindIfExists != nil && *body.FindIfExists
-	spec, err := core.NewShortUrlSpec(core.ShortUrlSpecInput{
-		LongUrl:        body.LongUrl,
+	spec, err := core.NewShortURLSpec(core.ShortURLSpecInput{
+		LongURL:        body.LongURL,
 		CustomSlug:     body.CustomSlug,
 		CodeLength:     body.ShortCodeLength,
 		Domain:         body.Domain,
@@ -263,45 +263,45 @@ func (a *App) apiCreateShortUrl(key *AuthenticatedKey, w http.ResponseWriter, r 
 		FindIfExists:   findIfExists,
 	})
 	if err != nil {
-		return shortUrlProblem(err)
+		return shortURLProblem(err)
 	}
 
-	dto, err := a.CreateShortUrl(r.Context(), ApiKeyAuthor(key.Id()), spec)
+	dto, err := a.CreateShortURL(r.Context(), APIKeyAuthor(key.ID()), spec)
 	if err != nil {
-		return shortUrlProblem(err)
+		return shortURLProblem(err)
 	}
 	return RespondJSON(w, http.StatusCreated, dto)
 }
 
 // GET /rest/v1/short-urls/{code}
-func (a *App) apiGetShortUrl(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
+func (a *App) apiGetShortURL(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	code := r.PathValue("code")
-	detail, err := a.findAccessibleShortUrl(r.Context(), key, code, r.URL.Query().Get("domain"))
+	detail, err := a.findAccessibleShortURL(r.Context(), key, code, r.URL.Query().Get("domain"))
 	if err != nil {
 		return err
 	}
-	tags, err := data.TagsForShortUrl(r.Context(), a.Db, detail.Id)
+	tags, err := data.TagsForShortURL(r.Context(), a.DB, detail.ID)
 	if err != nil {
 		return err
 	}
-	return RespondJSON(w, http.StatusOK, NewShortUrlDto(a.Cfg, tags, detail))
+	return RespondJSON(w, http.StatusOK, NewShortURLDTO(a.Cfg, tags, detail))
 }
 
 // PATCH /rest/v1/short-urls/{code} — merge with current state, then validate
 // the merged result as a whole through the edit spec.
-func (a *App) apiEditShortUrl(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
-	body, err := ReadJSON[EditShortUrlBody](w, r)
+func (a *App) apiEditShortURL(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
+	body, err := ReadJSON[EditShortURLBody](w, r)
 	if err != nil {
 		return BadRequest(err.Error())
 	}
 	code := r.PathValue("code")
-	detail, err := a.findAccessibleShortUrl(r.Context(), key, code, r.URL.Query().Get("domain"))
+	detail, err := a.findAccessibleShortURL(r.Context(), key, code, r.URL.Query().Get("domain"))
 	if err != nil {
 		return err
 	}
 
-	input := core.ShortUrlEditInput{
-		LongUrl:        body.LongUrl.PickValue(detail.LongUrl),
+	input := core.ShortURLEditInput{
+		LongURL:        body.LongURL.PickValue(detail.LongURL),
 		Title:          body.Title.Pick(detail.Title),
 		Group:          body.Group.Pick(detail.GroupName),
 		ValidSince:     body.ValidSince.Pick(detail.ValidSince),
@@ -316,11 +316,11 @@ func (a *App) apiEditShortUrl(key *AuthenticatedKey, w http.ResponseWriter, r *h
 		input.Tags = body.Tags.Value
 	}
 
-	edit, err := core.NewShortUrlEdit(input)
+	edit, err := core.NewShortURLEdit(input)
 	if err != nil {
-		return shortUrlProblem(err)
+		return shortURLProblem(err)
 	}
-	dto, err := a.EditShortUrl(r.Context(), detail.Id, detail, edit)
+	dto, err := a.EditShortURL(r.Context(), detail.ID, detail, edit)
 	if err != nil {
 		return err
 	}
@@ -328,54 +328,54 @@ func (a *App) apiEditShortUrl(key *AuthenticatedKey, w http.ResponseWriter, r *h
 }
 
 // DELETE /rest/v1/short-urls/{code}
-func (a *App) apiDeleteShortUrl(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
+func (a *App) apiDeleteShortURL(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	code := r.PathValue("code")
-	detail, err := a.findAccessibleShortUrl(r.Context(), key, code, r.URL.Query().Get("domain"))
+	detail, err := a.findAccessibleShortURL(r.Context(), key, code, r.URL.Query().Get("domain"))
 	if err != nil {
 		return err
 	}
-	if _, err := data.DeleteShortUrl(r.Context(), a.Db, detail.Id); err != nil {
+	if _, err := data.DeleteShortURL(r.Context(), a.DB, detail.ID); err != nil {
 		return err
 	}
 	w.WriteHeader(http.StatusNoContent)
 	return nil
 }
 
-type rulesDto struct {
-	DefaultLongUrl string        `json:"defaultLongUrl"`
-	RedirectRules  []ruleItemDto `json:"redirectRules"`
+type rulesDTO struct {
+	DefaultLongURL string        `json:"defaultLongUrl"`
+	RedirectRules  []ruleItemDTO `json:"redirectRules"`
 }
 
-type ruleItemDto struct {
-	LongUrl    string              `json:"longUrl"`
+type ruleItemDTO struct {
+	LongURL    string              `json:"longUrl"`
 	Priority   int                 `json:"priority"`
 	Conditions []RuleConditionBody `json:"conditions"`
 }
 
-func newRulesDto(detail *data.ShortUrlDetail, rules []core.RedirectRule) rulesDto {
-	items := make([]ruleItemDto, len(rules))
+func newRulesDTO(detail *data.ShortURLDetail, rules []core.RedirectRule) rulesDTO {
+	items := make([]ruleItemDTO, len(rules))
 	for i, rule := range rules {
 		conditions := make([]RuleConditionBody, len(rule.Conditions))
 		for j, c := range rule.Conditions {
 			conditions[j] = conditionToBody(c)
 		}
-		items[i] = ruleItemDto{LongUrl: rule.LongUrl, Priority: rule.Priority, Conditions: conditions}
+		items[i] = ruleItemDTO{LongURL: rule.LongURL, Priority: rule.Priority, Conditions: conditions}
 	}
-	return rulesDto{DefaultLongUrl: detail.LongUrl, RedirectRules: items}
+	return rulesDTO{DefaultLongURL: detail.LongURL, RedirectRules: items}
 }
 
 // GET /rest/v1/short-urls/{code}/redirect-rules
 func (a *App) apiGetRules(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	code := r.PathValue("code")
-	detail, err := a.findAccessibleShortUrl(r.Context(), key, code, r.URL.Query().Get("domain"))
+	detail, err := a.findAccessibleShortURL(r.Context(), key, code, r.URL.Query().Get("domain"))
 	if err != nil {
 		return err
 	}
-	rules, err := data.RedirectRules(r.Context(), a.Db, detail.Id)
+	rules, err := data.RedirectRules(r.Context(), a.DB, detail.ID)
 	if err != nil {
 		return err
 	}
-	return RespondJSON(w, http.StatusOK, newRulesDto(detail, rules))
+	return RespondJSON(w, http.StatusOK, newRulesDTO(detail, rules))
 }
 
 // POST /rest/v1/short-urls/{code}/redirect-rules — replaces all rules.
@@ -385,7 +385,7 @@ func (a *App) apiSetRules(key *AuthenticatedKey, w http.ResponseWriter, r *http.
 		return BadRequest(err.Error())
 	}
 	code := r.PathValue("code")
-	detail, err := a.findAccessibleShortUrl(r.Context(), key, code, r.URL.Query().Get("domain"))
+	detail, err := a.findAccessibleShortURL(r.Context(), key, code, r.URL.Query().Get("domain"))
 	if err != nil {
 		return err
 	}
@@ -399,35 +399,35 @@ func (a *App) apiSetRules(key *AuthenticatedKey, w http.ResponseWriter, r *http.
 		rules[i] = parsed
 	}
 
-	if err := data.SetRedirectRules(r.Context(), a.Db, detail.Id, rules); err != nil {
+	if err := data.SetRedirectRules(r.Context(), a.DB, detail.ID, rules); err != nil {
 		return err
 	}
-	return RespondJSON(w, http.StatusOK, newRulesDto(detail, rules))
+	return RespondJSON(w, http.StatusOK, newRulesDTO(detail, rules))
 }
 
 // GET /rest/v1/short-urls/{code}/visits
-func (a *App) apiListShortUrlVisits(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
+func (a *App) apiListShortURLVisits(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	code := r.PathValue("code")
 	q := r.URL.Query()
-	detail, err := a.findAccessibleShortUrl(r.Context(), key, code, q.Get("domain"))
+	detail, err := a.findAccessibleShortURL(r.Context(), key, code, q.Get("domain"))
 	if err != nil {
 		return err
 	}
-	page, err := data.ListVisitsForShortUrl(r.Context(), a.Db, detail.Id, visitFiltersFromQuery(q))
+	page, err := data.ListVisitsForShortURL(r.Context(), a.DB, detail.ID, visitFiltersFromQuery(q))
 	if err != nil {
 		return err
 	}
-	return RespondJSON(w, http.StatusOK, NewPageDto(page, NewVisitDto))
+	return RespondJSON(w, http.StatusOK, NewPageDTO(page, NewVisitDTO))
 }
 
 // DELETE /rest/v1/short-urls/{code}/visits
-func (a *App) apiDeleteShortUrlVisits(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
+func (a *App) apiDeleteShortURLVisits(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	code := r.PathValue("code")
-	detail, err := a.findAccessibleShortUrl(r.Context(), key, code, r.URL.Query().Get("domain"))
+	detail, err := a.findAccessibleShortURL(r.Context(), key, code, r.URL.Query().Get("domain"))
 	if err != nil {
 		return err
 	}
-	deleted, err := data.DeleteVisitsForShortUrl(r.Context(), a.Db, detail.Id)
+	deleted, err := data.DeleteVisitsForShortURL(r.Context(), a.DB, detail.ID)
 	if err != nil {
 		return err
 	}

@@ -63,8 +63,8 @@ func TestLifetimeActivityChecksCoverAllThreeExpiryReasons(t *testing.T) {
 // ---- ShortUrlSpec: the single validation path ----
 
 func TestSpecsCollectEveryValidatedPiece(t *testing.T) {
-	spec, serr := NewShortUrlSpec(ShortUrlSpecInput{
-		LongUrl:        "https://example.com/x",
+	spec, serr := NewShortURLSpec(ShortURLSpecInput{
+		LongURL:        "https://example.com/x",
 		CustomSlug:     strPtr("My-Slug"),
 		Tags:           []string{" Marketing ", "LAUNCH"},
 		MaxVisits:      int64Ptr(10),
@@ -73,8 +73,8 @@ func TestSpecsCollectEveryValidatedPiece(t *testing.T) {
 	if serr != nil {
 		t.Fatalf("unexpected: %s", serr)
 	}
-	if spec.LongUrl.Value() != "https://example.com/x" {
-		t.Errorf("long url: %q", spec.LongUrl.Value())
+	if spec.LongURL.Value() != "https://example.com/x" {
+		t.Errorf("long url: %q", spec.LongURL.Value())
 	}
 	if spec.CustomSlug == nil || spec.CustomSlug.Value() != "My-Slug" {
 		t.Errorf("custom slug: %v", spec.CustomSlug)
@@ -88,7 +88,7 @@ func TestSpecsCollectEveryValidatedPiece(t *testing.T) {
 }
 
 func TestSpecsRejectAZeroMaxVisitBudget(t *testing.T) {
-	_, serr := NewShortUrlSpec(ShortUrlSpecInput{LongUrl: "https://example.com", MaxVisits: int64Ptr(0)})
+	_, serr := NewShortURLSpec(ShortURLSpecInput{LongURL: "https://example.com", MaxVisits: int64Ptr(0)})
 	if serr == nil {
 		t.Fatal("expected rejection")
 	}
@@ -98,7 +98,7 @@ func TestSpecsRejectAZeroMaxVisitBudget(t *testing.T) {
 }
 
 func TestSpecsRejectUnsupportedRedirectStatuses(t *testing.T) {
-	_, serr := NewShortUrlSpec(ShortUrlSpecInput{LongUrl: "https://example.com", RedirectStatus: intPtr(418)})
+	_, serr := NewShortURLSpec(ShortURLSpecInput{LongURL: "https://example.com", RedirectStatus: intPtr(418)})
 	if serr == nil {
 		t.Fatal("expected rejection")
 	}
@@ -108,7 +108,7 @@ func TestSpecsRejectUnsupportedRedirectStatuses(t *testing.T) {
 }
 
 func TestSpecsBlankOutWhitespaceTitles(t *testing.T) {
-	spec, serr := NewShortUrlSpec(ShortUrlSpecInput{LongUrl: "https://example.com", Title: strPtr("   ")})
+	spec, serr := NewShortURLSpec(ShortURLSpecInput{LongURL: "https://example.com", Title: strPtr("   ")})
 	if serr != nil {
 		t.Fatal(serr)
 	}
@@ -119,34 +119,34 @@ func TestSpecsBlankOutWhitespaceTitles(t *testing.T) {
 
 // ---- API key roles: unknown stored roles must never default to admin ----
 
-func TestApiKeyRoleParsingIsFailClosed(t *testing.T) {
-	if role, ok := ApiKeyRoleOfStored("admin", nil); !ok || role.Kind != RoleAdmin {
+func TestAPIKeyRoleParsingIsFailClosed(t *testing.T) {
+	if role, ok := APIKeyRoleOfStored("admin", nil); !ok || role.Kind != RoleAdmin {
 		t.Error("admin should parse")
 	}
-	if role, ok := ApiKeyRoleOfStored("author", nil); !ok || role.Kind != RoleAuthor {
+	if role, ok := APIKeyRoleOfStored("author", nil); !ok || role.Kind != RoleAuthor {
 		t.Error("author should parse")
 	}
-	if role, ok := ApiKeyRoleOfStored("domain", domainIDPtr(7)); !ok || role.Kind != RoleDomain || role.DomainID != DomainID(7) {
+	if role, ok := APIKeyRoleOfStored("domain", domainIDPtr(7)); !ok || role.Kind != RoleDomain || role.DomainID != DomainID(7) {
 		t.Error("domain should parse with id")
 	}
 	// A domain role without a domain id is corrupt, not admin.
-	if _, ok := ApiKeyRoleOfStored("domain", nil); ok {
+	if _, ok := APIKeyRoleOfStored("domain", nil); ok {
 		t.Error("domain without id must not parse")
 	}
 	// Unknown roles are rejected, not defaulted.
-	if _, ok := ApiKeyRoleOfStored("superuser", nil); ok {
+	if _, ok := APIKeyRoleOfStored("superuser", nil); ok {
 		t.Error("unknown role must not parse")
 	}
-	if _, ok := ApiKeyRoleOfStored("", nil); ok {
+	if _, ok := APIKeyRoleOfStored("", nil); ok {
 		t.Error("empty role must not parse")
 	}
 }
 
-func TestTypedIdsDoNotCrossAssign(t *testing.T) {
+func TestTypedIDsDoNotCrossAssign(t *testing.T) {
 	// Compile-time guarantee — this test documents the intent.
-	shortUrlId := ShortUrlID(1)
-	domainId := DomainID(1)
-	if shortUrlId.Value() != 1 || domainId.Value() != 1 {
+	shortURLID := ShortURLID(1)
+	domainID := DomainID(1)
+	if shortURLID.Value() != 1 || domainID.Value() != 1 {
 		t.Error("unexpected values")
 	}
 }

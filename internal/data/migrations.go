@@ -293,7 +293,7 @@ func migrationScripts(dialect Dialect) []struct {
 }
 
 // Migrate applies all pending migrations. Safe to run on every startup.
-func Migrate(ctx context.Context, db *Db) error {
+func Migrate(ctx context.Context, db *DB) error {
 	_, err := db.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
 	  version INT PRIMARY KEY,
 	  applied_at TEXT NOT NULL

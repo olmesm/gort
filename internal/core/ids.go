@@ -1,12 +1,12 @@
 package core
 
-// Strongly-typed identifiers. Persistence rows carry raw int64s; everything
-// above the row level speaks in these, so a domain id can never be passed
-// where a short-url id is expected.
+// Strongly-typed identifiers. Rows are scanned straight into these, so from
+// the repository boundary up a domain id can never be passed where a
+// short-url id is expected.
 
-type ShortUrlID int64
+type ShortURLID int64
 
-func (id ShortUrlID) Value() int64 { return int64(id) }
+func (id ShortURLID) Value() int64 { return int64(id) }
 
 type DomainID int64
 
@@ -20,9 +20,9 @@ type UserID int64
 
 func (id UserID) Value() int64 { return int64(id) }
 
-type ApiKeyID int64
+type APIKeyID int64
 
-func (id ApiKeyID) Value() int64 { return int64(id) }
+func (id APIKeyID) Value() int64 { return int64(id) }
 
 type WebhookID int64
 

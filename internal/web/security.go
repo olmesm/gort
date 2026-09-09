@@ -41,14 +41,14 @@ func VerifyPassword(password, hash string) bool {
 // stored role cannot be parsed never reaches a handler — unknown roles are
 // rejected, not defaulted.
 type AuthenticatedKey struct {
-	Row  data.ApiKeyRow
-	Role core.ApiKeyRole
+	Row  data.APIKeyRow
+	Role core.APIKeyRole
 }
 
-func (k *AuthenticatedKey) Id() core.ApiKeyID { return core.ApiKeyID(k.Row.Id) }
+func (k *AuthenticatedKey) ID() core.APIKeyID { return core.APIKeyID(k.Row.ID) }
 
 // GenerateApiKey generates a new plaintext API key. Only its hash is stored.
-func GenerateApiKey() string {
+func GenerateAPIKey() string {
 	bytes := make([]byte, 32)
 	if _, err := rand.Read(bytes); err != nil {
 		panic(err)
@@ -56,29 +56,29 @@ func GenerateApiKey() string {
 	return "gort_" + base64.RawURLEncoding.EncodeToString(bytes)
 }
 
-func HashApiKey(key string) string {
+func HashAPIKey(key string) string {
 	sum := sha256.Sum256([]byte(key))
 	return hex.EncodeToString(sum[:])
 }
 
-func apiKeyIsUsable(row *data.ApiKeyRow, now time.Time) bool {
+func apiKeyIsUsable(row *data.APIKeyRow, now time.Time) bool {
 	return row.Enabled && (row.ExpiresAt == nil || row.ExpiresAt.After(now))
 }
 
 // AuthenticateApiKey authenticates a stored key row: it must be enabled,
 // unexpired and carry a parseable role.
-func AuthenticateApiKey(now time.Time, row *data.ApiKeyRow) *AuthenticatedKey {
+func AuthenticateAPIKey(now time.Time, row *data.APIKeyRow) *AuthenticatedKey {
 	if row == nil || !apiKeyIsUsable(row, now) {
 		return nil
 	}
-	role, ok := core.ApiKeyRoleOfStored(row.Role, row.DomainId)
+	role, ok := core.APIKeyRoleOfStored(row.Role, row.DomainID)
 	if !ok {
 		return nil
 	}
 	return &AuthenticatedKey{Row: *row, Role: role}
 }
 
-func readApiKeyHeader(r *http.Request) string {
+func readAPIKeyHeader(r *http.Request) string {
 	if key := r.Header.Get("X-Api-Key"); key != "" {
 		return key
 	}
@@ -90,17 +90,17 @@ func readApiKeyHeader(r *http.Request) string {
 
 // requireApiKey authenticates the request by API key and passes the
 // authenticated key to the handler.
-func (a *App) requireApiKey(next apiHandler) http.HandlerFunc {
+func (a *App) requireAPIKey(next apiHandler) http.HandlerFunc {
 	return a.handle(func(w http.ResponseWriter, r *http.Request) error {
-		key := readApiKeyHeader(r)
+		key := readAPIKeyHeader(r)
 		if key == "" {
 			return Unauthorized("Expected an API key in the X-Api-Key header.")
 		}
-		row, err := data.ApiKeyByHash(r.Context(), a.Db, HashApiKey(key))
+		row, err := data.APIKeyByHash(r.Context(), a.DB, HashAPIKey(key))
 		if err != nil {
 			return err
 		}
-		authenticated := AuthenticateApiKey(time.Now().UTC(), row)
+		authenticated := AuthenticateAPIKey(time.Now().UTC(), row)
 		if authenticated == nil {
 			return Unauthorized("The provided API key is not valid.")
 		}
@@ -110,7 +110,7 @@ func (a *App) requireApiKey(next apiHandler) http.HandlerFunc {
 
 // requireAdminKey authenticates and requires the admin role.
 func (a *App) requireAdminKey(next apiHandler) http.HandlerFunc {
-	return a.requireApiKey(func(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
+	return a.requireAPIKey(func(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 		if key.Role.Kind != core.RoleAdmin {
 			return Forbidden("This operation requires an admin API key.")
 		}
@@ -125,7 +125,7 @@ const sessionLifetime = 14 * 24 * time.Hour
 
 // CurrentUser is the signed-in dashboard user for the current request.
 type CurrentUser struct {
-	Id       core.UserID
+	ID       core.UserID
 	Username string
 	Role     core.UserRole
 	// Groups are the normalized OIDC groups from the login token; empty for
@@ -157,7 +157,7 @@ func (u *CurrentUser) VisibleGroups() []string {
 }
 
 type sessionPayload struct {
-	Uid      int64    `json:"uid"`
+	UID      int64    `json:"uid"`
 	Username string   `json:"u"`
 	Role     string   `json:"r"`
 	Groups   []string `json:"g,omitempty"`
@@ -239,7 +239,7 @@ func (a *App) SignIn(w http.ResponseWriter, user *data.UserRow) {
 // SignInWithGroups issues the session cookie carrying the user's OIDC groups.
 func (a *App) SignInWithGroups(w http.ResponseWriter, user *data.UserRow, groups []string) {
 	payload, _ := json.Marshal(sessionPayload{
-		Uid:      user.Id.Value(),
+		UID:      user.ID.Value(),
 		Username: user.Username,
 		Role:     user.Role,
 		Groups:   groups,
@@ -282,7 +282,7 @@ func (a *App) currentUser(r *http.Request) *CurrentUser {
 		return nil
 	}
 	return &CurrentUser{
-		Id:       core.UserID(session.Uid),
+		ID:       core.UserID(session.UID),
 		Username: session.Username,
 		Role:     role,
 		Groups:   core.NormalizeGroups(session.Groups),
@@ -295,8 +295,8 @@ func (a *App) requireUser(next userHandler) http.HandlerFunc {
 	return a.handle(func(w http.ResponseWriter, r *http.Request) error {
 		user := a.currentUser(r)
 		if user == nil {
-			returnUrl := url.QueryEscape(r.URL.RequestURI())
-			return redirect(w, r, "/admin/login?returnUrl="+returnUrl)
+			returnURL := url.QueryEscape(r.URL.RequestURI())
+			return redirect(w, r, "/admin/login?returnUrl="+returnURL)
 		}
 		return next(user, w, r)
 	})

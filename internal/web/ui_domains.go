@@ -15,13 +15,13 @@ type domainsView struct {
 
 type messageView struct {
 	Error     string
-	BackUrl   string
+	BackURL   string
 	BackLabel string
 }
 
 // GET /admin/domains (admin)
 func (a *App) uiListDomains(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	domains, err := data.ListDomainsWithStats(r.Context(), a.Db)
+	domains, err := data.ListDomainsWithStats(r.Context(), a.DB)
 	if err != nil {
 		return err
 	}
@@ -31,7 +31,7 @@ func (a *App) uiListDomains(user *CurrentUser, w http.ResponseWriter, r *http.Re
 func (a *App) renderDomainsMessage(w http.ResponseWriter, status int, user *CurrentUser, message string) error {
 	return a.renderPage(w, status, "message", user, "/admin/domains", "Domains", messageView{
 		Error:     message,
-		BackUrl:   "/admin/domains",
+		BackURL:   "/admin/domains",
 		BackLabel: "← Back to domains",
 	})
 }
@@ -42,7 +42,7 @@ func (a *App) uiCreateDomain(user *CurrentUser, w http.ResponseWriter, r *http.R
 	if err != nil {
 		return a.renderDomainsMessage(w, http.StatusBadRequest, user, err.Error())
 	}
-	created, err := data.CreateDomain(r.Context(), a.Db, authority)
+	created, err := data.CreateDomain(r.Context(), a.DB, authority)
 	if err != nil {
 		return err
 	}
@@ -65,7 +65,7 @@ func (a *App) uiSetDomainRedirects(_ *CurrentUser, w http.ResponseWriter, r *htt
 		}
 		return nil
 	}
-	if _, err := data.UpdateDomainRedirects(r.Context(), a.Db, id,
+	if _, err := data.UpdateDomainRedirects(r.Context(), a.DB, id,
 		getOpt("baseUrlRedirect"), getOpt("regular404Redirect"), getOpt("invalidShortUrlRedirect")); err != nil {
 		return err
 	}
@@ -78,7 +78,7 @@ func (a *App) uiDeleteDomain(_ *CurrentUser, w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		return err
 	}
-	if _, err := data.DeleteDomain(r.Context(), a.Db, id); err != nil {
+	if _, err := data.DeleteDomain(r.Context(), a.DB, id); err != nil {
 		return err
 	}
 	return redirect(w, r, "/admin/domains")

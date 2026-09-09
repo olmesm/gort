@@ -330,8 +330,8 @@ through the actual Keycloak login form), see
 ```
 cmd/gort/           entry point (plus a -healthcheck probe for containers)
 internal/
-  core/             pure domain: constrained types (LongUrl, ShortCode,
-                    TagName, DomainAuthority, typed ids), the ShortUrlSpec /
+  core/             pure domain: constrained types (LongURL, ShortCode,
+                    TagName, DomainAuthority, typed ids), the ShortURLSpec /
                     ShortUrlEdit constructors, Lifetime invariants,
                     redirect rule engine, IP anonymization
   data/             database/sql repositories with dialect-aware SQL
@@ -349,14 +349,14 @@ The design follows the functional-core / imperative-shell style ported from
 the original F# codebase:
 
 - **Parse, don't validate.** Raw input (JSON bodies, form fields, env vars)
-  is parsed once into constrained types — `LongUrl`, `ShortCode`, `TagName`,
+  is parsed once into constrained types — `LongURL`, `ShortCode`, `TagName`,
   `DomainAuthority` — whose constructors are the only way to build them, so
   an unvalidated value cannot reach a repository.
-- **One home per invariant.** `NewShortUrlSpec` / `NewShortUrlEdit` enforce
+- **One home per invariant.** `NewShortURLSpec` / `NewShortURLEdit` enforce
   every creation/edit rule (`maxVisits > 0`, `validSince < validUntil`, valid
   status codes, tag rules); the REST API and the dashboard both go through
   them, so the entry points cannot drift.
-- **Typed everything at boundaries.** `ShortUrlID`/`DomainID`/… prevent id
+- **Typed everything at boundaries.** `ShortURLID`/`DomainID`/… prevent id
   transposition; API-key roles parse fail-closed (an unknown stored role is
   an invalid key, never a default admin).
 - **Errors as values.** Domain failures are sentinel error categories

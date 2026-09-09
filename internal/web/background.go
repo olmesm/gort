@@ -28,19 +28,19 @@ import (
 
 // GeoIpService is a thread-safe holder around the MaxMind reader; reloadable
 // when the database file is refreshed.
-type GeoIpService struct {
+type GeoIPService struct {
 	cfg    *AppConfig
 	logger *slog.Logger
 	mu     sync.RWMutex
 	reader *geoip2.Reader
 }
 
-func NewGeoIpService(cfg *AppConfig, logger *slog.Logger) *GeoIpService {
-	return &GeoIpService{cfg: cfg, logger: logger}
+func NewGeoIPService(cfg *AppConfig, logger *slog.Logger) *GeoIPService {
+	return &GeoIPService{cfg: cfg, logger: logger}
 }
 
-func (g *GeoIpService) Reload() {
-	path := g.cfg.GeoDbPath()
+func (g *GeoIPService) Reload() {
+	path := g.cfg.GeoDBPath()
 	if _, err := os.Stat(path); err != nil {
 		return
 	}
@@ -58,13 +58,13 @@ func (g *GeoIpService) Reload() {
 	g.logger.Info("GeoIP database loaded", "path", path)
 }
 
-func (g *GeoIpService) IsAvailable() bool {
+func (g *GeoIPService) IsAvailable() bool {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 	return g.reader != nil
 }
 
-func (g *GeoIpService) TryLookup(ip string) *data.GeoInfo {
+func (g *GeoIPService) TryLookup(ip string) *data.GeoInfo {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 	if g.reader == nil {
@@ -109,13 +109,13 @@ type WorkQueues struct {
 }
 
 type geoJob struct {
-	VisitId core.VisitID
-	Ip      string
+	VisitID core.VisitID
+	IP      string
 }
 
 type titleJob struct {
-	ShortUrlId core.ShortUrlID
-	LongUrl    core.LongUrl
+	ShortURLID core.ShortURLID
+	LongURL    core.LongURL
 }
 
 func NewWorkQueues() *WorkQueues {
@@ -136,16 +136,16 @@ func (q *WorkQueues) PublishEvent(event DomainEvent) {
 	}
 }
 
-func (q *WorkQueues) enqueueGeo(visitId core.VisitID, ip string) {
+func (q *WorkQueues) enqueueGeo(visitID core.VisitID, ip string) {
 	select {
-	case q.Geo <- geoJob{VisitId: visitId, Ip: ip}:
+	case q.Geo <- geoJob{VisitID: visitID, IP: ip}:
 	default:
 	}
 }
 
-func (q *WorkQueues) enqueueTitle(shortUrlId core.ShortUrlID, longUrl core.LongUrl) {
+func (q *WorkQueues) enqueueTitle(shortURLID core.ShortURLID, longURL core.LongURL) {
 	select {
-	case q.Title <- titleJob{ShortUrlId: shortUrlId, LongUrl: longUrl}:
+	case q.Title <- titleJob{ShortURLID: shortURLID, LongURL: longURL}:
 	default:
 	}
 }
@@ -164,7 +164,7 @@ func (a *App) StartWorkers(ctx context.Context) {
 	go a.geoWorker(ctx)
 	go a.titleWorker(ctx)
 	go a.webhookWorker(ctx)
-	go a.geoDbUpdater(ctx)
+	go a.geoDBUpdater(ctx)
 }
 
 // eventWorker turns published events into queued webhook deliveries.
@@ -174,7 +174,7 @@ func (a *App) eventWorker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case event := <-a.Queues.Events:
-			hooks, err := data.ListWebhooksForEvent(ctx, a.Db, event.Kind())
+			hooks, err := data.ListWebhooksForEvent(ctx, a.DB, event.Kind())
 			if err != nil {
 				a.Logger.Warn("Failed to fan out event to webhooks", "event", event.Kind().Slug(), "error", err)
 				continue
@@ -185,8 +185,8 @@ func (a *App) eventWorker(ctx context.Context) {
 			payload := event.ToDeliveryPayload(time.Now().UTC())
 			failed := false
 			for _, hook := range hooks {
-				if err := data.EnqueueDelivery(ctx, a.Db, hook.Id, event.Kind(), payload); err != nil {
-					a.Logger.Warn("Failed to enqueue webhook delivery", "webhook", hook.Id, "error", err)
+				if err := data.EnqueueDelivery(ctx, a.DB, hook.ID, event.Kind(), payload); err != nil {
+					a.Logger.Warn("Failed to enqueue webhook delivery", "webhook", hook.ID, "error", err)
 					failed = true
 				}
 			}
@@ -199,26 +199,26 @@ func (a *App) eventWorker(ctx context.Context) {
 
 // geoWorker resolves geolocation for recorded visits.
 func (a *App) geoWorker(ctx context.Context) {
-	resolve := func(visitId core.VisitID, ip string) {
+	resolve := func(visitID core.VisitID, ip string) {
 		var err error
 		if info := a.Geo.TryLookup(ip); info != nil {
-			err = data.SetVisitGeo(ctx, a.Db, visitId, *info)
+			err = data.SetVisitGeo(ctx, a.DB, visitID, *info)
 		} else {
-			err = data.MarkGeoResolved(ctx, a.Db, visitId)
+			err = data.MarkGeoResolved(ctx, a.DB, visitID)
 		}
 		if err != nil {
-			a.Logger.Warn("Failed to geolocate visit", "visit", visitId.Value(), "error", err)
+			a.Logger.Warn("Failed to geolocate visit", "visit", visitID.Value(), "error", err)
 		}
 	}
 
 	// Catch up on visits left unresolved by previous runs.
 	if a.Geo.IsAvailable() {
-		pending, err := data.ListPendingGeo(ctx, a.Db, 1000)
+		pending, err := data.ListPendingGeo(ctx, a.DB, 1000)
 		if err != nil {
 			a.Logger.Warn("Geo catch-up scan failed", "error", err)
 		} else {
 			for _, p := range pending {
-				resolve(p.Id, p.Ip)
+				resolve(p.ID, p.IP)
 			}
 		}
 	}
@@ -228,7 +228,7 @@ func (a *App) geoWorker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case job := <-a.Queues.Geo:
-			resolve(job.VisitId, job.Ip)
+			resolve(job.VisitID, job.IP)
 		}
 	}
 }
@@ -237,11 +237,11 @@ var titleRegex = regexp.MustCompile(`(?i)<title[^>]*>\s*([^<]{1,512})`)
 
 // TryFetchTitle fetches a page and extracts its <title>, when the response is
 // a successful HTML document.
-func (a *App) TryFetchTitle(ctx context.Context, longUrl core.LongUrl) string {
+func (a *App) TryFetchTitle(ctx context.Context, longURL core.LongURL) string {
 	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, longUrl.Value(), nil)
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, longURL.Value(), nil)
 	if err != nil {
 		return ""
 	}
@@ -276,9 +276,9 @@ func (a *App) titleWorker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case job := <-a.Queues.Title:
-			if title := a.TryFetchTitle(ctx, job.LongUrl); title != "" {
-				if err := data.SetResolvedTitle(ctx, a.Db, job.ShortUrlId, title); err != nil {
-					a.Logger.Warn("Failed to store title", "shortUrl", job.ShortUrlId.Value(), "error", err)
+			if title := a.TryFetchTitle(ctx, job.LongURL); title != "" {
+				if err := data.SetResolvedTitle(ctx, a.DB, job.ShortURLID, title); err != nil {
+					a.Logger.Warn("Failed to store title", "shortUrl", job.ShortURLID.Value(), "error", err)
 				}
 			}
 		}
@@ -301,10 +301,10 @@ func (a *App) webhookWorker(ctx context.Context) {
 		reqCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 		defer cancel()
 
-		req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, hook.Url,
+		req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, hook.URL,
 			strings.NewReader(delivery.Payload))
 		if err != nil {
-			_ = data.MarkFailedAttempt(ctx, a.Db, delivery.Id, delivery.Attempts, webhookMaxAttempts, err.Error())
+			_ = data.MarkFailedAttempt(ctx, a.DB, delivery.ID, delivery.Attempts, webhookMaxAttempts, err.Error())
 			return
 		}
 		req.Header.Set("Content-Type", "application/json; charset=utf-8")
@@ -316,17 +316,17 @@ func (a *App) webhookWorker(ctx context.Context) {
 			if ctx.Err() != nil {
 				return
 			}
-			a.Logger.Warn("Webhook delivery failed", "delivery", delivery.Id, "error", err)
-			_ = data.MarkFailedAttempt(ctx, a.Db, delivery.Id, delivery.Attempts, webhookMaxAttempts, err.Error())
+			a.Logger.Warn("Webhook delivery failed", "delivery", delivery.ID, "error", err)
+			_ = data.MarkFailedAttempt(ctx, a.DB, delivery.ID, delivery.Attempts, webhookMaxAttempts, err.Error())
 			return
 		}
 		defer resp.Body.Close()
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			_ = data.MarkDelivered(ctx, a.Db, delivery.Id)
+			_ = data.MarkDelivered(ctx, a.DB, delivery.ID)
 		} else {
-			_ = data.MarkFailedAttempt(ctx, a.Db, delivery.Id, delivery.Attempts, webhookMaxAttempts,
+			_ = data.MarkFailedAttempt(ctx, a.DB, delivery.ID, delivery.Attempts, webhookMaxAttempts,
 				fmt.Sprintf("HTTP %d", resp.StatusCode))
 		}
 	}
@@ -339,7 +339,7 @@ func (a *App) webhookWorker(ctx context.Context) {
 		case <-a.Queues.WebhookSignal:
 		case <-time.After(15 * time.Second):
 		}
-		due, err := data.DueDeliveries(ctx, a.Db, 50)
+		due, err := data.DueDeliveries(ctx, a.DB, 50)
 		if err != nil {
 			a.Logger.Warn("Failed to load due webhook deliveries", "error", err)
 			continue
@@ -352,7 +352,7 @@ func (a *App) webhookWorker(ctx context.Context) {
 
 // geoDbUpdater downloads and refreshes the GeoLite2 city database when a
 // license key is configured.
-func (a *App) geoDbUpdater(ctx context.Context) {
+func (a *App) geoDBUpdater(ctx context.Context) {
 	a.Geo.Reload()
 
 	if a.Cfg.GeoLiteLicenseKey == "" {
@@ -364,13 +364,13 @@ func (a *App) geoDbUpdater(ctx context.Context) {
 	}
 
 	for {
-		dbPath := a.Cfg.GeoDbPath()
+		dbPath := a.Cfg.GeoDBPath()
 		stale := true
 		if info, err := os.Stat(dbPath); err == nil {
 			stale = info.ModTime().UTC().Before(time.Now().UTC().AddDate(0, 0, -7))
 		}
 		if stale {
-			ok, err := a.downloadGeoDb(ctx)
+			ok, err := a.downloadGeoDB(ctx)
 			if err != nil {
 				if ctx.Err() != nil {
 					return
@@ -390,14 +390,14 @@ func (a *App) geoDbUpdater(ctx context.Context) {
 	}
 }
 
-func (a *App) downloadGeoDb(ctx context.Context) (bool, error) {
-	downloadUrl := "https://download.maxmind.com/app/geoip_download" +
+func (a *App) downloadGeoDB(ctx context.Context) (bool, error) {
+	downloadURL := "https://download.maxmind.com/app/geoip_download" +
 		"?edition_id=GeoLite2-City&license_key=" + url.QueryEscape(a.Cfg.GeoLiteLicenseKey) +
 		"&suffix=tar.gz"
 
 	reqCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, downloadUrl, nil)
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, downloadURL, nil)
 	if err != nil {
 		return false, err
 	}
@@ -431,7 +431,7 @@ func (a *App) downloadGeoDb(ctx context.Context) (bool, error) {
 		if err := os.MkdirAll(a.Cfg.DataDir, 0o755); err != nil {
 			return false, err
 		}
-		target := a.Cfg.GeoDbPath()
+		target := a.Cfg.GeoDBPath()
 		tmp := target + ".tmp"
 		out, err := os.Create(tmp)
 		if err != nil {

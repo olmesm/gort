@@ -122,7 +122,7 @@ func (idp *fakeIdp) signToken(claims map[string]any) string {
 }
 
 // newTestAppWithOidc boots the app against the fake IdP.
-func newTestAppWithOidc(t *testing.T, idp *fakeIdp, extra map[string]string) *App {
+func newTestAppWithOIDC(t *testing.T, idp *fakeIdp, extra map[string]string) *App {
 	t.Helper()
 	dataDir := t.TempDir()
 	vars := map[string]string{
@@ -154,7 +154,7 @@ func newTestAppWithOidc(t *testing.T, idp *fakeIdp, extra map[string]string) *Ap
 	}
 	// Hermetic HTTP for discovery/JWKS/token: never touch a proxy.
 	app.oidc.httpClient = &http.Client{Transport: &http.Transport{Proxy: nil}}
-	t.Cleanup(func() { _ = app.Db.Close() })
+	t.Cleanup(func() { _ = app.DB.Close() })
 	return app
 }
 
@@ -168,16 +168,16 @@ func oidcLogin(t *testing.T, app *App, idp *fakeIdp, sub, username string, group
 	if start.Code != http.StatusFound {
 		t.Fatalf("login start status %d: %s", start.Code, start.Body.String())
 	}
-	authUrl, err := url.Parse(start.Header().Get("Location"))
+	authURL, err := url.Parse(start.Header().Get("Location"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	state := authUrl.Query().Get("state")
-	nonce := authUrl.Query().Get("nonce")
-	if state == "" || nonce == "" || authUrl.Query().Get("code_challenge") == "" {
-		t.Fatalf("auth URL missing state/nonce/PKCE: %s", authUrl)
+	state := authURL.Query().Get("state")
+	nonce := authURL.Query().Get("nonce")
+	if state == "" || nonce == "" || authURL.Query().Get("code_challenge") == "" {
+		t.Fatalf("auth URL missing state/nonce/PKCE: %s", authURL)
 	}
-	if got := authUrl.Query().Get("redirect_uri"); got != "http://example.test/admin/oidc/callback" {
+	if got := authURL.Query().Get("redirect_uri"); got != "http://example.test/admin/oidc/callback" {
 		t.Fatalf("redirect_uri: %s", got)
 	}
 
@@ -219,9 +219,9 @@ func withSession(client *testClient, session string) *testClient {
 	return client
 }
 
-func TestOidcLoginProvisionsUserAndGrantsAdminByGroup(t *testing.T) {
+func TestOIDCLoginProvisionsUserAndGrantsAdminByGroup(t *testing.T) {
 	idp := newFakeIdp(t)
-	app := newTestAppWithOidc(t, idp, nil)
+	app := newTestAppWithOIDC(t, idp, nil)
 
 	// Member of the admin group → dashboard admin.
 	adminSession := oidcLogin(t, app, idp, "sub-admin", "alice", []string{"/gort-admins", "/marketing"})
@@ -249,9 +249,9 @@ func TestOidcLoginProvisionsUserAndGrantsAdminByGroup(t *testing.T) {
 	}
 }
 
-func TestOidcCallbackRejectsBadStateAndNonce(t *testing.T) {
+func TestOIDCCallbackRejectsBadStateAndNonce(t *testing.T) {
 	idp := newFakeIdp(t)
-	app := newTestAppWithOidc(t, idp, nil)
+	app := newTestAppWithOIDC(t, idp, nil)
 	client := app.client(t)
 
 	// No state cookie at all.
@@ -262,8 +262,8 @@ func TestOidcCallbackRejectsBadStateAndNonce(t *testing.T) {
 
 	// Mismatched nonce inside a valid state.
 	start := client.get("/admin/oidc/login")
-	authUrl, _ := url.Parse(start.Header().Get("Location"))
-	state := authUrl.Query().Get("state")
+	authURL, _ := url.Parse(start.Header().Get("Location"))
+	state := authURL.Query().Get("state")
 	var stateCookie string
 	for _, cookie := range start.Result().Cookies() {
 		if cookie.Name == "gort_oidc" {
@@ -280,9 +280,9 @@ func TestOidcCallbackRejectsBadStateAndNonce(t *testing.T) {
 	}
 }
 
-func TestOidcOnlyDisablesPasswordLogin(t *testing.T) {
+func TestOIDCOnlyDisablesPasswordLogin(t *testing.T) {
 	idp := newFakeIdp(t)
-	app := newTestAppWithOidc(t, idp, map[string]string{"OIDC_ONLY": "true"})
+	app := newTestAppWithOIDC(t, idp, map[string]string{"OIDC_ONLY": "true"})
 	client := app.client(t)
 
 	form := client.get("/admin/login")
@@ -301,7 +301,7 @@ func TestOidcOnlyDisablesPasswordLogin(t *testing.T) {
 
 func TestGroupScopingInDashboard(t *testing.T) {
 	idp := newFakeIdp(t)
-	app := newTestAppWithOidc(t, idp, nil)
+	app := newTestAppWithOIDC(t, idp, nil)
 	apiAdmin := app.adminClient(t)
 
 	// Seed one ungrouped link and one per team.
@@ -349,7 +349,7 @@ func TestGroupScopingInDashboard(t *testing.T) {
 	}
 	_ = idOf // codes are the slugs themselves; edit pages need numeric ids
 
-	editUrlFor := func(slug string) string {
+	editURLFor := func(slug string) string {
 		// The list page links to /admin/short-urls/{id}/edit; scrape it from
 		// the admin's full listing.
 		adminSession := oidcLogin(t, app, idp, "sub-root", "root", []string{"gort-admins"})
@@ -365,11 +365,11 @@ func TestGroupScopingInDashboard(t *testing.T) {
 	}
 
 	// Edit page of the foreign link is a 404; own group opens.
-	foreignEdit := editUrlFor("team-b-link")
+	foreignEdit := editURLFor("team-b-link")
 	if resp := client.get(foreignEdit); resp.Code != http.StatusNotFound {
 		t.Fatalf("foreign edit page: %d", resp.Code)
 	}
-	ownEdit := editUrlFor("team-a-link")
+	ownEdit := editURLFor("team-a-link")
 	if resp := client.get(ownEdit); resp.Code != http.StatusOK {
 		t.Fatalf("own edit page: %d", resp.Code)
 	}
@@ -389,11 +389,11 @@ func TestGroupScopingInDashboard(t *testing.T) {
 	}
 }
 
-func TestApiGroupFieldAndFilter(t *testing.T) {
+func TestAPIGroupFieldAndFilter(t *testing.T) {
 	app := newTestApp(t)
 	client := app.adminClient(t)
 
-	created := parseJson(t, client.post("/rest/v1/short-urls",
+	created := parseJSON(t, client.post("/rest/v1/short-urls",
 		`{"longUrl":"https://example.com/grouped","customSlug":"grouped","group":"/ops"}`).Body.String())
 	if created["group"] != "ops" {
 		t.Fatalf("group normalized: %v", created["group"])
@@ -401,23 +401,23 @@ func TestApiGroupFieldAndFilter(t *testing.T) {
 	client.post("/rest/v1/short-urls", `{"longUrl":"https://example.com/plain","customSlug":"plain"}`)
 
 	// Filter to one group.
-	list := parseJson(t, client.get("/rest/v1/short-urls?group=ops").Body.String())
+	list := parseJSON(t, client.get("/rest/v1/short-urls?group=ops").Body.String())
 	if items := list["data"].([]any); len(items) != 1 {
 		t.Fatalf("group filter items: %d", len(items))
 	}
 	// group= (empty) filters to ungrouped links.
-	ungrouped := parseJson(t, client.get("/rest/v1/short-urls?group=").Body.String())
+	ungrouped := parseJSON(t, client.get("/rest/v1/short-urls?group=").Body.String())
 	items := ungrouped["data"].([]any)
 	if len(items) != 1 || items[0].(map[string]any)["shortCode"] != "plain" {
 		t.Fatalf("ungrouped filter items: %v", items)
 	}
 
 	// PATCH can move and clear the group; null clears.
-	moved := parseJson(t, client.patch("/rest/v1/short-urls/grouped", `{"group":"platform"}`).Body.String())
+	moved := parseJSON(t, client.patch("/rest/v1/short-urls/grouped", `{"group":"platform"}`).Body.String())
 	if moved["group"] != "platform" {
 		t.Fatalf("moved group: %v", moved["group"])
 	}
-	cleared := parseJson(t, client.patch("/rest/v1/short-urls/grouped", `{"group":null}`).Body.String())
+	cleared := parseJSON(t, client.patch("/rest/v1/short-urls/grouped", `{"group":null}`).Body.String())
 	if _, has := cleared["group"]; has {
 		t.Fatalf("group should be cleared: %v", cleared["group"])
 	}

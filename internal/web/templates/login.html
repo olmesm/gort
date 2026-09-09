@@ -14,15 +14,15 @@
       {{- if .Error}}
       <div class="alert error">{{.Error}}</div>
       {{- end}}
-      {{- if .OidcEnabled}}
-      <a class="btn" style="display:block;text-align:center" href="/admin/oidc/login?returnUrl={{.ReturnUrlParam}}">Continue with {{.ProviderName}}</a>
+      {{- if .OIDCEnabled}}
+      <a class="btn" style="display:block;text-align:center" href="/admin/oidc/login?returnUrl={{.ReturnURLParam}}">Continue with {{.ProviderName}}</a>
       {{- end}}
       {{- if .ShowPasswordForm}}
-      {{- if .OidcEnabled}}
+      {{- if .OIDCEnabled}}
       <p class="muted" style="text-align:center;margin:0.75rem 0 0">or sign in with a local account</p>
       {{- end}}
       <form class="stack" method="post" action="/admin/login">
-        <input type="hidden" name="returnUrl" value="{{.ReturnUrl}}">
+        <input type="hidden" name="returnUrl" value="{{.ReturnURL}}">
         <div><label>Username</label><input type="text" name="username" required autofocus></div>
         <div><label>Password</label><input type="password" name="password" required></div>
         <button>Log in</button>

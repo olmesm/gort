@@ -10,21 +10,21 @@
       {{- range .Domains}}
       <tr>
         <td><span class="mono">{{.Authority}}</span>{{if .IsDefault}} <span class="badge green">default</span>{{end}}</td>
-        <td>{{.ShortUrlCount}}</td>
+        <td>{{.ShortURLCount}}</td>
         <td>{{.VisitCount}}</td>
         <td>
-          <form method="post" action="/admin/domains/{{.Id}}/redirects" class="stack" style="max-width:100%">
+          <form method="post" action="/admin/domains/{{.ID}}/redirects" class="stack" style="max-width:100%">
             <div class="row">
-              <input type="url" name="baseUrlRedirect" placeholder="Base URL redirect" value="{{deref .BaseUrlRedirect}}">
+              <input type="url" name="baseUrlRedirect" placeholder="Base URL redirect" value="{{deref .BaseURLRedirect}}">
               <input type="url" name="regular404Redirect" placeholder="Regular 404 redirect" value="{{deref .Regular404Redirect}}">
-              <input type="url" name="invalidShortUrlRedirect" placeholder="Invalid short URL redirect" value="{{deref .InvalidShortUrlRedirect}}">
+              <input type="url" name="invalidShortUrlRedirect" placeholder="Invalid short URL redirect" value="{{deref .InvalidShortURLRedirect}}">
               <button class="secondary small">Save</button>
             </div>
           </form>
         </td>
         <td class="actions">
           {{- if not .IsDefault}}
-          <form class="inline" method="post" action="/admin/domains/{{.Id}}/delete" onsubmit="return confirm('Delete this domain and ALL its short URLs?')">
+          <form class="inline" method="post" action="/admin/domains/{{.ID}}/delete" onsubmit="return confirm('Delete this domain and ALL its short URLs?')">
             <button class="danger small">Delete</button>
           </form>
           {{- end}}

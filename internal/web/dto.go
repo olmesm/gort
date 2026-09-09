@@ -9,57 +9,57 @@ import (
 // JSON representations shared by the REST API, webhook payloads and the
 // dashboard.
 
-type VisitsSummaryDto struct {
+type VisitsSummaryDTO struct {
 	Total   int64 `json:"total"`
 	NonBots int64 `json:"nonBots"`
 	Bots    int64 `json:"bots"`
 }
 
-type ShortUrlMetaDto struct {
+type ShortURLMetaDTO struct {
 	ValidSince *time.Time `json:"validSince,omitempty"`
 	ValidUntil *time.Time `json:"validUntil,omitempty"`
 	MaxVisits  *int64     `json:"maxVisits,omitempty"`
 }
 
-type ShortUrlDto struct {
+type ShortURLDTO struct {
 	ShortCode      string           `json:"shortCode"`
-	ShortUrl       string           `json:"shortUrl"`
+	ShortURL       string           `json:"shortUrl"`
 	Domain         string           `json:"domain"`
-	LongUrl        string           `json:"longUrl"`
+	LongURL        string           `json:"longUrl"`
 	Title          *string          `json:"title,omitempty"`
 	DateCreated    time.Time        `json:"dateCreated"`
 	Tags           []string         `json:"tags"`
 	Group          *string          `json:"group,omitempty"`
-	Meta           ShortUrlMetaDto  `json:"meta"`
-	VisitsSummary  VisitsSummaryDto `json:"visitsSummary"`
+	Meta           ShortURLMetaDTO  `json:"meta"`
+	VisitsSummary  VisitsSummaryDTO `json:"visitsSummary"`
 	ForwardQuery   bool             `json:"forwardQuery"`
 	Crawlable      bool             `json:"crawlable"`
 	RedirectStatus int              `json:"redirectStatus"`
 }
 
-func ShortUrlFor(cfg *AppConfig, authority, shortCode string) string {
-	return cfg.ShortUrlBase(authority) + "/" + shortCode
+func ShortURLFor(cfg *AppConfig, authority, shortCode string) string {
+	return cfg.ShortURLBase(authority) + "/" + shortCode
 }
 
-func NewShortUrlDto(cfg *AppConfig, tags []string, d *data.ShortUrlDetail) ShortUrlDto {
+func NewShortURLDTO(cfg *AppConfig, tags []string, d *data.ShortURLDetail) ShortURLDTO {
 	if tags == nil {
 		tags = []string{}
 	}
-	return ShortUrlDto{
+	return ShortURLDTO{
 		ShortCode:   d.ShortCode,
-		ShortUrl:    ShortUrlFor(cfg, d.Authority, d.ShortCode),
+		ShortURL:    ShortURLFor(cfg, d.Authority, d.ShortCode),
 		Domain:      d.Authority,
-		LongUrl:     d.LongUrl,
+		LongURL:     d.LongURL,
 		Title:       d.Title,
 		DateCreated: d.CreatedAt,
 		Tags:        tags,
 		Group:       d.GroupName,
-		Meta: ShortUrlMetaDto{
+		Meta: ShortURLMetaDTO{
 			ValidSince: d.ValidSince,
 			ValidUntil: d.ValidUntil,
 			MaxVisits:  d.MaxVisits,
 		},
-		VisitsSummary: VisitsSummaryDto{
+		VisitsSummary: VisitsSummaryDTO{
 			Total:   d.VisitCount,
 			NonBots: d.VisitCount - d.BotVisitCount,
 			Bots:    d.BotVisitCount,

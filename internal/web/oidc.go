@@ -39,7 +39,7 @@ type oidcClient struct {
 	verifier *gooidc.IDTokenVerifier
 }
 
-func newOidcClient(cfg *AppConfig) *oidcClient {
+func newOIDCClient(cfg *AppConfig) *oidcClient {
 	return &oidcClient{cfg: cfg}
 }
 
@@ -56,28 +56,28 @@ func (o *oidcClient) get(ctx context.Context) (*gooidc.Provider, *gooidc.IDToken
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if o.provider == nil {
-		provider, err := gooidc.NewProvider(ctx, o.cfg.OidcIssuer)
+		provider, err := gooidc.NewProvider(ctx, o.cfg.OIDCIssuer)
 		if err != nil {
-			return nil, nil, fmt.Errorf("OIDC discovery against %s failed: %w", o.cfg.OidcIssuer, err)
+			return nil, nil, fmt.Errorf("OIDC discovery against %s failed: %w", o.cfg.OIDCIssuer, err)
 		}
 		o.provider = provider
-		o.verifier = provider.Verifier(&gooidc.Config{ClientID: o.cfg.OidcClientID})
+		o.verifier = provider.Verifier(&gooidc.Config{ClientID: o.cfg.OIDCClientID})
 	}
 	return o.provider, o.verifier, nil
 }
 
 func (a *App) oidcRedirectURL(r *http.Request) string {
-	if a.Cfg.OidcRedirectURL != "" {
-		return a.Cfg.OidcRedirectURL
+	if a.Cfg.OIDCRedirectURL != "" {
+		return a.Cfg.OIDCRedirectURL
 	}
 	return requestScheme(r) + "://" + r.Host + "/admin/oidc/callback"
 }
 
 func (a *App) oauth2Config(r *http.Request, provider *gooidc.Provider) *oauth2.Config {
-	scopes := append([]string{gooidc.ScopeOpenID}, a.Cfg.OidcScopes...)
+	scopes := append([]string{gooidc.ScopeOpenID}, a.Cfg.OIDCScopes...)
 	return &oauth2.Config{
-		ClientID:     a.Cfg.OidcClientID,
-		ClientSecret: a.Cfg.OidcClientSecret,
+		ClientID:     a.Cfg.OIDCClientID,
+		ClientSecret: a.Cfg.OIDCClientSecret,
 		Endpoint:     provider.Endpoint(),
 		RedirectURL:  a.oidcRedirectURL(r),
 		Scopes:       scopes,
@@ -90,7 +90,7 @@ type oidcState struct {
 	State     string `json:"s"`
 	Nonce     string `json:"n"`
 	Verifier  string `json:"v"`
-	ReturnUrl string `json:"r"`
+	ReturnURL string `json:"r"`
 	Expires   int64  `json:"exp"`
 }
 
@@ -103,8 +103,8 @@ func randomToken() string {
 }
 
 // GET /admin/oidc/login — start the authorization-code flow.
-func (a *App) uiOidcLogin(w http.ResponseWriter, r *http.Request) error {
-	if !a.Cfg.OidcEnabled() {
+func (a *App) uiOIDCLogin(w http.ResponseWriter, r *http.Request) error {
+	if !a.Cfg.OIDCEnabled() {
 		return errPageNotFound
 	}
 	provider, _, err := a.oidc.get(r.Context())
@@ -114,12 +114,12 @@ func (a *App) uiOidcLogin(w http.ResponseWriter, r *http.Request) error {
 			"Single sign-on is unavailable: the identity provider could not be reached.", "/admin")
 	}
 
-	returnUrl := safeReturnUrl(r.URL.Query().Get("returnUrl"))
+	returnURL := safeReturnURL(r.URL.Query().Get("returnUrl"))
 	state := oidcState{
 		State:     randomToken(),
 		Nonce:     randomToken(),
 		Verifier:  oauth2.GenerateVerifier(),
-		ReturnUrl: returnUrl,
+		ReturnURL: returnURL,
 		Expires:   time.Now().Add(oidcStateLifetime).Unix(),
 	}
 	payload, _ := json.Marshal(state)
@@ -132,13 +132,13 @@ func (a *App) uiOidcLogin(w http.ResponseWriter, r *http.Request) error {
 		MaxAge:   int(oidcStateLifetime.Seconds()),
 	})
 
-	authUrl := a.oauth2Config(r, provider).AuthCodeURL(state.State,
+	authURL := a.oauth2Config(r, provider).AuthCodeURL(state.State,
 		gooidc.Nonce(state.Nonce),
 		oauth2.S256ChallengeOption(state.Verifier))
-	return redirect(w, r, authUrl)
+	return redirect(w, r, authURL)
 }
 
-func (a *App) readOidcState(r *http.Request) *oidcState {
+func (a *App) readOIDCState(r *http.Request) *oidcState {
 	cookie, err := r.Cookie(oidcStateCookieName)
 	if err != nil {
 		return nil
@@ -158,7 +158,7 @@ func (a *App) readOidcState(r *http.Request) *oidcState {
 	return &state
 }
 
-func (a *App) clearOidcState(w http.ResponseWriter) {
+func (a *App) clearOIDCState(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     oidcStateCookieName,
 		Value:    "",
@@ -175,12 +175,12 @@ func (a *App) oidcLoginError(w http.ResponseWriter, message string) error {
 
 // GET /admin/oidc/callback — exchange the code, verify the ID token, map
 // claims and sign the user in.
-func (a *App) uiOidcCallback(w http.ResponseWriter, r *http.Request) error {
-	if !a.Cfg.OidcEnabled() {
+func (a *App) uiOIDCCallback(w http.ResponseWriter, r *http.Request) error {
+	if !a.Cfg.OIDCEnabled() {
 		return errPageNotFound
 	}
-	state := a.readOidcState(r)
-	a.clearOidcState(w)
+	state := a.readOIDCState(r)
+	a.clearOIDCState(w)
 	q := r.URL.Query()
 
 	if state == nil || q.Get("state") == "" || q.Get("state") != state.State {
@@ -224,13 +224,13 @@ func (a *App) uiOidcCallback(w http.ResponseWriter, r *http.Request) error {
 		return a.oidcLoginError(w, "Sign-on failed: the ID token carried unreadable claims.")
 	}
 
-	user, err := data.UpsertOidcUser(r.Context(), a.Db, identity.Subject, identity.Username, identity.Role)
+	user, err := data.UpsertOIDCUser(r.Context(), a.DB, identity.Subject, identity.Username, identity.Role)
 	if err != nil || user == nil {
 		return fmt.Errorf("provisioning OIDC user: %w", err)
 	}
 
 	a.SignInWithGroups(w, user, identity.Groups)
-	return redirect(w, r, state.ReturnUrl)
+	return redirect(w, r, state.ReturnURL)
 }
 
 // oidcIdentity is what Gort keeps from a verified ID token.
@@ -265,7 +265,7 @@ func (a *App) identityFromToken(idToken *gooidc.IDToken) (*oidcIdentity, error) 
 	}
 
 	var rawGroups []string
-	if list, ok := claims[a.Cfg.OidcGroupsClaim].([]any); ok {
+	if list, ok := claims[a.Cfg.OIDCGroupsClaim].([]any); ok {
 		for _, item := range list {
 			if g, ok := item.(string); ok {
 				rawGroups = append(rawGroups, g)
@@ -275,7 +275,7 @@ func (a *App) identityFromToken(idToken *gooidc.IDToken) (*oidcIdentity, error) 
 	groups := core.NormalizeGroups(rawGroups)
 
 	role := core.UserRegular
-	adminGroup := core.NormalizeGroup(a.Cfg.OidcAdminGroup)
+	adminGroup := core.NormalizeGroup(a.Cfg.OIDCAdminGroup)
 	if adminGroup != "" && core.GroupsContain(groups, adminGroup) {
 		role = core.UserAdmin
 	}

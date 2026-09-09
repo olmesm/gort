@@ -15,15 +15,15 @@ type usersView struct {
 	Users []data.UserRow
 	// LastAdminId is the sole admin's id when only one is left (0 otherwise);
 	// that account can be neither demoted nor deleted.
-	LastAdminId core.UserID
+	LastAdminID core.UserID
 }
 
 func (a *App) usersViewModel(ctx context.Context, errorMessage string) (usersView, error) {
-	users, err := data.ListUsers(ctx, a.Db)
+	users, err := data.ListUsers(ctx, a.DB)
 	if err != nil {
 		return usersView{}, err
 	}
-	adminCount, err := data.CountAdmins(ctx, a.Db)
+	adminCount, err := data.CountAdmins(ctx, a.DB)
 	if err != nil {
 		return usersView{}, err
 	}
@@ -32,7 +32,7 @@ func (a *App) usersViewModel(ctx context.Context, errorMessage string) (usersVie
 	if adminCount <= 1 {
 		for _, u := range users {
 			if u.Role == core.UserAdmin.Slug() {
-				model.LastAdminId = u.Id
+				model.LastAdminID = u.ID
 			}
 		}
 	}
@@ -63,7 +63,7 @@ func (a *App) uiCreateUser(user *CurrentUser, w http.ResponseWriter, r *http.Req
 	if username == "" || len(password) < 8 {
 		return a.renderUsersPage(r.Context(), w, user, "Username is required and the password needs at least 8 characters.")
 	}
-	created, err := data.InsertUser(r.Context(), a.Db, username, HashPassword(password), role)
+	created, err := data.InsertUser(r.Context(), a.DB, username, HashPassword(password), role)
 	if err != nil {
 		return err
 	}
@@ -83,18 +83,18 @@ func (a *App) uiSetUserRole(_ *CurrentUser, w http.ResponseWriter, r *http.Reque
 	if r.PostFormValue("role") == "admin" {
 		role = core.UserAdmin
 	}
-	target, err := data.UserByID(r.Context(), a.Db, id)
+	target, err := data.UserByID(r.Context(), a.DB, id)
 	if err != nil {
 		return err
 	}
-	adminCount, err := data.CountAdmins(r.Context(), a.Db)
+	adminCount, err := data.CountAdmins(r.Context(), a.DB)
 	if err != nil {
 		return err
 	}
 	demotingLastAdmin := target != nil &&
 		target.Role == core.UserAdmin.Slug() && role == core.UserRegular && adminCount <= 1
 	if target != nil && !demotingLastAdmin {
-		if _, err := data.UpdateUserRole(r.Context(), a.Db, id, role); err != nil {
+		if _, err := data.UpdateUserRole(r.Context(), a.DB, id, role); err != nil {
 			return err
 		}
 	}
@@ -111,7 +111,7 @@ func (a *App) uiSetUserPassword(user *CurrentUser, w http.ResponseWriter, r *htt
 	if len(password) < 8 {
 		return a.renderUsersPage(r.Context(), w, user, "Passwords need at least 8 characters.")
 	}
-	if _, err := data.UpdateUserPassword(r.Context(), a.Db, id, HashPassword(password)); err != nil {
+	if _, err := data.UpdateUserPassword(r.Context(), a.DB, id, HashPassword(password)); err != nil {
 		return err
 	}
 	return redirect(w, r, "/admin/users")
@@ -123,18 +123,18 @@ func (a *App) uiDeleteUser(user *CurrentUser, w http.ResponseWriter, r *http.Req
 	if err != nil {
 		return err
 	}
-	target, err := data.UserByID(r.Context(), a.Db, id)
+	target, err := data.UserByID(r.Context(), a.DB, id)
 	if err != nil {
 		return err
 	}
-	adminCount, err := data.CountAdmins(r.Context(), a.Db)
+	adminCount, err := data.CountAdmins(r.Context(), a.DB)
 	if err != nil {
 		return err
 	}
-	isSelf := target != nil && target.Id == user.Id
+	isSelf := target != nil && target.ID == user.ID
 	isLastAdmin := target != nil && target.Role == core.UserAdmin.Slug() && adminCount <= 1
 	if target != nil && !isSelf && !isLastAdmin {
-		if _, err := data.DeleteUser(r.Context(), a.Db, id); err != nil {
+		if _, err := data.DeleteUser(r.Context(), a.DB, id); err != nil {
 			return err
 		}
 	}

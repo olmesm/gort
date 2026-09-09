@@ -27,25 +27,25 @@ func redirectWith(w http.ResponseWriter, status core.RedirectStatus, location st
 func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) error {
 	const version = "1.0.0"
 	var one int64
-	if err := a.Db.QueryRow(r.Context(), "SELECT 1").Scan(&one); err != nil {
+	if err := a.DB.QueryRow(r.Context(), "SELECT 1").Scan(&one); err != nil {
 		return RespondJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "fail", "version": version})
 	}
 	return RespondJSON(w, http.StatusOK, map[string]string{"status": "pass", "version": version})
 }
 
 // GET / — orphan-tracked; redirects when a base-url redirect is configured.
-func (a *App) handleBaseUrl(w http.ResponseWriter, r *http.Request) error {
+func (a *App) handleBaseURL(w http.ResponseWriter, r *http.Request) error {
 	domain, err := a.ResolveRequestDomain(r.Context(), r.Host)
 	if err != nil {
 		return err
 	}
-	a.RecordVisit(r, core.VisitOrphanBaseUrl, nil, nil)
+	a.RecordVisit(r, core.VisitOrphanBaseURL, nil, nil)
 
 	target := ""
-	if domain.BaseUrlRedirect != nil {
-		target = *domain.BaseUrlRedirect
-	} else if a.Cfg.BaseUrlRedirect != "" {
-		target = a.Cfg.BaseUrlRedirect
+	if domain.BaseURLRedirect != nil {
+		target = *domain.BaseURLRedirect
+	} else if a.Cfg.BaseURLRedirect != "" {
+		target = a.Cfg.BaseURLRedirect
 	}
 	if target != "" {
 		return redirect(w, r, target)
@@ -56,7 +56,7 @@ func (a *App) handleBaseUrl(w http.ResponseWriter, r *http.Request) error {
 // GET /robots.txt — disallow everything except crawlable short URLs and the
 // base URL.
 func (a *App) handleRobots(w http.ResponseWriter, r *http.Request) error {
-	crawlable, err := data.ListCrawlable(r.Context(), a.Db)
+	crawlable, err := data.ListCrawlable(r.Context(), a.DB)
 	if err != nil {
 		return err
 	}
@@ -71,24 +71,24 @@ func (a *App) handleRobots(w http.ResponseWriter, r *http.Request) error {
 }
 
 // GET /{code}/qr-code — public QR code for an existing short URL.
-func (a *App) handleQrCode(w http.ResponseWriter, r *http.Request) error {
+func (a *App) handleQRCode(w http.ResponseWriter, r *http.Request) error {
 	code := r.PathValue("code")
 	domain, err := a.ResolveRequestDomain(r.Context(), r.Host)
 	if err != nil {
 		return err
 	}
-	shortUrl, err := data.ShortUrlByCode(r.Context(), a.Db, domain.Id, code)
+	shortURL, err := data.ShortURLByCode(r.Context(), a.DB, domain.ID, code)
 	if err != nil {
 		return err
 	}
-	if shortUrl == nil {
+	if shortURL == nil {
 		return a.respondNotFound(w, "There is no short URL to encode.")
 	}
 	q := r.URL.Query()
-	opts := ParseQrOptions(queryInt(q, "size"), queryInt(q, "margin"),
+	opts := ParseQROptions(queryInt(q, "size"), queryInt(q, "margin"),
 		q.Get("errorCorrection"), q.Get("format"))
-	content := ShortUrlFor(a.Cfg, domain.Authority, shortUrl.ShortCode)
-	RespondQr(w, content, opts)
+	content := ShortURLFor(a.Cfg, domain.Authority, shortURL.ShortCode)
+	RespondQR(w, content, opts)
 	return nil
 }
 
@@ -136,10 +136,10 @@ func (a *App) handleInvalid(w http.ResponseWriter, r *http.Request, slug string)
 
 	target := ""
 	if isCodeLike {
-		if domain.InvalidShortUrlRedirect != nil {
-			target = *domain.InvalidShortUrlRedirect
+		if domain.InvalidShortURLRedirect != nil {
+			target = *domain.InvalidShortURLRedirect
 		} else {
-			target = a.Cfg.InvalidShortUrlRedirect
+			target = a.Cfg.InvalidShortURLRedirect
 		}
 	} else {
 		if domain.Regular404Redirect != nil {
@@ -155,10 +155,10 @@ func (a *App) handleInvalid(w http.ResponseWriter, r *http.Request, slug string)
 }
 
 // GET /{...} — the redirect hot path.
-func (a *App) handleShortUrl(w http.ResponseWriter, r *http.Request) error {
+func (a *App) handleShortURL(w http.ResponseWriter, r *http.Request) error {
 	slug := strings.Trim(r.URL.Path, "/")
 	if slug == "" {
-		a.handleBaseUrl(w, r)
+		a.handleBaseURL(w, r)
 		return nil
 	}
 
@@ -166,7 +166,7 @@ func (a *App) handleShortUrl(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	found, err := data.ShortUrlByCode(r.Context(), a.Db, domain.Id, slug)
+	found, err := data.ShortURLByCode(r.Context(), a.DB, domain.ID, slug)
 	if err != nil {
 		return err
 	}
@@ -174,12 +174,12 @@ func (a *App) handleShortUrl(w http.ResponseWriter, r *http.Request) error {
 		return a.handleInvalid(w, r, slug)
 	}
 
-	id := found.Id
+	id := found.ID
 	lifetime := LifetimeOfRow(found)
 
 	var visitCount int64
 	if lifetime.MaxVisits != nil {
-		visitCount, err = data.CountValidVisits(r.Context(), a.Db, id)
+		visitCount, err = data.CountValidVisits(r.Context(), a.DB, id)
 		if err != nil {
 			return err
 		}
@@ -190,13 +190,13 @@ func (a *App) handleShortUrl(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	visitor := visitorContextOf(r)
-	rules, err := data.RedirectRules(r.Context(), a.Db, id)
+	rules, err := data.RedirectRules(r.Context(), a.DB, id)
 	if err != nil {
 		return err
 	}
-	target := core.ResolveTarget(found.LongUrl, rules, visitor)
+	target := core.ResolveTarget(found.LongURL, rules, visitor)
 
-	finalUrl := target
+	finalURL := target
 	if found.ForwardQuery {
 		var incoming [][2]string
 		for _, key := range queryKeysInOrder(r.URL.RawQuery) {
@@ -207,21 +207,21 @@ func (a *App) handleShortUrl(w http.ResponseWriter, r *http.Request) error {
 				incoming = append(incoming, [2]string{key, value})
 			}
 		}
-		finalUrl = core.ForwardQuery(target, incoming)
+		finalURL = core.ForwardQuery(target, incoming)
 	}
 
-	visited := &VisitedShortUrl{
+	visited := &VisitedShortURL{
 		ShortCode: found.ShortCode,
 		Domain:    domain.Authority,
-		LongUrl:   found.LongUrl,
+		LongURL:   found.LongURL,
 	}
-	a.RecordVisit(r, core.VisitValidShortUrl, &id, visited)
+	a.RecordVisit(r, core.VisitValidShortURL, &id, visited)
 
 	status, ok := core.RedirectStatusOfCode(found.RedirectStatus)
 	if !ok {
 		status = a.Cfg.DefaultRedirectStatus
 	}
-	redirectWith(w, status, finalUrl)
+	redirectWith(w, status, finalURL)
 	return nil
 }
 

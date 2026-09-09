@@ -24,14 +24,14 @@ const (
 
 // Db is a connection pool plus dialect-specific SQL fragments. Repositories
 // write SQL with `?` placeholders; Postgres rebinding happens in Exec/Query.
-type Db struct {
+type DB struct {
 	Dialect Dialect
 	Pool    *sql.DB
 }
 
 // Open creates the pool. SQLite connections get their pragmas via the DSN so
 // every pooled connection is configured identically.
-func Open(dialect Dialect, connectionString string) (*Db, error) {
+func Open(dialect Dialect, connectionString string) (*DB, error) {
 	switch dialect {
 	case Sqlite:
 		sep := "?"
@@ -47,22 +47,22 @@ func Open(dialect Dialect, connectionString string) (*Db, error) {
 		// A single writer connection sidesteps SQLITE_BUSY under concurrency;
 		// WAL still serves readers through the same handle fine at this scale.
 		pool.SetMaxOpenConns(1)
-		return &Db{Dialect: Sqlite, Pool: pool}, nil
+		return &DB{Dialect: Sqlite, Pool: pool}, nil
 	case Postgres:
 		pool, err := sql.Open("pgx", connectionString)
 		if err != nil {
 			return nil, err
 		}
-		return &Db{Dialect: Postgres, Pool: pool}, nil
+		return &DB{Dialect: Postgres, Pool: pool}, nil
 	default:
 		return nil, fmt.Errorf("unknown dialect %d", dialect)
 	}
 }
 
-func (db *Db) Close() error { return db.Pool.Close() }
+func (db *DB) Close() error { return db.Pool.Close() }
 
 // rebind converts `?` placeholders to `$1..$n` for Postgres.
-func (db *Db) rebind(query string) string {
+func (db *DB) rebind(query string) string {
 	if db.Dialect != Postgres {
 		return query
 	}
@@ -80,21 +80,21 @@ func (db *Db) rebind(query string) string {
 }
 
 // Exec / Query / QueryRow run against the pool with placeholder rebinding.
-func (db *Db) Exec(ctx context.Context, query string, args ...any) (sql.Result, error) {
+func (db *DB) Exec(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	return db.Pool.ExecContext(ctx, db.rebind(query), args...)
 }
 
-func (db *Db) Query(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+func (db *DB) Query(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
 	return db.Pool.QueryContext(ctx, db.rebind(query), args...)
 }
 
-func (db *Db) QueryRow(ctx context.Context, query string, args ...any) *sql.Row {
+func (db *DB) QueryRow(ctx context.Context, query string, args ...any) *sql.Row {
 	return db.Pool.QueryRowContext(ctx, db.rebind(query), args...)
 }
 
 // WithTx runs several statements atomically. The transaction commits when
 // work returns nil and rolls back otherwise.
-func (db *Db) WithTx(ctx context.Context, work func(tx *Tx) error) error {
+func (db *DB) WithTx(ctx context.Context, work func(tx *Tx) error) error {
 	raw, err := db.Pool.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -109,7 +109,7 @@ func (db *Db) WithTx(ctx context.Context, work func(tx *Tx) error) error {
 
 // Tx wraps sql.Tx with the same rebinding as Db.
 type Tx struct {
-	db  *Db
+	db  *DB
 	raw *sql.Tx
 }
 
@@ -124,7 +124,7 @@ func (tx *Tx) QueryRow(ctx context.Context, query string, args ...any) *sql.Row 
 // ---- Dialect-specific SQL fragments ----
 
 // BoolLiteral is the SQL literal for a boolean value in this dialect.
-func (db *Db) BoolLiteral(value bool) string {
+func (db *DB) BoolLiteral(value bool) string {
 	if db.Dialect == Sqlite {
 		if value {
 			return "1"
@@ -139,7 +139,7 @@ func (db *Db) BoolLiteral(value bool) string {
 
 // DayExpr is a SQL expression grouping a timestamp column by calendar day
 // (UTC), as 'YYYY-MM-DD'.
-func (db *Db) DayExpr(column string) string {
+func (db *DB) DayExpr(column string) string {
 	if db.Dialect == Sqlite {
 		return fmt.Sprintf("strftime('%%Y-%%m-%%d', %s)", column)
 	}
@@ -147,7 +147,7 @@ func (db *Db) DayExpr(column string) string {
 }
 
 // ILike is a case-insensitive LIKE comparison.
-func (db *Db) ILike(column, param string) string {
+func (db *DB) ILike(column, param string) string {
 	return fmt.Sprintf("lower(%s) LIKE lower(%s)", column, param)
 }
 
@@ -170,12 +170,12 @@ func InList[T any](column string, values []T) (string, []any) {
 
 // IsValidVisit: the visit row is a real short-URL visit (not orphan traffic).
 func IsValidVisit(alias string) string {
-	return fmt.Sprintf("%s.visit_type = '%s'", alias, core.VisitValidShortUrl.Slug())
+	return fmt.Sprintf("%s.visit_type = '%s'", alias, core.VisitValidShortURL.Slug())
 }
 
 // IsOrphanVisit: the visit row is orphan traffic of any kind.
 func IsOrphanVisit(alias string) string {
-	return fmt.Sprintf("%s.visit_type <> '%s'", alias, core.VisitValidShortUrl.Slug())
+	return fmt.Sprintf("%s.visit_type <> '%s'", alias, core.VisitValidShortURL.Slug())
 }
 
 // ---- Time handling ----
@@ -186,7 +186,7 @@ const sqliteTimeFormat = "2006-01-02T15:04:05.000Z"
 
 // BindTime converts a timestamp for storage: TEXT for SQLite, native
 // timestamptz for Postgres. All stored timestamps are UTC.
-func (db *Db) BindTime(t time.Time) any {
+func (db *DB) BindTime(t time.Time) any {
 	t = t.UTC()
 	if db.Dialect == Sqlite {
 		return t.Format(sqliteTimeFormat)
@@ -194,7 +194,7 @@ func (db *Db) BindTime(t time.Time) any {
 	return t
 }
 
-func (db *Db) BindTimePtr(t *time.Time) any {
+func (db *DB) BindTimePtr(t *time.Time) any {
 	if t == nil {
 		return nil
 	}
@@ -216,14 +216,14 @@ func (n *NullTime) Scan(value any) error {
 		n.Time, n.Valid = v.UTC(), true
 		return nil
 	case string:
-		t, err := parseDbTime(v)
+		t, err := parseDBTime(v)
 		if err != nil {
 			return err
 		}
 		n.Time, n.Valid = t, true
 		return nil
 	case []byte:
-		t, err := parseDbTime(string(v))
+		t, err := parseDBTime(string(v))
 		if err != nil {
 			return err
 		}
@@ -272,7 +272,7 @@ func (t timePtrScanner) Scan(value any) error {
 	return nil
 }
 
-func parseDbTime(s string) (time.Time, error) {
+func parseDBTime(s string) (time.Time, error) {
 	for _, layout := range []string{
 		sqliteTimeFormat,
 		time.RFC3339Nano,

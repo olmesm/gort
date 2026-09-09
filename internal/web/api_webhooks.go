@@ -16,7 +16,7 @@ import (
 
 type CreateWebhookBody struct {
 	Name   string   `json:"name"`
-	Url    string   `json:"url"`
+	URL    string   `json:"url"`
 	Events []string `json:"events"`
 }
 
@@ -24,21 +24,21 @@ type PatchWebhookBody struct {
 	Enabled bool `json:"enabled"`
 }
 
-type webhookDto struct {
-	Id        int64     `json:"id"`
+type webhookDTO struct {
+	ID        int64     `json:"id"`
 	Name      string    `json:"name"`
-	Url       string    `json:"url"`
+	URL       string    `json:"url"`
 	Events    []string  `json:"events"`
 	Enabled   bool      `json:"enabled"`
 	CreatedAt time.Time `json:"createdAt"`
 	Secret    string    `json:"secret,omitempty"`
 }
 
-func newWebhookDto(w *data.WebhookRow) webhookDto {
-	return webhookDto{
-		Id:        w.Id.Value(),
+func newWebhookDTO(w *data.WebhookRow) webhookDTO {
+	return webhookDTO{
+		ID:        w.ID.Value(),
 		Name:      w.Name,
-		Url:       w.Url,
+		URL:       w.URL,
 		Events:    strings.Split(w.Events, ","),
 		Enabled:   w.Enabled,
 		CreatedAt: w.CreatedAt,
@@ -53,16 +53,16 @@ func allEventSlugs() string {
 	return strings.Join(slugs, ", ")
 }
 
-func isHttpUrl(raw string) bool {
+func isHTTPURL(raw string) bool {
 	parsed, err := url.Parse(raw)
 	return err == nil && parsed.IsAbs() && (parsed.Scheme == "http" || parsed.Scheme == "https") && parsed.Host != ""
 }
 
-func parseWebhookBody(body *CreateWebhookBody) (name, hookUrl string, events []core.WebhookEvent, err error) {
+func parseWebhookBody(body *CreateWebhookBody) (name, hookURL string, events []core.WebhookEvent, err error) {
 	if strings.TrimSpace(body.Name) == "" {
 		return "", "", nil, fmt.Errorf("name is required.")
 	}
-	if !isHttpUrl(body.Url) {
+	if !isHTTPURL(body.URL) {
 		return "", "", nil, fmt.Errorf("url must be an absolute http(s) URL.")
 	}
 	if len(body.Events) == 0 {
@@ -75,7 +75,7 @@ func parseWebhookBody(body *CreateWebhookBody) (name, hookUrl string, events []c
 		}
 		events = append(events, event)
 	}
-	return strings.TrimSpace(body.Name), body.Url, events, nil
+	return strings.TrimSpace(body.Name), body.URL, events, nil
 }
 
 func generateWebhookSecret() string {
@@ -88,13 +88,13 @@ func generateWebhookSecret() string {
 
 // GET /rest/v1/webhooks (admin)
 func (a *App) apiListWebhooks(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
-	hooks, err := data.ListWebhooks(r.Context(), a.Db)
+	hooks, err := data.ListWebhooks(r.Context(), a.DB)
 	if err != nil {
 		return err
 	}
-	dtos := make([]webhookDto, len(hooks))
+	dtos := make([]webhookDTO, len(hooks))
 	for i := range hooks {
-		dtos[i] = newWebhookDto(&hooks[i])
+		dtos[i] = newWebhookDTO(&hooks[i])
 	}
 	return RespondJSON(w, http.StatusOK, map[string]any{"data": dtos})
 }
@@ -106,21 +106,21 @@ func (a *App) apiCreateWebhook(_ *AuthenticatedKey, w http.ResponseWriter, r *ht
 	if err != nil {
 		return BadRequest(err.Error())
 	}
-	name, hookUrl, events, err := parseWebhookBody(body)
+	name, hookURL, events, err := parseWebhookBody(body)
 	if err != nil {
 		return BadRequest(err.Error())
 	}
 	secret := generateWebhookSecret()
-	row, err := data.InsertWebhook(r.Context(), a.Db, name, hookUrl, secret, events)
+	row, err := data.InsertWebhook(r.Context(), a.DB, name, hookURL, secret, events)
 	if err != nil {
 		return err
 	}
-	dto := newWebhookDto(row)
+	dto := newWebhookDTO(row)
 	dto.Secret = secret
 	return RespondJSON(w, http.StatusCreated, dto)
 }
 
-func webhookIdFromPath(r *http.Request) (core.WebhookID, bool) {
+func webhookIDFromPath(r *http.Request) (core.WebhookID, bool) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	return core.WebhookID(id), err == nil
 }
@@ -131,11 +131,11 @@ func (a *App) apiPatchWebhook(_ *AuthenticatedKey, w http.ResponseWriter, r *htt
 	if err != nil {
 		return BadRequest(err.Error())
 	}
-	id, ok := webhookIdFromPath(r)
+	id, ok := webhookIDFromPath(r)
 	if !ok {
 		return NotFound("Webhook was not found.")
 	}
-	updated, err := data.SetWebhookEnabled(r.Context(), a.Db, id, body.Enabled)
+	updated, err := data.SetWebhookEnabled(r.Context(), a.DB, id, body.Enabled)
 	if err != nil {
 		return err
 	}
@@ -147,11 +147,11 @@ func (a *App) apiPatchWebhook(_ *AuthenticatedKey, w http.ResponseWriter, r *htt
 
 // DELETE /rest/v1/webhooks/{id} (admin)
 func (a *App) apiDeleteWebhook(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
-	id, ok := webhookIdFromPath(r)
+	id, ok := webhookIDFromPath(r)
 	if !ok {
 		return NotFound("Webhook was not found.")
 	}
-	deleted, err := data.DeleteWebhook(r.Context(), a.Db, id)
+	deleted, err := data.DeleteWebhook(r.Context(), a.DB, id)
 	if err != nil {
 		return err
 	}

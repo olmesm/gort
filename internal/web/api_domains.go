@@ -15,44 +15,44 @@ type CreateDomainBody struct {
 
 type DomainRedirectsBody struct {
 	Domain                  string  `json:"domain"`
-	BaseUrlRedirect         *string `json:"baseUrlRedirect"`
+	BaseURLRedirect         *string `json:"baseUrlRedirect"`
 	Regular404Redirect      *string `json:"regular404Redirect"`
-	InvalidShortUrlRedirect *string `json:"invalidShortUrlRedirect"`
+	InvalidShortURLRedirect *string `json:"invalidShortUrlRedirect"`
 }
 
-type domainRedirectsDto struct {
-	BaseUrlRedirect         *string `json:"baseUrlRedirect,omitempty"`
+type domainRedirectsDTO struct {
+	BaseURLRedirect         *string `json:"baseUrlRedirect,omitempty"`
 	Regular404Redirect      *string `json:"regular404Redirect,omitempty"`
-	InvalidShortUrlRedirect *string `json:"invalidShortUrlRedirect,omitempty"`
+	InvalidShortURLRedirect *string `json:"invalidShortUrlRedirect,omitempty"`
 }
 
-type domainDto struct {
+type domainDTO struct {
 	Domain    string             `json:"domain"`
 	IsDefault bool               `json:"isDefault"`
-	Redirects domainRedirectsDto `json:"redirects"`
+	Redirects domainRedirectsDTO `json:"redirects"`
 }
 
-func newDomainDto(d *data.DomainRow) domainDto {
-	return domainDto{
+func newDomainDTO(d *data.DomainRow) domainDTO {
+	return domainDTO{
 		Domain:    d.Authority,
 		IsDefault: d.IsDefault,
-		Redirects: domainRedirectsDto{
-			BaseUrlRedirect:         d.BaseUrlRedirect,
+		Redirects: domainRedirectsDTO{
+			BaseURLRedirect:         d.BaseURLRedirect,
 			Regular404Redirect:      d.Regular404Redirect,
-			InvalidShortUrlRedirect: d.InvalidShortUrlRedirect,
+			InvalidShortURLRedirect: d.InvalidShortURLRedirect,
 		},
 	}
 }
 
 // GET /rest/v1/domains
 func (a *App) apiListDomains(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
-	domains, err := data.ListDomains(r.Context(), a.Db)
+	domains, err := data.ListDomains(r.Context(), a.DB)
 	if err != nil {
 		return err
 	}
-	dtos := make([]domainDto, len(domains))
+	dtos := make([]domainDTO, len(domains))
 	for i := range domains {
-		dtos[i] = newDomainDto(&domains[i])
+		dtos[i] = newDomainDTO(&domains[i])
 	}
 	return RespondJSON(w, http.StatusOK, map[string]any{"data": dtos})
 }
@@ -67,14 +67,14 @@ func (a *App) apiCreateDomain(_ *AuthenticatedKey, w http.ResponseWriter, r *htt
 	if err != nil {
 		return BadRequest(err.Error())
 	}
-	created, err := data.CreateDomain(r.Context(), a.Db, authority)
+	created, err := data.CreateDomain(r.Context(), a.DB, authority)
 	if err != nil {
 		return err
 	}
 	if created == nil {
 		return Conflict("domain-exists", fmt.Sprintf("Domain '%s' is already registered.", authority.Value()))
 	}
-	return RespondJSON(w, http.StatusCreated, newDomainDto(created))
+	return RespondJSON(w, http.StatusCreated, newDomainDTO(created))
 }
 
 // PATCH /rest/v1/domains/redirects (admin)
@@ -83,28 +83,28 @@ func (a *App) apiSetDomainRedirects(_ *AuthenticatedKey, w http.ResponseWriter, 
 	if err != nil {
 		return BadRequest(err.Error())
 	}
-	domain, err := data.DomainByAuthority(r.Context(), a.Db, strings.ToLower(strings.TrimSpace(body.Domain)))
+	domain, err := data.DomainByAuthority(r.Context(), a.DB, strings.ToLower(strings.TrimSpace(body.Domain)))
 	if err != nil {
 		return err
 	}
 	if domain == nil {
 		return NotFound(fmt.Sprintf("Domain '%s' is not registered.", body.Domain))
 	}
-	if _, err := data.UpdateDomainRedirects(r.Context(), a.Db, domain.Id,
-		body.BaseUrlRedirect, body.Regular404Redirect, body.InvalidShortUrlRedirect); err != nil {
+	if _, err := data.UpdateDomainRedirects(r.Context(), a.DB, domain.ID,
+		body.BaseURLRedirect, body.Regular404Redirect, body.InvalidShortURLRedirect); err != nil {
 		return err
 	}
-	updated, err := data.DomainByID(r.Context(), a.Db, domain.Id)
+	updated, err := data.DomainByID(r.Context(), a.DB, domain.ID)
 	if err != nil || updated == nil {
 		return err
 	}
-	return RespondJSON(w, http.StatusOK, newDomainDto(updated))
+	return RespondJSON(w, http.StatusOK, newDomainDTO(updated))
 }
 
 // DELETE /rest/v1/domains/{authority} (admin)
 func (a *App) apiDeleteDomain(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	authority := r.PathValue("authority")
-	domain, err := data.DomainByAuthority(r.Context(), a.Db, strings.ToLower(authority))
+	domain, err := data.DomainByAuthority(r.Context(), a.DB, strings.ToLower(authority))
 	if err != nil {
 		return err
 	}
@@ -114,7 +114,7 @@ func (a *App) apiDeleteDomain(_ *AuthenticatedKey, w http.ResponseWriter, r *htt
 	if domain.IsDefault {
 		return Forbidden("The default domain cannot be deleted.")
 	}
-	if _, err := data.DeleteDomain(r.Context(), a.Db, domain.Id); err != nil {
+	if _, err := data.DeleteDomain(r.Context(), a.DB, domain.ID); err != nil {
 		return err
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -124,7 +124,7 @@ func (a *App) apiDeleteDomain(_ *AuthenticatedKey, w http.ResponseWriter, r *htt
 // GET /rest/v1/domains/{authority}/visits
 func (a *App) apiDomainVisits(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	authority := r.PathValue("authority")
-	domain, err := data.DomainByAuthority(r.Context(), a.Db, strings.ToLower(authority))
+	domain, err := data.DomainByAuthority(r.Context(), a.DB, strings.ToLower(authority))
 	if err != nil {
 		return err
 	}
@@ -136,14 +136,14 @@ func (a *App) apiDomainVisits(key *AuthenticatedKey, w http.ResponseWriter, r *h
 	case core.RoleAdmin:
 		allowed = true
 	case core.RoleDomain:
-		allowed = key.Role.DomainID == domain.Id
+		allowed = key.Role.DomainID == domain.ID
 	}
 	if !allowed {
 		return Forbidden("This API key cannot view visits for this domain.")
 	}
-	page, err := data.ListVisitsForDomain(r.Context(), a.Db, domain.Id, visitFiltersFromQuery(r.URL.Query()))
+	page, err := data.ListVisitsForDomain(r.Context(), a.DB, domain.ID, visitFiltersFromQuery(r.URL.Query()))
 	if err != nil {
 		return err
 	}
-	return RespondJSON(w, http.StatusOK, NewPageDto(page, NewVisitDto))
+	return RespondJSON(w, http.StatusOK, NewPageDTO(page, NewVisitDTO))
 }

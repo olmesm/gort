@@ -16,14 +16,14 @@
       {{- range .Webhooks}}
       <tr>
         <td>{{.Name}}</td>
-        <td><span class="truncate mono">{{.Url}}</span></td>
+        <td><span class="truncate mono">{{.URL}}</span></td>
         <td>{{range csv .Events}}<span class="badge gray">{{.}}</span>{{end}}</td>
         <td>{{if .Enabled}}<span class="badge green">enabled</span>{{else}}<span class="badge red">disabled</span>{{end}}</td>
         <td class="actions">
-          <form class="inline" method="post" action="/admin/webhooks/{{.Id}}/toggle">
+          <form class="inline" method="post" action="/admin/webhooks/{{.ID}}/toggle">
             <button class="secondary small">{{if .Enabled}}Disable{{else}}Enable{{end}}</button>
           </form>
-          <form class="inline" method="post" action="/admin/webhooks/{{.Id}}/delete" onsubmit="return confirm('Delete this webhook?')">
+          <form class="inline" method="post" action="/admin/webhooks/{{.ID}}/delete" onsubmit="return confirm('Delete this webhook?')">
             <button class="danger small">Delete</button>
           </form>
         </td>

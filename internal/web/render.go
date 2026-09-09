@@ -72,7 +72,7 @@ func (a *App) render(w http.ResponseWriter, status int, t *template.Template, na
 	if err := t.ExecuteTemplate(&buf, name, data); err != nil {
 		return fmt.Errorf("rendering %s: %w", name, err)
 	}
-	respondHtml(w, status, buf.String())
+	respondHTML(w, status, buf.String())
 	return nil
 }
 
@@ -87,7 +87,7 @@ func (a *App) renderShared(w http.ResponseWriter, status int, name string, data 
 	return a.render(w, status, a.baseTemplates, name, data)
 }
 
-func respondHtml(w http.ResponseWriter, status int, body string) {
+func respondHTML(w http.ResponseWriter, status int, body string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
 	_, _ = w.Write([]byte(body))
@@ -122,24 +122,24 @@ func formatCount(n int64) string {
 // ---- Shared view-model pieces ----
 
 type pagerView struct {
-	PrevUrl     string
-	NextUrl     string
+	PrevURL     string
+	NextURL     string
 	CurrentPage int
 	TotalPages  int
 	TotalItems  int64
 }
 
-func newPager[T any](page core.Page[T], buildUrl func(int) string) pagerView {
+func newPager[T any](page core.Page[T], buildURL func(int) string) pagerView {
 	total := page.TotalPages()
 	if total < 1 {
 		total = 1
 	}
 	pv := pagerView{CurrentPage: page.CurrentPage, TotalPages: total, TotalItems: page.TotalItems}
 	if page.CurrentPage > 1 {
-		pv.PrevUrl = buildUrl(page.CurrentPage - 1)
+		pv.PrevURL = buildURL(page.CurrentPage - 1)
 	}
 	if page.CurrentPage < page.TotalPages() {
-		pv.NextUrl = buildUrl(page.CurrentPage + 1)
+		pv.NextURL = buildURL(page.CurrentPage + 1)
 	}
 	return pv
 }

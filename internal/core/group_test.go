@@ -39,7 +39,7 @@ func TestGroupNamesRejectEmptyAndCommas(t *testing.T) {
 
 func TestSpecsCarryTheValidatedGroup(t *testing.T) {
 	group := "/team-a"
-	spec, serr := NewShortUrlSpec(ShortUrlSpecInput{LongUrl: "https://example.com", Group: &group})
+	spec, serr := NewShortURLSpec(ShortURLSpecInput{LongURL: "https://example.com", Group: &group})
 	if serr != nil {
 		t.Fatal(serr)
 	}
@@ -48,7 +48,7 @@ func TestSpecsCarryTheValidatedGroup(t *testing.T) {
 	}
 
 	empty := "  "
-	spec, serr = NewShortUrlSpec(ShortUrlSpecInput{LongUrl: "https://example.com", Group: &empty})
+	spec, serr = NewShortURLSpec(ShortURLSpecInput{LongURL: "https://example.com", Group: &empty})
 	if serr != nil || spec.Group != nil {
 		t.Errorf("blank group should mean no group: %v %v", spec.Group, serr)
 	}

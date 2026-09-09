@@ -4,7 +4,7 @@
 <div class="alert warning">Geolocation is off: set GORT_GEOLITE_LICENSE_KEY to enrich visits with country and city data.</div>
 {{- end}}
 <div class="stat-grid">
-  <div class="stat"><div class="num">{{.Stats.ShortUrlCount}}</div><div class="label"><a href="/admin/short-urls">Short URLs</a></div></div>
+  <div class="stat"><div class="num">{{.Stats.ShortURLCount}}</div><div class="label"><a href="/admin/short-urls">Short URLs</a></div></div>
   <div class="stat"><div class="num">{{.Stats.VisitCount}}</div><div class="label">Visits</div></div>
   <div class="stat"><div class="num">{{.Stats.OrphanVisitCount}}</div><div class="label"><a href="/admin/visits/orphan">Orphan visits</a></div></div>
   <div class="stat"><div class="num">{{.Stats.TagCount}}</div><div class="label"><a href="/admin/tags">Tags</a></div></div>
@@ -23,8 +23,8 @@
     <tbody>
       {{- range .Recent}}
       <tr>
-        <td><a class="mono" href="/admin/short-urls/{{.Id}}/edit">{{.Authority}}/{{.ShortCode}}</a></td>
-        <td><span class="truncate">{{.LongUrl}}</span></td>
+        <td><a class="mono" href="/admin/short-urls/{{.ID}}/edit">{{.Authority}}/{{.ShortCode}}</a></td>
+        <td><span class="truncate">{{.LongURL}}</span></td>
         <td>{{.VisitCount}}</td>
         <td class="muted">{{fmtDate .CreatedAt}}</td>
       </tr>

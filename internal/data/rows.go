@@ -7,7 +7,7 @@ import (
 )
 
 type UserRow struct {
-	Id           core.UserID
+	ID           core.UserID
 	Username     string
 	PasswordHash string
 	Role         string
@@ -15,24 +15,24 @@ type UserRow struct {
 	// AuthSource is "local" for password accounts, "oidc" for SSO-provisioned
 	// ones.
 	AuthSource  string
-	OidcSubject *string
+	OIDCSubject *string
 }
 
 type DomainRow struct {
-	Id                      core.DomainID
+	ID                      core.DomainID
 	Authority               string
-	BaseUrlRedirect         *string
+	BaseURLRedirect         *string
 	Regular404Redirect      *string
-	InvalidShortUrlRedirect *string
+	InvalidShortURLRedirect *string
 	IsDefault               bool
 	CreatedAt               time.Time
 }
 
-type ShortUrlRow struct {
-	Id                   core.ShortUrlID
+type ShortURLRow struct {
+	ID                   core.ShortURLID
 	ShortCode            string
-	DomainId             core.DomainID
-	LongUrl              string
+	DomainID             core.DomainID
+	LongURL              string
 	Title                *string
 	TitleWasAutoResolved bool
 	RedirectStatus       int
@@ -41,20 +41,20 @@ type ShortUrlRow struct {
 	MaxVisits            *int64
 	ValidSince           *time.Time
 	ValidUntil           *time.Time
-	AuthorUserId         *core.UserID
-	AuthorApiKeyId       *core.ApiKeyID
+	AuthorUserID         *core.UserID
+	AuthorAPIKeyID       *core.APIKeyID
 	GroupName            *string
 	CreatedAt            time.Time
 }
 
 // ShortUrlDetail is a short URL row enriched with joined data for lists and
 // API payloads.
-type ShortUrlDetail struct {
-	Id                   core.ShortUrlID
+type ShortURLDetail struct {
+	ID                   core.ShortURLID
 	ShortCode            string
-	DomainId             core.DomainID
+	DomainID             core.DomainID
 	Authority            string
-	LongUrl              string
+	LongURL              string
 	Title                *string
 	TitleWasAutoResolved bool
 	RedirectStatus       int
@@ -63,8 +63,8 @@ type ShortUrlDetail struct {
 	MaxVisits            *int64
 	ValidSince           *time.Time
 	ValidUntil           *time.Time
-	AuthorUserId         *core.UserID
-	AuthorApiKeyId       *core.ApiKeyID
+	AuthorUserID         *core.UserID
+	AuthorAPIKeyID       *core.APIKeyID
 	GroupName            *string
 	CreatedAt            time.Time
 	VisitCount           int64
@@ -72,48 +72,48 @@ type ShortUrlDetail struct {
 }
 
 type TagStatsRow struct {
-	Id            int64
+	ID            int64
 	Name          string
-	ShortUrlCount int64
+	ShortURLCount int64
 	VisitCount    int64
 }
 
 type VisitRow struct {
-	Id          core.VisitID
-	ShortUrlId  *core.ShortUrlID
+	ID          core.VisitID
+	ShortURLID  *core.ShortURLID
 	VisitType   string
 	VisitedAt   time.Time
 	Referer     *string
 	UserAgent   *string
 	Browser     *string
-	Os          *string
+	OS          *string
 	Device      *string
 	IsBot       bool
-	RemoteIp    *string
+	RemoteIP    *string
 	CountryCode *string
 	CountryName *string
 	City        *string
 	Latitude    *float64
 	Longitude   *float64
-	VisitedUrl  *string
+	VisitedURL  *string
 	GeoResolved bool
 }
 
-type ApiKeyRow struct {
-	Id        core.ApiKeyID
+type APIKeyRow struct {
+	ID        core.APIKeyID
 	KeyHash   string
 	Name      *string
 	Role      string
-	DomainId  *core.DomainID
+	DomainID  *core.DomainID
 	Enabled   bool
 	ExpiresAt *time.Time
 	CreatedAt time.Time
 }
 
 type WebhookRow struct {
-	Id        core.WebhookID
+	ID        core.WebhookID
 	Name      string
-	Url       string
+	URL       string
 	Secret    string
 	Events    string
 	Enabled   bool
@@ -121,8 +121,8 @@ type WebhookRow struct {
 }
 
 type WebhookDeliveryRow struct {
-	Id            int64
-	WebhookId     core.WebhookID
+	ID            int64
+	WebhookID     core.WebhookID
 	Event         string
 	Payload       string
 	Attempts      int
@@ -134,6 +134,6 @@ type WebhookDeliveryRow struct {
 
 type DomainStatsRow struct {
 	DomainRow
-	ShortUrlCount int64
+	ShortURLCount int64
 	VisitCount    int64
 }

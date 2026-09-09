@@ -18,8 +18,8 @@ type AppConfig struct {
 	// when no domain is picked.
 	DefaultDomain core.DomainAuthority
 	// UseHttps is the scheme used when rendering short URLs.
-	UseHttps         bool
-	DbDialect        data.Dialect
+	UseHTTPS         bool
+	DBDialect        data.Dialect
 	ConnectionString string
 	// DataDir is the directory for runtime state: SQLite db, GeoIP db,
 	// session signing keys.
@@ -32,9 +32,9 @@ type AppConfig struct {
 	DisableTracking bool
 	// DisableIpTracking tracks visits but never records any form of the
 	// visitor's IP.
-	DisableIpTracking bool
+	DisableIPTracking bool
 	// AnonymizeIps anonymizes recorded IPs (zero host bits) before storing.
-	AnonymizeIps bool
+	AnonymizeIPs bool
 	// TrackSkipParam: requests carrying this query param are redirected but
 	// not tracked.
 	TrackSkipParam string
@@ -42,9 +42,9 @@ type AppConfig struct {
 	// other 404s.
 	TrackOrphanVisits bool
 	// Global fallbacks; per-domain values in the DB take precedence.
-	BaseUrlRedirect         string
+	BaseURLRedirect         string
 	Regular404Redirect      string
-	InvalidShortUrlRedirect string
+	InvalidShortURLRedirect string
 	GeoLiteLicenseKey       string
 	InitialAdminUsername    string
 	InitialAdminPassword    string
@@ -57,35 +57,35 @@ type AppConfig struct {
 
 	// OidcIssuer enables SSO when set (e.g.
 	// https://keycloak.example.com/realms/myrealm).
-	OidcIssuer       string
-	OidcClientID     string
-	OidcClientSecret string
+	OIDCIssuer       string
+	OIDCClientID     string
+	OIDCClientSecret string
 	// OidcRedirectURL overrides the callback URL; when empty it is derived
 	// from the incoming request as {scheme}://{host}/admin/oidc/callback.
-	OidcRedirectURL string
+	OIDCRedirectURL string
 	// OidcScopes are the scopes requested besides the mandatory "openid".
-	OidcScopes []string
+	OIDCScopes []string
 	// OidcGroupsClaim is the token claim carrying the user's groups.
-	OidcGroupsClaim string
+	OIDCGroupsClaim string
 	// OidcAdminGroup grants the dashboard admin role to members of this group.
-	OidcAdminGroup string
+	OIDCAdminGroup string
 	// OidcProviderName is the label on the SSO login button.
-	OidcProviderName string
+	OIDCProviderName string
 	// OidcOnly hides local password login (the initial admin remains as a
 	// break-glass account for direct API/database recovery).
-	OidcOnly bool
+	OIDCOnly bool
 }
 
 // OidcEnabled reports whether SSO is configured.
-func (cfg *AppConfig) OidcEnabled() bool { return cfg.OidcIssuer != "" }
+func (cfg *AppConfig) OIDCEnabled() bool { return cfg.OIDCIssuer != "" }
 
-func (cfg *AppConfig) GeoDbPath() string {
+func (cfg *AppConfig) GeoDBPath() string {
 	return filepath.Join(cfg.DataDir, "GeoLite2-City.mmdb")
 }
 
-func (cfg *AppConfig) ShortUrlBase(authority string) string {
+func (cfg *AppConfig) ShortURLBase(authority string) string {
 	scheme := "http"
-	if cfg.UseHttps {
+	if cfg.UseHTTPS {
 		scheme = "https"
 	}
 	return scheme + "://" + authority
@@ -166,35 +166,35 @@ func ConfigFromLookup(get ConfigLookup) (*AppConfig, error) {
 
 	return &AppConfig{
 		DefaultDomain:           defaultDomain,
-		UseHttps:                boolVar(get, "USE_HTTPS", false),
-		DbDialect:               dialect,
+		UseHTTPS:                boolVar(get, "USE_HTTPS", false),
+		DBDialect:               dialect,
 		ConnectionString:        connString,
 		DataDir:                 dataDir,
 		ShortCodeLength:         intVar(get, "SHORT_CODE_LENGTH", core.DefaultCodeLength),
 		DefaultRedirectStatus:   status,
 		AutoResolveTitles:       boolVar(get, "AUTO_RESOLVE_TITLES", true),
 		DisableTracking:         boolVar(get, "DISABLE_TRACKING", false),
-		DisableIpTracking:       boolVar(get, "DISABLE_IP_TRACKING", false),
-		AnonymizeIps:            boolVar(get, "ANONYMIZE_IPS", true),
+		DisableIPTracking:       boolVar(get, "DISABLE_IP_TRACKING", false),
+		AnonymizeIPs:            boolVar(get, "ANONYMIZE_IPS", true),
 		TrackSkipParam:          strVar(get, "TRACK_SKIP_PARAM"),
 		TrackOrphanVisits:       boolVar(get, "TRACK_ORPHAN_VISITS", true),
-		BaseUrlRedirect:         strVar(get, "BASE_URL_REDIRECT"),
+		BaseURLRedirect:         strVar(get, "BASE_URL_REDIRECT"),
 		Regular404Redirect:      strVar(get, "REGULAR_404_REDIRECT"),
-		InvalidShortUrlRedirect: strVar(get, "INVALID_SHORT_URL_REDIRECT"),
+		InvalidShortURLRedirect: strVar(get, "INVALID_SHORT_URL_REDIRECT"),
 		GeoLiteLicenseKey:       strVar(get, "GEOLITE_LICENSE_KEY"),
 		InitialAdminUsername:    strVar(get, "INITIAL_ADMIN_USERNAME"),
 		InitialAdminPassword:    strVar(get, "INITIAL_ADMIN_PASSWORD"),
 		RateLimitPerMinute:      intVar(get, "RATE_LIMIT_PER_MINUTE", 120),
 		Port:                    port,
-		OidcIssuer:              strVar(get, "OIDC_ISSUER"),
-		OidcClientID:            strVar(get, "OIDC_CLIENT_ID"),
-		OidcClientSecret:        strVar(get, "OIDC_CLIENT_SECRET"),
-		OidcRedirectURL:         strVar(get, "OIDC_REDIRECT_URL"),
-		OidcScopes:              splitList(strVar(get, "OIDC_SCOPES"), "profile", "email"),
-		OidcGroupsClaim:         strVarDefault(get, "OIDC_GROUPS_CLAIM", "groups"),
-		OidcAdminGroup:          strVarDefault(get, "OIDC_ADMIN_GROUP", "gort-admins"),
-		OidcProviderName:        strVarDefault(get, "OIDC_PROVIDER_NAME", "SSO"),
-		OidcOnly:                boolVar(get, "OIDC_ONLY", false),
+		OIDCIssuer:              strVar(get, "OIDC_ISSUER"),
+		OIDCClientID:            strVar(get, "OIDC_CLIENT_ID"),
+		OIDCClientSecret:        strVar(get, "OIDC_CLIENT_SECRET"),
+		OIDCRedirectURL:         strVar(get, "OIDC_REDIRECT_URL"),
+		OIDCScopes:              splitList(strVar(get, "OIDC_SCOPES"), "profile", "email"),
+		OIDCGroupsClaim:         strVarDefault(get, "OIDC_GROUPS_CLAIM", "groups"),
+		OIDCAdminGroup:          strVarDefault(get, "OIDC_ADMIN_GROUP", "gort-admins"),
+		OIDCProviderName:        strVarDefault(get, "OIDC_PROVIDER_NAME", "SSO"),
+		OIDCOnly:                boolVar(get, "OIDC_ONLY", false),
 	}, nil
 }
 

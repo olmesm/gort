@@ -12,24 +12,24 @@ type overviewView struct {
 	GeoWarning bool
 	Stats      data.OverviewRow
 	Chart      template.HTML
-	Recent     []data.ShortUrlDetail
+	Recent     []data.ShortURLDetail
 }
 
 // GET /admin — dashboard overview.
 func (a *App) uiOverview(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	stats, err := data.Overview(r.Context(), a.Db)
+	stats, err := data.Overview(r.Context(), a.DB)
 	if err != nil {
 		return err
 	}
 	start := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -29)
-	series, err := data.VisitsPerDay(r.Context(), a.Db, data.GlobalScope(), &start, nil)
+	series, err := data.VisitsPerDay(r.Context(), a.DB, data.GlobalScope(), &start, nil)
 	if err != nil {
 		return err
 	}
-	recentFilters := data.EmptyShortUrlFilters()
+	recentFilters := data.EmptyShortURLFilters()
 	recentFilters.ItemsPerPage = 5
 	recentFilters.VisibleGroups = user.VisibleGroups()
-	recent, err := data.ListShortUrls(r.Context(), a.Db, recentFilters)
+	recent, err := data.ListShortURLs(r.Context(), a.DB, recentFilters)
 	if err != nil {
 		return err
 	}

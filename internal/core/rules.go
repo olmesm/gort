@@ -16,7 +16,7 @@ func DetectDevice(userAgent string) Device {
 	case strings.Contains(ua, "android"):
 		return DeviceAndroid
 	case strings.Contains(ua, "iphone"), strings.Contains(ua, "ipad"), strings.Contains(ua, "ipod"):
-		return DeviceIos
+		return DeviceIOS
 	case strings.Contains(ua, "mobile"):
 		return DeviceMobile
 	default:
@@ -56,7 +56,7 @@ func matchesCondition(visitor VisitorContext, cond RuleCondition) bool {
 		}
 		device := DetectDevice(visitor.UserAgent)
 		if wanted == DeviceMobile {
-			return device == DeviceAndroid || device == DeviceIos || device == DeviceMobile
+			return device == DeviceAndroid || device == DeviceIOS || device == DeviceMobile
 		}
 		return wanted == device
 	case CondLanguage:
@@ -65,7 +65,7 @@ func matchesCondition(visitor VisitorContext, cond RuleCondition) bool {
 		v, ok := visitor.Query[cond.Key]
 		return ok && v == cond.Value
 	case CondIPAddress:
-		return visitor.RemoteIP != "" && IPInCidr(cond.Value, visitor.RemoteIP)
+		return visitor.RemoteIP != "" && IPInCIDR(cond.Value, visitor.RemoteIP)
 	default:
 		return false
 	}
@@ -73,7 +73,7 @@ func matchesCondition(visitor VisitorContext, cond RuleCondition) bool {
 
 // ResolveTarget resolves the target long URL for a visit: the first rule (by
 // priority) whose conditions all match wins; otherwise the default long URL.
-func ResolveTarget(defaultLongUrl string, rules []RedirectRule, visitor VisitorContext) string {
+func ResolveTarget(defaultLongURL string, rules []RedirectRule, visitor VisitorContext) string {
 	sorted := make([]RedirectRule, len(rules))
 	copy(sorted, rules)
 	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].Priority < sorted[j].Priority })
@@ -90,8 +90,8 @@ func ResolveTarget(defaultLongUrl string, rules []RedirectRule, visitor VisitorC
 			}
 		}
 		if all {
-			return rule.LongUrl
+			return rule.LongURL
 		}
 	}
-	return defaultLongUrl
+	return defaultLongURL
 }

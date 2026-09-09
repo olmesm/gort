@@ -82,7 +82,7 @@ func parseUserAgentFamilies(userAgent string) (browser, osName *string) {
 // RecordVisit records a visit (if tracking settings allow it) and publishes
 // the matching event. The only synchronous work is one INSERT; geolocation
 // and webhook fan-out run on background workers.
-func (a *App) RecordVisit(r *http.Request, visitType core.VisitType, shortUrlId *core.ShortUrlID, visited *VisitedShortUrl) {
+func (a *App) RecordVisit(r *http.Request, visitType core.VisitType, shortURLID *core.ShortURLID, visited *VisitedShortURL) {
 	skip := a.Cfg.DisableTracking ||
 		(visitType.IsOrphan() && !a.Cfg.TrackOrphanVisits) ||
 		a.shouldSkipTracking(r)
@@ -99,9 +99,9 @@ func (a *App) RecordVisit(r *http.Request, visitType core.VisitType, shortUrlId 
 	}
 
 	var ip *string
-	if !a.Cfg.DisableIpTracking {
+	if !a.Cfg.DisableIPTracking {
 		if remote := RemoteIP(r); remote != "" {
-			if a.Cfg.AnonymizeIps {
+			if a.Cfg.AnonymizeIPs {
 				if anonymized := core.AnonymizeIP(remote); anonymized != "" {
 					ip = &anonymized
 				}
@@ -111,13 +111,13 @@ func (a *App) RecordVisit(r *http.Request, visitType core.VisitType, shortUrlId 
 		}
 	}
 
-	var visitedUrl *string
+	var visitedURL *string
 	if visitType.IsOrphan() {
 		full := requestScheme(r) + "://" + r.Host + r.URL.Path
 		if r.URL.RawQuery != "" {
 			full += "?" + r.URL.RawQuery
 		}
-		visitedUrl = &full
+		visitedURL = &full
 	}
 
 	uaValue := ""
@@ -126,33 +126,33 @@ func (a *App) RecordVisit(r *http.Request, visitType core.VisitType, shortUrlId 
 	}
 
 	visit := data.NewVisit{
-		ShortUrlId: shortUrlId,
+		ShortURLID: shortURLID,
 		VisitType:  visitType,
 		VisitedAt:  time.Now().UTC(),
 		Referer:    referer,
 		UserAgent:  userAgent,
 		Browser:    browser,
-		Os:         osName,
+		OS:         osName,
 		Device:     core.DetectDevice(uaValue),
 		IsBot:      IsBot(uaValue),
-		RemoteIp:   ip,
-		VisitedUrl: visitedUrl,
+		RemoteIP:   ip,
+		VisitedURL: visitedURL,
 	}
 
-	visitId, err := data.InsertVisit(r.Context(), a.Db, visit)
+	visitID, err := data.InsertVisit(r.Context(), a.DB, visit)
 	if err != nil {
 		a.Logger.Warn("Failed to record visit", "error", err)
 		return
 	}
 
 	if ip != nil {
-		a.Queues.enqueueGeo(visitId, *ip)
+		a.Queues.enqueueGeo(visitID, *ip)
 	}
 
 	payload := VisitEventPayload{
 		VisitType:    visitType.Slug(),
-		ShortUrl:     visited,
-		VisitedUrl:   visitedUrl,
+		ShortURL:     visited,
+		VisitedURL:   visitedURL,
 		Referer:      referer,
 		UserAgent:    userAgent,
 		PotentialBot: visit.IsBot,

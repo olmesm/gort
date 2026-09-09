@@ -22,23 +22,23 @@ func (a *App) apiListTags(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Re
 	page := queryIntDefault(q, "page", 1)
 	itemsPerPage := queryIntDefault(q, "itemsPerPage", core.MaxPageSize)
 
-	result, err := data.ListTags(r.Context(), a.Db, q.Get("searchTerm"), page, itemsPerPage)
+	result, err := data.ListTags(r.Context(), a.DB, q.Get("searchTerm"), page, itemsPerPage)
 	if err != nil {
 		return err
 	}
 
 	if withStats {
-		type tagStatsDto struct {
+		type tagStatsDTO struct {
 			Tag            string `json:"tag"`
-			ShortUrlsCount int64  `json:"shortUrlsCount"`
+			ShortURLsCount int64  `json:"shortUrlsCount"`
 			VisitsCount    int64  `json:"visitsCount"`
 		}
-		RespondJSON(w, http.StatusOK, NewPageDto(result, func(t data.TagStatsRow) tagStatsDto {
-			return tagStatsDto{Tag: t.Name, ShortUrlsCount: t.ShortUrlCount, VisitsCount: t.VisitCount}
+		RespondJSON(w, http.StatusOK, NewPageDTO(result, func(t data.TagStatsRow) tagStatsDTO {
+			return tagStatsDTO{Tag: t.Name, ShortURLsCount: t.ShortURLCount, VisitsCount: t.VisitCount}
 		}))
 		return nil
 	}
-	return RespondJSON(w, http.StatusOK, NewPageDto(result, func(t data.TagStatsRow) string { return t.Name }))
+	return RespondJSON(w, http.StatusOK, NewPageDTO(result, func(t data.TagStatsRow) string { return t.Name }))
 }
 
 // PUT /rest/v1/tags — rename
@@ -51,7 +51,7 @@ func (a *App) apiRenameTag(_ *AuthenticatedKey, w http.ResponseWriter, r *http.R
 	if err != nil {
 		return BadRequest(err.Error())
 	}
-	if err := data.RenameTag(r.Context(), a.Db, body.OldName, newName); err != nil {
+	if err := data.RenameTag(r.Context(), a.DB, body.OldName, newName); err != nil {
 		var renameErr *data.TagRenameError
 		if errors.As(err, &renameErr) {
 			if renameErr.NameTaken {
@@ -77,7 +77,7 @@ func (a *App) apiDeleteTags(_ *AuthenticatedKey, w http.ResponseWriter, r *http.
 	if len(tags) == 0 {
 		return BadRequest("Provide at least one tag to delete via ?tags[]=.")
 	}
-	deleted, err := data.DeleteTags(r.Context(), a.Db, tags)
+	deleted, err := data.DeleteTags(r.Context(), a.DB, tags)
 	if err != nil {
 		return err
 	}
@@ -87,16 +87,16 @@ func (a *App) apiDeleteTags(_ *AuthenticatedKey, w http.ResponseWriter, r *http.
 // GET /rest/v1/tags/{tag}/visits
 func (a *App) apiTagVisits(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
 	tag := r.PathValue("tag")
-	exists, err := data.TagExists(r.Context(), a.Db, tag)
+	exists, err := data.TagExists(r.Context(), a.DB, tag)
 	if err != nil {
 		return err
 	}
 	if !exists {
 		return NotFound(fmt.Sprintf("Tag '%s' was not found.", tag))
 	}
-	page, err := data.ListVisitsForTag(r.Context(), a.Db, tag, visitFiltersFromQuery(r.URL.Query()))
+	page, err := data.ListVisitsForTag(r.Context(), a.DB, tag, visitFiltersFromQuery(r.URL.Query()))
 	if err != nil {
 		return err
 	}
-	return RespondJSON(w, http.StatusOK, NewPageDto(page, NewVisitDto))
+	return RespondJSON(w, http.StatusOK, NewPageDTO(page, NewVisitDTO))
 }
