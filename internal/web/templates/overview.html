@@ -1,7 +1,7 @@
 {{define "content"}}{{with .Data}}
-<h1>Overview</h1>
+<div class="page-heading"><h1>Overview</h1><a class="btn" href="/admin/short-urls/new">+ New short URL</a></div>
 {{- if .GeoWarning}}
-<div class="alert warning">Geolocation is off: set GORT_GEOLITE_LICENSE_KEY to enrich visits with country and city data.</div>
+<div class="alert warning">Geolocation is off. Set GORT_GEOLITE_LICENSE_KEY to record countries and cities.</div>
 {{- end}}
 <div class="stat-grid">
   <div class="stat"><div class="num">{{.Stats.ShortURLCount}}</div><div class="label"><a href="/admin/short-urls">Short URLs</a></div></div>
@@ -10,11 +10,11 @@
   <div class="stat"><div class="num">{{.Stats.TagCount}}</div><div class="label"><a href="/admin/tags">Tags</a></div></div>
   <div class="stat"><div class="num">{{.Stats.BotVisitCount}}</div><div class="label">Bot visits</div></div>
 </div>
-<div class="card chart-card" style="margin-top:1rem">
-  <h2 style="margin-top:0">Visits — last 30 days</h2>
+<div class="card chart-card overview-chart">
+  <div class="section-heading"><h2>Visits in the last 30 days</h2><span class="muted mono">UTC</span></div>
   {{.Chart}}
 </div>
-<h2>Latest short URLs</h2>
+<div class="section-heading"><h2>Latest short URLs</h2><a href="/admin/short-urls">View all short URLs</a></div>
 <div class="table-wrap">
   <table>
     <thead>

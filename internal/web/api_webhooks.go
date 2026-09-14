@@ -1,10 +1,10 @@
 package web
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -21,7 +21,7 @@ type CreateWebhookBody struct {
 }
 
 type PatchWebhookBody struct {
-	Enabled bool `json:"enabled"`
+	Enabled bool `json:"enabled" required:"false"`
 }
 
 type webhookDTO struct {
@@ -87,77 +87,94 @@ func generateWebhookSecret() string {
 }
 
 // GET /rest/v1/webhooks (admin)
-func (a *App) apiListWebhooks(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
-	hooks, err := data.ListWebhooks(r.Context(), a.DB)
+func (a *App) opListWebhooks(ctx context.Context, key *AuthenticatedKey, in *Empty) (*DataList[webhookDTO], error) {
+	if !a.Cfg.WebhooksEnabled {
+		return nil, NotFound("Webhooks are disabled.")
+	}
+	if key.Role.Kind != core.RoleAdmin {
+		return nil, Forbidden("This operation requires an admin API key.")
+	}
+	hooks, err := data.ListWebhooks(ctx, a.DB)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	dtos := make([]webhookDTO, len(hooks))
 	for i := range hooks {
 		dtos[i] = newWebhookDTO(&hooks[i])
 	}
-	return RespondJSON(w, http.StatusOK, map[string]any{"data": dtos})
+	return result(DataList[webhookDTO]{Data: dtos})
 }
 
 // POST /rest/v1/webhooks (admin) — the signing secret is returned exactly
 // once.
-func (a *App) apiCreateWebhook(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
-	body, err := ReadJSON[CreateWebhookBody](w, r)
-	if err != nil {
-		return BadRequest(err.Error())
+func (a *App) opCreateWebhook(ctx context.Context, key *AuthenticatedKey, in *BodyInput[CreateWebhookBody]) (*webhookDTO, error) {
+	if !a.Cfg.WebhooksEnabled {
+		return nil, NotFound("Webhooks are disabled.")
 	}
+	if key.Role.Kind != core.RoleAdmin {
+		return nil, Forbidden("This operation requires an admin API key.")
+	}
+	body := &in.Body
 	name, hookURL, events, err := parseWebhookBody(body)
 	if err != nil {
-		return BadRequest(err.Error())
+		return nil, BadRequest(err.Error())
 	}
 	secret := generateWebhookSecret()
-	row, err := data.InsertWebhook(r.Context(), a.DB, name, hookURL, secret, events)
+	row, err := data.InsertWebhook(ctx, a.DB, name, hookURL, secret, events)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	dto := newWebhookDTO(row)
 	dto.Secret = secret
-	return RespondJSON(w, http.StatusCreated, dto)
+	return result(dto)
 }
 
-func webhookIDFromPath(r *http.Request) (core.WebhookID, bool) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+func webhookIDFromPath(raw string) (core.WebhookID, bool) {
+	id, err := strconv.ParseInt(raw, 10, 64)
 	return core.WebhookID(id), err == nil
 }
 
 // PATCH /rest/v1/webhooks/{id} (admin)
-func (a *App) apiPatchWebhook(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
-	body, err := ReadJSON[PatchWebhookBody](w, r)
-	if err != nil {
-		return BadRequest(err.Error())
+func (a *App) opPatchWebhook(ctx context.Context, key *AuthenticatedKey, in *IDBodyInput[PatchWebhookBody]) (*IDEnabled, error) {
+	if !a.Cfg.WebhooksEnabled {
+		return nil, NotFound("Webhooks are disabled.")
 	}
-	id, ok := webhookIDFromPath(r)
+	if key.Role.Kind != core.RoleAdmin {
+		return nil, Forbidden("This operation requires an admin API key.")
+	}
+	body := &in.Body
+	id, ok := webhookIDFromPath(in.ID)
 	if !ok {
-		return NotFound("Webhook was not found.")
+		return nil, NotFound("Webhook was not found.")
 	}
-	updated, err := data.SetWebhookEnabled(r.Context(), a.DB, id, body.Enabled)
+	updated, err := data.SetWebhookEnabled(ctx, a.DB, id, body.Enabled)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !updated {
-		return NotFound(fmt.Sprintf("Webhook %d was not found.", id.Value()))
+		return nil, NotFound(fmt.Sprintf("Webhook %d was not found.", id.Value()))
 	}
-	return RespondJSON(w, http.StatusOK, map[string]any{"id": id.Value(), "enabled": body.Enabled})
+	return result(IDEnabled{ID: id.Value(), Enabled: body.Enabled})
 }
 
 // DELETE /rest/v1/webhooks/{id} (admin)
-func (a *App) apiDeleteWebhook(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
-	id, ok := webhookIDFromPath(r)
-	if !ok {
-		return NotFound("Webhook was not found.")
+func (a *App) opDeleteWebhook(ctx context.Context, key *AuthenticatedKey, in *IDInput) (*Empty, error) {
+	if !a.Cfg.WebhooksEnabled {
+		return nil, NotFound("Webhooks are disabled.")
 	}
-	deleted, err := data.DeleteWebhook(r.Context(), a.DB, id)
+	if key.Role.Kind != core.RoleAdmin {
+		return nil, Forbidden("This operation requires an admin API key.")
+	}
+	id, ok := webhookIDFromPath(in.ID)
+	if !ok {
+		return nil, NotFound("Webhook was not found.")
+	}
+	deleted, err := data.DeleteWebhook(ctx, a.DB, id)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !deleted {
-		return NotFound(fmt.Sprintf("Webhook %d was not found.", id.Value()))
+		return nil, NotFound(fmt.Sprintf("Webhook %d was not found.", id.Value()))
 	}
-	w.WriteHeader(http.StatusNoContent)
-	return nil
+	return nil, nil
 }

@@ -11,8 +11,8 @@
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="/admin">Gort</a>
-    <nav>
+    <a class="brand" href="/admin" aria-label="Gort home"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M8 5h16v6H14v10h10v6H8z"/><path d="M19 14h10v13h-6v-7h-4z"/></svg><span>gort<span class="brand-dot">.</span></span></a>
+    <nav aria-label="Main navigation">
       <a href="/admin"{{if active .Path "/admin"}} class="active"{{end}}>Overview</a>
       <a href="/admin/short-urls"{{if active .Path "/admin/short-urls"}} class="active"{{end}}>Short URLs</a>
       <a href="/admin/tags"{{if active .Path "/admin/tags"}} class="active"{{end}}>Tags</a>
@@ -32,7 +32,9 @@
       <button class="secondary small">Log out</button>
     </form>
   </header>
-  <main class="container">{{template "content" .}}</main>
+  <main class="container">
+    {{template "content" .}}
+  </main>
 </body>
 </html>
 {{- end}}

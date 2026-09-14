@@ -1,6 +1,6 @@
 {{define "content"}}{{with .Data}}
 <h1>Domains</h1>
-<p class="muted">Short URLs are unique per domain. Point extra domains at this server and register them here (or let them auto-register on first use).</p>
+<p class="muted">Point a domain at this server, then add it here. Gort also registers domains when you first use them to create a short URL.</p>
 {{template "list-filters" .Filters}}
 <div class="table-wrap">
   <table>
@@ -25,7 +25,7 @@
         </td>
         <td class="actions">
           {{- if not .IsDefault}}
-          <form class="inline" method="post" action="/admin/domains/{{.ID}}/delete" onsubmit="return confirm('Delete this domain and ALL its short URLs?')">
+          <form class="inline" method="post" action="/admin/domains/{{.ID}}/delete" onsubmit="return confirm('Delete this domain and all its short URLs?')">
             <button class="danger small">Delete</button>
           </form>
           {{- end}}
@@ -42,7 +42,7 @@
 <div class="card">
   <form class="row" method="post" action="/admin/domains">
     <div>
-      <label>Authority (host or host:port)</label>
+      <label>Domain, with optional port</label>
       <input type="text" name="authority" value="" placeholder="links.example.com">
     </div>
     <div><button>Add domain</button></div>

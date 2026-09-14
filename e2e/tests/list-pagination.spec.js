@@ -5,7 +5,7 @@ test('100 webhooks paginate and retain combined filters', async ({ page, request
   await page.goto('/admin/api-keys');
   const createKey = page.locator('form[action="/admin/api-keys"][method="post"]');
   await createKey.locator('input[name="name"]').fill('pagination-seed');
-  await createKey.getByRole('button', { name: 'Create', exact: true }).click();
+  await createKey.getByRole('button', { name: 'Create API key', exact: true }).click();
   const key = await page.locator('.alert.success .mono').innerText();
   const webhookIDs = [];
   try {
@@ -25,7 +25,7 @@ test('100 webhooks paginate and retain combined filters', async ({ page, request
     await page.goto('/admin/webhooks?search=pagination-hook-');
     await expect(page.locator('tbody tr')).toHaveCount(25);
     await expect(page.locator('.pager')).toContainText('Page 1 of 4 · 100 items');
-    await page.getByRole('link', { name: 'Next →' }).click();
+    await page.getByRole('link', { name: 'Next', exact: true }).click();
     await expect(page).toHaveURL(/page=2.*search=pagination-hook-/);
     await expect(page.locator('tbody tr').first()).toContainText('pagination-hook-025');
 
@@ -34,7 +34,7 @@ test('100 webhooks paginate and retain combined filters', async ({ page, request
     await filters.getByLabel('Event', { exact: true }).selectOption('visit.recorded');
     await filters.getByRole('button', { name: 'Filter', exact: true }).click();
     await expect(page.locator('.pager')).toContainText('Page 1 of 2 · 50 items');
-    await page.getByRole('link', { name: 'Next →' }).click();
+    await page.getByRole('link', { name: 'Next', exact: true }).click();
     await expect(filters.getByLabel('Status')).toHaveValue('enabled');
     await expect(filters.getByLabel('Event', { exact: true })).toHaveValue('visit.recorded');
     await expect(page.locator('.pager')).toContainText('Page 2 of 2 · 50 items');

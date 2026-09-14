@@ -20,11 +20,11 @@ func inv(v float64) string {
 // chartVisitsPerDay renders daily visit counts as a filled line chart.
 // Fills gaps between days with zeroes.
 func chartVisitsPerDay(series []data.DayCount) template.HTML {
-	const width, height = 720.0, 200.0
-	const padL, padR, padT, padB = 40.0, 10.0, 10.0, 22.0
+	const width, height = 1200.0, 200.0
+	const padL, padR, padT, padB = 40.0, 40.0, 10.0, 22.0
 
 	if len(series) == 0 {
-		return `<div class="muted">No visits recorded in this period yet.</div>`
+		return `<div class="muted">No visits for these dates.</div>`
 	}
 
 	// Expand to a contiguous day range so gaps show as zero.
@@ -85,10 +85,10 @@ func chartVisitsPerDay(series []data.DayCount) template.HTML {
 		value := float64(maxY) * (1.0 - gy)
 		yy := padT + plotH*gy
 		fmt.Fprintf(&sb,
-			`<line x1="%s" y1="%s" x2="%s" y2="%s" stroke="#222738" stroke-width="1"/>`,
+			`<line x1="%s" y1="%s" x2="%s" y2="%s" stroke="var(--border)" stroke-width="1"/>`,
 			inv(padL), inv(yy), inv(width-padR), inv(yy))
 		fmt.Fprintf(&sb,
-			`<text x="%s" y="%s" font-size="11" fill="#6b7385" text-anchor="end">%d</text>`,
+			`<text x="%s" y="%s" font-size="11" fill="var(--muted)" text-anchor="end">%d</text>`,
 			inv(padL-6.0), inv(yy+4.0), int64(value))
 	}
 
@@ -104,14 +104,14 @@ func chartVisitsPerDay(series []data.DayCount) template.HTML {
 	linePath := strings.Join(lineParts, " ")
 	areaPath := linePath + fmt.Sprintf(" L%s,%s L%s,%s Z",
 		inv(x(n-1)), inv(padT+plotH), inv(x(0)), inv(padT+plotH))
-	fmt.Fprintf(&sb, `<path d="%s" fill="rgba(129,140,248,0.16)" stroke="none"/>`, areaPath)
-	fmt.Fprintf(&sb, `<path d="%s" fill="none" stroke="#818cf8" stroke-width="2"/>`, linePath)
+	fmt.Fprintf(&sb, `<path d="%s" fill="var(--chart-fill)" stroke="none"/>`, areaPath)
+	fmt.Fprintf(&sb, `<path d="%s" fill="none" stroke="var(--chart-line)" stroke-width="2"/>`, linePath)
 
 	// Dots with tooltips
 	for i, p := range points {
 		label := html.EscapeString(p.day.Format("2006-01-02"))
 		fmt.Fprintf(&sb,
-			`<circle cx="%s" cy="%s" r="2.5" fill="#818cf8"><title>%s: %d</title></circle>`,
+			`<circle cx="%s" cy="%s" r="2.5" fill="var(--chart-line)"><title>%s: %d</title></circle>`,
 			inv(x(i)), inv(y(p.count)), label, p.count)
 	}
 
@@ -124,7 +124,7 @@ func chartVisitsPerDay(series []data.DayCount) template.HTML {
 		if i%labelEvery == 0 || i == n-1 {
 			label := html.EscapeString(p.day.Format("01-02"))
 			fmt.Fprintf(&sb,
-				`<text x="%s" y="%s" font-size="10" fill="#6b7385" text-anchor="middle">%s</text>`,
+				`<text x="%s" y="%s" font-size="10" fill="var(--muted)" text-anchor="middle">%s</text>`,
 				inv(x(i)), inv(height-6.0), label)
 		}
 	}

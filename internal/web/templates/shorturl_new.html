@@ -20,7 +20,7 @@
       </div>
     </div>
     <div>
-      <label>Title (optional; auto-resolved when empty)</label>
+      <label>Title (optional)</label>
       <input type="text" name="title" value="{{.Form.Title}}">
     </div>
     <div>
@@ -51,7 +51,7 @@
     </div>
     <div class="checkbox">
       <input type="checkbox" name="forwardQuery" id="forwardQuery" value="true"{{if .Form.ForwardQuery}} checked{{end}}>
-      <label for="forwardQuery">Forward query params to the long URL</label>
+      <label for="forwardQuery">Forward query parameters to the long URL</label>
     </div>
     <div class="checkbox">
       <input type="checkbox" name="crawlable" id="crawlable" value="true"{{if .Form.Crawlable}} checked{{end}}>

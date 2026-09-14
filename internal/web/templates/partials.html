@@ -1,8 +1,8 @@
 {{define "pager"}}
 <div class="pager">
-  {{- if .PrevURL}}<a class="btn secondary small" href="{{.PrevURL}}">← Prev</a>{{end}}
-  <span class="info">Page {{.CurrentPage}} of {{.TotalPages}} · {{.TotalItems}} items</span>
-  {{- if .NextURL}}<a class="btn secondary small" href="{{.NextURL}}">Next →</a>{{end}}
+  {{- if .PrevURL}}<a class="btn secondary small" href="{{.PrevURL}}">Previous</a>{{end}}
+  <span class="info">Page {{.CurrentPage}} of {{.TotalPages}} · {{.TotalItems}} {{if eq .TotalItems 1}}item{{else}}items{{end}}</span>
+  {{- if .NextURL}}<a class="btn secondary small" href="{{.NextURL}}">Next</a>{{end}}
 </div>
 {{end}}
 
@@ -111,14 +111,14 @@
     {{- range .}}
     <tr>
       <td style="width:35%">{{.Label}}</td>
-      <td><div style="background:rgba(129,140,248,0.35);border-radius:4px;height:1.1rem;width:{{.Pct}}%;min-width:2px"></div></td>
+      <td><div style="background:var(--chart-fill);border-radius:4px;height:1.1rem;width:{{.Pct}}%;min-width:2px"></div></td>
       <td style="width:4rem;text-align:right">{{.Count}}</td>
     </tr>
     {{- end}}
   </tbody>
 </table>
 {{- else}}
-<div class="muted">No data yet.</div>
+<div class="muted">No data for these dates.</div>
 {{- end}}
 {{end}}
 
@@ -159,7 +159,7 @@
           <th>Browser / OS</th>
           <th>Device</th>
           <th>Referrer</th>
-          <th>Bot?</th>
+          <th>Bot</th>
         </tr>
       </thead>
       <tbody>

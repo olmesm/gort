@@ -1,8 +1,8 @@
 package web
 
 import (
+	"context"
 	"fmt"
-	"net/http"
 	"strings"
 
 	"github.com/olmesm/gort/internal/core"
@@ -15,9 +15,9 @@ type CreateDomainBody struct {
 
 type DomainRedirectsBody struct {
 	Domain                  string  `json:"domain"`
-	BaseURLRedirect         *string `json:"baseUrlRedirect"`
-	Regular404Redirect      *string `json:"regular404Redirect"`
-	InvalidShortURLRedirect *string `json:"invalidShortUrlRedirect"`
+	BaseURLRedirect         *string `json:"baseUrlRedirect" required:"false"`
+	Regular404Redirect      *string `json:"regular404Redirect" required:"false"`
+	InvalidShortURLRedirect *string `json:"invalidShortUrlRedirect" required:"false"`
 }
 
 type domainRedirectsDTO struct {
@@ -45,91 +45,93 @@ func newDomainDTO(d *data.DomainRow) domainDTO {
 }
 
 // GET /rest/v1/domains
-func (a *App) apiListDomains(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
-	domains, err := data.ListDomains(r.Context(), a.DB)
+func (a *App) opListDomains(ctx context.Context, _ *AuthenticatedKey, in *Empty) (*DataList[domainDTO], error) {
+	domains, err := data.ListDomains(ctx, a.DB)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	dtos := make([]domainDTO, len(domains))
 	for i := range domains {
 		dtos[i] = newDomainDTO(&domains[i])
 	}
-	return RespondJSON(w, http.StatusOK, map[string]any{"data": dtos})
+	return result(DataList[domainDTO]{Data: dtos})
 }
 
 // POST /rest/v1/domains (admin)
-func (a *App) apiCreateDomain(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
-	body, err := ReadJSON[CreateDomainBody](w, r)
-	if err != nil {
-		return BadRequest(err.Error())
+func (a *App) opCreateDomain(ctx context.Context, key *AuthenticatedKey, in *BodyInput[CreateDomainBody]) (*domainDTO, error) {
+	if key.Role.Kind != core.RoleAdmin {
+		return nil, Forbidden("This operation requires an admin API key.")
 	}
+	body := &in.Body
 	authority, err := core.NewDomainAuthority(body.Domain)
 	if err != nil {
-		return BadRequest(err.Error())
+		return nil, BadRequest(err.Error())
 	}
-	created, err := data.CreateDomain(r.Context(), a.DB, authority)
+	created, err := data.CreateDomain(ctx, a.DB, authority)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if created == nil {
-		return Conflict("domain-exists", fmt.Sprintf("Domain '%s' is already registered.", authority.Value()))
+		return nil, Conflict("domain-exists", fmt.Sprintf("Domain '%s' is already registered.", authority.Value()))
 	}
-	return RespondJSON(w, http.StatusCreated, newDomainDTO(created))
+	return result(newDomainDTO(created))
 }
 
 // PATCH /rest/v1/domains/redirects (admin)
-func (a *App) apiSetDomainRedirects(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
-	body, err := ReadJSON[DomainRedirectsBody](w, r)
-	if err != nil {
-		return BadRequest(err.Error())
+func (a *App) opSetDomainRedirects(ctx context.Context, key *AuthenticatedKey, in *BodyInput[DomainRedirectsBody]) (*domainDTO, error) {
+	if key.Role.Kind != core.RoleAdmin {
+		return nil, Forbidden("This operation requires an admin API key.")
 	}
-	domain, err := data.DomainByAuthority(r.Context(), a.DB, strings.ToLower(strings.TrimSpace(body.Domain)))
+	body := &in.Body
+	domain, err := data.DomainByAuthority(ctx, a.DB, strings.ToLower(strings.TrimSpace(body.Domain)))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if domain == nil {
-		return NotFound(fmt.Sprintf("Domain '%s' is not registered.", body.Domain))
+		return nil, NotFound(fmt.Sprintf("Domain '%s' is not registered.", body.Domain))
 	}
-	if _, err := data.UpdateDomainRedirects(r.Context(), a.DB, domain.ID,
+	if _, err := data.UpdateDomainRedirects(ctx, a.DB, domain.ID,
 		body.BaseURLRedirect, body.Regular404Redirect, body.InvalidShortURLRedirect); err != nil {
-		return err
+		return nil, err
 	}
-	updated, err := data.DomainByID(r.Context(), a.DB, domain.ID)
+	updated, err := data.DomainByID(ctx, a.DB, domain.ID)
 	if err != nil || updated == nil {
-		return err
+		return nil, err
 	}
-	return RespondJSON(w, http.StatusOK, newDomainDTO(updated))
+	return result(newDomainDTO(updated))
 }
 
 // DELETE /rest/v1/domains/{authority} (admin)
-func (a *App) apiDeleteDomain(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
-	authority := r.PathValue("authority")
-	domain, err := data.DomainByAuthority(r.Context(), a.DB, strings.ToLower(authority))
+func (a *App) opDeleteDomain(ctx context.Context, key *AuthenticatedKey, in *AuthorityInput) (*Empty, error) {
+	if key.Role.Kind != core.RoleAdmin {
+		return nil, Forbidden("This operation requires an admin API key.")
+	}
+	authority := in.Authority
+	domain, err := data.DomainByAuthority(ctx, a.DB, strings.ToLower(authority))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if domain == nil {
-		return NotFound(fmt.Sprintf("Domain '%s' is not registered.", authority))
+		return nil, NotFound(fmt.Sprintf("Domain '%s' is not registered.", authority))
 	}
 	if domain.IsDefault {
-		return Forbidden("The default domain cannot be deleted.")
+		return nil, Forbidden("The default domain cannot be deleted.")
 	}
-	if _, err := data.DeleteDomain(r.Context(), a.DB, domain.ID); err != nil {
-		return err
+	if _, err := data.DeleteDomain(ctx, a.DB, domain.ID); err != nil {
+		return nil, err
 	}
-	w.WriteHeader(http.StatusNoContent)
-	return nil
+	return nil, nil
 }
 
 // GET /rest/v1/domains/{authority}/visits
-func (a *App) apiDomainVisits(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
-	authority := r.PathValue("authority")
-	domain, err := data.DomainByAuthority(r.Context(), a.DB, strings.ToLower(authority))
+func (a *App) opDomainVisits(ctx context.Context, key *AuthenticatedKey, in *DomainVisitsInput) (*PageDTO[VisitDTO], error) {
+	authority := in.Authority
+	domain, err := data.DomainByAuthority(ctx, a.DB, strings.ToLower(authority))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if domain == nil {
-		return NotFound(fmt.Sprintf("Domain '%s' is not registered.", authority))
+		return nil, NotFound(fmt.Sprintf("Domain '%s' is not registered.", authority))
 	}
 	allowed := false
 	switch key.Role.Kind {
@@ -139,11 +141,11 @@ func (a *App) apiDomainVisits(key *AuthenticatedKey, w http.ResponseWriter, r *h
 		allowed = key.Role.DomainID == domain.ID
 	}
 	if !allowed {
-		return Forbidden("This API key cannot view visits for this domain.")
+		return nil, Forbidden("This API key cannot view visits for this domain.")
 	}
-	page, err := data.ListVisitsForDomain(r.Context(), a.DB, domain.ID, visitFiltersFromQuery(r.URL.Query()))
+	page, err := data.ListVisitsForDomain(ctx, a.DB, domain.ID, visitFiltersFromQuery(queryValues(in)))
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return RespondJSON(w, http.StatusOK, NewPageDTO(page, NewVisitDTO))
+	return result(NewPageDTO(page, NewVisitDTO))
 }

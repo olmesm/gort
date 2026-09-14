@@ -46,7 +46,7 @@
     </div>
     <div class="checkbox">
       <input type="checkbox" name="forwardQuery" id="forwardQuery" value="true"{{if .ForwardQuery}} checked{{end}}>
-      <label for="forwardQuery">Forward query params to the long URL</label>
+      <label for="forwardQuery">Forward query parameters to the long URL</label>
     </div>
     <div class="checkbox">
       <input type="checkbox" name="crawlable" id="crawlable" value="true"{{if .Crawlable}} checked{{end}}>
@@ -57,7 +57,7 @@
 </div>
 <h2>Conditional redirect rules</h2>
 <div class="card">
-  <p class="muted">Rules are evaluated top-down; the first rule whose conditions all match overrides the long URL.</p>
+  <p class="muted">Gort checks rules in order. The first rule with all conditions matched sets the destination URL.</p>
   {{template "list-filters" .RuleFilters}}
   {{- if .Rules}}
   <div class="table-wrap">
@@ -114,24 +114,24 @@
     </div>
     <div class="row">
       <div>
-        <label>Query param name</label>
+        <label>Query parameter name</label>
         <input type="text" name="queryKey" value="" placeholder="utm_source">
       </div>
       <div>
-        <label>Query param value</label>
+        <label>Query parameter value</label>
         <input type="text" name="queryValue" value="" placeholder="newsletter">
       </div>
     </div>
     <div><button class="secondary">Add rule</button></div>
   </form>
 </div>
-<h2>Danger zone</h2>
+<h2>Delete</h2>
 <div class="card">
   <form class="inline" method="post" action="{{.DeleteAction}}" onsubmit="return confirm('Delete this short URL and all its visits?')">
     <button class="danger">Delete short URL</button>
   </form>
   <form class="inline" method="post" action="{{.VisitsDeleteAction}}" onsubmit="return confirm('Delete all visits of this short URL?')">
-    <button class="danger">Delete its visits</button>
+    <button class="danger">Delete all visits</button>
   </form>
 </div>
 {{end}}{{end}}

@@ -1,11 +1,11 @@
 {{define "content"}}{{with .Data}}
 <h1>Webhooks</h1>
-<p class="muted">Webhooks receive signed JSON POSTs when events happen. Payloads carry an X-Gort-Signature header (HMAC-SHA256 of the body with the webhook secret).</p>
+<p class="muted">Gort sends selected events as JSON POST requests. The X-Gort-Signature header contains an HMAC-SHA256 signature of the body, signed with your webhook secret.</p>
 {{- if .Error}}
 <div class="alert error">{{.Error}}</div>
 {{- end}}
 {{- if .Secret}}
-<div class="alert success">Webhook created — its signing secret (copy it now, it will not be shown again): <br><strong class="mono">{{.Secret}}</strong></div>
+<div class="alert success">Webhook created. Copy the signing secret now. You will not see it again. <br><strong class="mono">{{.Secret}}</strong></div>
 {{- end}}
 {{template "list-filters" .Filters}}
 <div class="table-wrap">

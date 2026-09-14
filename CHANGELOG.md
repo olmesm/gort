@@ -7,6 +7,47 @@ uses [Semantic Versioning](https://semver.org/).
 The release workflow publishes the section matching the tag as the GitHub
 release notes, so every release needs an entry below.
 
+## [0.2.0] - 2026-09-14
+
+### Added
+
+- GraphQL queries and mutations at `/graphql` for links, redirect rules, tags,
+  domains, visits, statistics, API keys and webhooks. Nested link visits and
+  redirect rules share the existing permissions and operations with REST.
+- OpenAPI 3.1 documents at `/rest/openapi.json` and `/rest/openapi.yaml`, generated
+  from every registered REST operation. Interactive REST docs at `/rest/docs`;
+  GraphQL examples, a request editor and schema download at `/graphql/docs`.
+- API keys page header links to both APIs and includes a curl example.
+- GraphQL request size, parser-token and query-complexity limits, bounded field
+  concurrency, authenticated introspection and POST rate limiting.
+
+### Changed
+
+- Rebuilt the dashboard with navy navigation, compact tables, consistent forms,
+  clearer hierarchy and responsive layouts. Existing routes, features, filters
+  and pagination remain in place. Removed decorative copy and design controls.
+- Chi handles routing, Huma binds and documents REST operations, and gqlgen
+  provides GraphQL. REST URLs, response envelopes, error documents and partial
+  update semantics are retained.
+- API documentation assets ship in the binary. The built-in editors keep API
+  keys in memory and send requests directly to the current Gort instance.
+- Building from source now requires Go 1.26+. The Docker build uses Go 1.26.
+
+### Fixed
+
+- Scoped API keys can no longer access other domains' statistics or global tag
+  statistics and visits. Renaming and deleting shared tags now requires an admin
+  key. These permissions apply to both REST and GraphQL.
+- Empty `group=` still selects ungrouped links after the router migration.
+  Path-style slugs remain addressable through encoded REST path parameters.
+
+### Upgrade notes
+
+- `/graphql` and its children are reserved. Recreate any existing links under
+  that prefix with another slug before upgrading.
+- No database migration is required. Webhooks remain disabled by default;
+  `GORT_WEBHOOKS_ENABLED=true` also enables their GraphQL operations.
+
 ## [0.1.2] - 2026-09-14
 
 ### Changed
@@ -74,6 +115,7 @@ release notes, so every release needs an entry below.
   link visibility and a configurable admin group.
 - Single static binary releases for Linux and macOS (amd64, arm64).
 
+[0.2.0]: https://github.com/olmesm/gort/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/olmesm/gort/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/olmesm/gort/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/olmesm/gort/releases/tag/v0.1.0

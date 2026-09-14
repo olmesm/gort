@@ -4,13 +4,14 @@
 <head>
   <meta charset="utf-8">
   <title>Gort</title>
-  <style>body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#0b0d13;color:#e7eaf3}main{text-align:center;padding:2rem}a{color:#818cf8}</style>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/app.css">
 </head>
-<body>
-  <main>
-    <h1>Gort</h1>
+<body class="login-wrap">
+  <main class="card login-card">
+    <h1>gort.</h1>
     <p>A self-hosted URL shortener.</p>
-    <p><a href="/admin">Open the dashboard</a></p>
+    <p><a class="btn" href="/admin">Open the dashboard</a></p>
   </main>
 </body>
 </html>
@@ -22,12 +23,14 @@
 <head>
   <meta charset="utf-8">
   <title>Not found</title>
-  <style>body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#0b0d13;color:#e7eaf3}main{text-align:center;padding:2rem}h1{font-size:4rem;margin:0}p{color:#6b7385}</style>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/app.css">
 </head>
-<body>
-  <main>
+<body class="login-wrap">
+  <main class="card login-card">
     <h1>404</h1>
     <p>{{.}}</p>
+    <a class="btn secondary" href="/admin">Open the dashboard</a>
   </main>
 </body>
 </html>

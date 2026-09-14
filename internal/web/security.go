@@ -108,16 +108,6 @@ func (a *App) requireAPIKey(next apiHandler) http.HandlerFunc {
 	})
 }
 
-// requireAdminKey authenticates and requires the admin role.
-func (a *App) requireAdminKey(next apiHandler) http.HandlerFunc {
-	return a.requireAPIKey(func(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
-		if key.Role.Kind != core.RoleAdmin {
-			return Forbidden("This operation requires an admin API key.")
-		}
-		return next(key, w, r)
-	})
-}
-
 // ---- Cookie sessions for the admin dashboard ----
 
 const sessionCookieName = "gort_session"

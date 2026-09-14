@@ -74,7 +74,7 @@ test.describe('short URL lifecycle', () => {
     await page.goto(`/${SLUG}`);
     // Landed on the app's landing page (the configured long URL).
     await expect(page).toHaveURL(`${baseURL}/`);
-    await expect(page.locator('h1')).toHaveText('Gort');
+    await expect(page.locator('h1')).toHaveText('gort.');
   });
 
   test('the visit shows up in the analytics page', async ({ page }) => {

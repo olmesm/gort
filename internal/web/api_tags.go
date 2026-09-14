@@ -1,9 +1,9 @@
 package web
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 
 	"github.com/olmesm/gort/internal/core"
@@ -16,58 +16,58 @@ type RenameTagBody struct {
 }
 
 // GET /rest/v1/tags?withStats=true&searchTerm=&page=&itemsPerPage=
-func (a *App) apiListTags(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
-	q := r.URL.Query()
+func (a *App) opListTags(ctx context.Context, key *AuthenticatedKey, in *TagListInput) (*PageDTO[any], error) {
+	q := queryValues(in)
 	withStats := queryBool(q, "withStats")
 	page := queryIntDefault(q, "page", 1)
 	itemsPerPage := queryIntDefault(q, "itemsPerPage", core.MaxPageSize)
 
-	result, err := data.ListTags(r.Context(), a.DB, q.Get("searchTerm"), page, itemsPerPage)
+	pageResult, err := data.ListTags(ctx, a.DB, q.Get("searchTerm"), page, itemsPerPage)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if withStats {
-		type tagStatsDTO struct {
-			Tag            string `json:"tag"`
-			ShortURLsCount int64  `json:"shortUrlsCount"`
-			VisitsCount    int64  `json:"visitsCount"`
+		if key.Role.Kind != core.RoleAdmin {
+			return nil, Forbidden("Only admin keys can view tag statistics.")
 		}
-		RespondJSON(w, http.StatusOK, NewPageDTO(result, func(t data.TagStatsRow) tagStatsDTO {
+		return result(NewPageDTO(pageResult, func(t data.TagStatsRow) any {
 			return tagStatsDTO{Tag: t.Name, ShortURLsCount: t.ShortURLCount, VisitsCount: t.VisitCount}
 		}))
-		return nil
 	}
-	return RespondJSON(w, http.StatusOK, NewPageDTO(result, func(t data.TagStatsRow) string { return t.Name }))
+	return result(NewPageDTO(pageResult, func(t data.TagStatsRow) any { return t.Name }))
 }
 
 // PUT /rest/v1/tags — rename
-func (a *App) apiRenameTag(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
-	body, err := ReadJSON[RenameTagBody](w, r)
-	if err != nil {
-		return BadRequest(err.Error())
+func (a *App) opRenameTag(ctx context.Context, key *AuthenticatedKey, in *BodyInput[RenameTagBody]) (*RenameTagBody, error) {
+	if key.Role.Kind != core.RoleAdmin {
+		return nil, Forbidden("Only admin keys can change global tags.")
 	}
+	body := &in.Body
 	newName, err := core.NewTagName(body.NewName)
 	if err != nil {
-		return BadRequest(err.Error())
+		return nil, BadRequest(err.Error())
 	}
-	if err := data.RenameTag(r.Context(), a.DB, body.OldName, newName); err != nil {
+	if err := data.RenameTag(ctx, a.DB, body.OldName, newName); err != nil {
 		var renameErr *data.TagRenameError
 		if errors.As(err, &renameErr) {
 			if renameErr.NameTaken {
-				return Conflict("tag-conflict", fmt.Sprintf("A tag named '%s' already exists.", renameErr.Name))
+				return nil, Conflict("tag-conflict", fmt.Sprintf("A tag named '%s' already exists.", renameErr.Name))
 			}
-			return NotFound(fmt.Sprintf("Tag '%s' was not found.", renameErr.Name))
+			return nil, NotFound(fmt.Sprintf("Tag '%s' was not found.", renameErr.Name))
 		}
-		return err
+		return nil, err
 	}
-	return RespondJSON(w, http.StatusOK, map[string]string{"oldName": body.OldName, "newName": newName.Value()})
+	return result(RenameTagBody{OldName: body.OldName, NewName: newName.Value()})
 }
 
 // DELETE /rest/v1/tags?tags[]=a&tags[]=b (also accepts tags=a,b)
-func (a *App) apiDeleteTags(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
+func (a *App) opDeleteTags(ctx context.Context, key *AuthenticatedKey, in *DeleteTagsInput) (*DeletedTags, error) {
+	if key.Role.Kind != core.RoleAdmin {
+		return nil, Forbidden("Only admin keys can change global tags.")
+	}
 	var tags []string
-	for _, listed := range queryStringList(r.URL.Query(), "tags") {
+	for _, listed := range queryStringList(queryValues(in), "tags") {
 		for _, tag := range strings.Split(listed, ",") {
 			if tag = strings.TrimSpace(tag); tag != "" {
 				tags = append(tags, tag)
@@ -75,28 +75,51 @@ func (a *App) apiDeleteTags(_ *AuthenticatedKey, w http.ResponseWriter, r *http.
 		}
 	}
 	if len(tags) == 0 {
-		return BadRequest("Provide at least one tag to delete via ?tags[]=.")
+		return nil, BadRequest("Provide at least one tag to delete via ?tags[]=.")
 	}
-	deleted, err := data.DeleteTags(r.Context(), a.DB, tags)
+	deleted, err := data.DeleteTags(ctx, a.DB, tags)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return RespondJSON(w, http.StatusOK, map[string]int{"deletedTags": deleted})
+	return result(DeletedTags{DeletedTags: deleted})
 }
 
 // GET /rest/v1/tags/{tag}/visits
-func (a *App) apiTagVisits(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
-	tag := r.PathValue("tag")
-	exists, err := data.TagExists(r.Context(), a.DB, tag)
+func (a *App) opTagVisits(ctx context.Context, key *AuthenticatedKey, in *TagVisitsInput) (*PageDTO[VisitDTO], error) {
+	if key.Role.Kind != core.RoleAdmin {
+		return nil, Forbidden("Only admin keys can view tag visits.")
+	}
+	tag := in.Tag
+	exists, err := data.TagExists(ctx, a.DB, tag)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !exists {
-		return NotFound(fmt.Sprintf("Tag '%s' was not found.", tag))
+		return nil, NotFound(fmt.Sprintf("Tag '%s' was not found.", tag))
 	}
-	page, err := data.ListVisitsForTag(r.Context(), a.DB, tag, visitFiltersFromQuery(r.URL.Query()))
+	page, err := data.ListVisitsForTag(ctx, a.DB, tag, visitFiltersFromQuery(queryValues(in)))
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return RespondJSON(w, http.StatusOK, NewPageDTO(page, NewVisitDTO))
+	return result(NewPageDTO(page, NewVisitDTO))
+}
+
+type tagStatsDTO struct {
+	Tag            string `json:"tag"`
+	ShortURLsCount int64  `json:"shortUrlsCount"`
+	VisitsCount    int64  `json:"visitsCount"`
+}
+
+func (a *App) opTagStats(ctx context.Context, key *AuthenticatedKey, in *TagListInput) (*PageDTO[tagStatsDTO], error) {
+	if key.Role.Kind != core.RoleAdmin {
+		return nil, Forbidden("Only admin keys can view tag statistics.")
+	}
+	q := queryValues(in)
+	page, err := data.ListTags(ctx, a.DB, q.Get("searchTerm"), queryIntDefault(q, "page", 1), queryIntDefault(q, "itemsPerPage", core.MaxPageSize))
+	if err != nil {
+		return nil, err
+	}
+	return result(NewPageDTO(page, func(t data.TagStatsRow) tagStatsDTO {
+		return tagStatsDTO{Tag: t.Name, ShortURLsCount: t.ShortURLCount, VisitsCount: t.VisitCount}
+	}))
 }

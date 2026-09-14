@@ -61,3 +61,9 @@ func NotFound(detail string) error {
 func Conflict(problemType, detail string) error {
 	return NewProblem(409, problemType, "Conflict", detail)
 }
+
+func (p *Problem) GetStatus() int            { return p.Status }
+func (p *Problem) ContentType(string) string { return "application/problem+json" }
+func (p *Problem) MarshalJSON() ([]byte, error) {
+	return json.Marshal(problemDetails{Type: "https://gort.dev/errors/" + p.Type, Title: p.Title, Detail: p.Detail, Status: p.Status})
+}

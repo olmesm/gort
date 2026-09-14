@@ -1,11 +1,18 @@
 {{define "content"}}{{with .Data}}
-<h1>API keys</h1>
-<p class="muted">Keys authenticate REST API calls via the X-Api-Key header. Admin keys can do everything; author keys only see short URLs they created; domain keys are limited to one domain.</p>
+<div class="page-heading">
+  <h1>API keys</h1>
+  <div class="actions"><a class="btn secondary small" href="/rest/docs">REST docs</a><a class="btn secondary small" href="/graphql/docs">GraphQL</a><a class="btn secondary small" href="/rest/openapi.json">OpenAPI ↗</a></div>
+</div>
+<details class="api-example"><summary>Example request</summary>
+<pre><code>curl -H "X-Api-Key: $GORT_API_KEY" \
+  "{{.APIBaseURL}}/rest/v1/short-urls?itemsPerPage=5"</code></pre>
+<p class="muted">Use the same key for REST and GraphQL. Authorization: Bearer is also supported.</p>
+</details>
 {{- if .Error}}
 <div class="alert error">{{.Error}}</div>
 {{- end}}
 {{- if .PlainKey}}
-<div class="alert success">API key created — copy it now, it will not be shown again: <br><strong class="mono">{{.PlainKey}}</strong></div>
+<div class="alert success">API key created. Copy it now. You will not see it again. <br><strong class="mono">{{.PlainKey}}</strong></div>
 {{- end}}
 {{template "list-filters" .Filters}}
 <div class="table-wrap">
@@ -40,6 +47,7 @@
 {{template "pager" .Pager}}
 <h2>Create API key</h2>
 <div class="card">
+  <p class="muted">Admin: full access. Author: links created by this key. Domain: links on one domain. Only admin keys can change shared tags or view global statistics.</p>
   <form class="row" method="post" action="/admin/api-keys">
     <div>
       <label>Name</label>
@@ -66,7 +74,7 @@
       <label>Expires (UTC, optional)</label>
       <input type="datetime-local" name="expiresAt">
     </div>
-    <div><button>Create</button></div>
+    <div><button>Create API key</button></div>
   </form>
 </div>
 {{end}}{{end}}

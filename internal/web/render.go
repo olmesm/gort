@@ -47,7 +47,7 @@ var pageTemplateNames = []string{
 func parseTemplates() (base *template.Template, pages map[string]*template.Template) {
 	base = template.Must(template.New("").Funcs(templateFuncs).ParseFS(templateFS,
 		"templates/layout.html", "templates/partials.html",
-		"templates/login.html", "templates/public.html"))
+		"templates/login.html", "templates/public.html", "templates/api_docs.html"))
 	pages = make(map[string]*template.Template, len(pageTemplateNames))
 	for _, name := range pageTemplateNames {
 		clone := template.Must(base.Clone())
@@ -176,10 +176,10 @@ type statusOptionView struct {
 
 func statusOptions(current int) []statusOptionView {
 	all := []statusOptionView{
-		{Code: 301, Label: "301 — permanent"},
-		{Code: 302, Label: "302 — found (default)"},
-		{Code: 307, Label: "307 — temporary, keep method"},
-		{Code: 308, Label: "308 — permanent, keep method"},
+		{Code: 301, Label: "301 Permanent"},
+		{Code: 302, Label: "302 Found, default"},
+		{Code: 307, Label: "307 Temporary, keep method"},
+		{Code: 308, Label: "308 Permanent, keep method"},
 	}
 	for i := range all {
 		all[i].Selected = all[i].Code == current

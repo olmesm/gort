@@ -11,7 +11,7 @@ test.describe('admin-only areas', () => {
     await page.click('button:has-text("Create")');
 
     const banner = page.locator('.alert.success');
-    await expect(banner).toContainText('copy it now');
+    await expect(banner).toContainText('Copy it now');
     await expect(banner.locator('.mono')).toContainText(/^gort_/);
 
     const row = page.locator('tr', { hasText: 'e2e-key' });

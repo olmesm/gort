@@ -1,8 +1,8 @@
 package web
 
 import (
+	"context"
 	"fmt"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -12,14 +12,14 @@ import (
 )
 
 type CreateAPIKeyBody struct {
-	Name      *string    `json:"name"`
-	Role      *string    `json:"role"`
-	Domain    *string    `json:"domain"`
-	ExpiresAt *time.Time `json:"expiresAt"`
+	Name      *string    `json:"name" required:"false"`
+	Role      *string    `json:"role" required:"false"`
+	Domain    *string    `json:"domain" required:"false"`
+	ExpiresAt *time.Time `json:"expiresAt" required:"false"`
 }
 
 type PatchAPIKeyBody struct {
-	Enabled bool `json:"enabled"`
+	Enabled bool `json:"enabled" required:"false"`
 }
 
 type apiKeyDTO struct {
@@ -46,14 +46,17 @@ func newAPIKeyDTO(k *data.APIKeyRow, domainAuthority *string) apiKeyDTO {
 }
 
 // GET /rest/v1/api-keys (admin)
-func (a *App) apiListAPIKeys(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
-	keys, err := data.ListAPIKeys(r.Context(), a.DB)
-	if err != nil {
-		return err
+func (a *App) opListAPIKeys(ctx context.Context, key *AuthenticatedKey, in *Empty) (*DataList[apiKeyDTO], error) {
+	if key.Role.Kind != core.RoleAdmin {
+		return nil, Forbidden("This operation requires an admin API key.")
 	}
-	domains, err := data.ListDomains(r.Context(), a.DB)
+	keys, err := data.ListAPIKeys(ctx, a.DB)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	domains, err := data.ListDomains(ctx, a.DB)
+	if err != nil {
+		return nil, err
 	}
 	authorityOf := func(id *core.DomainID) *string {
 		if id == nil {
@@ -71,22 +74,23 @@ func (a *App) apiListAPIKeys(_ *AuthenticatedKey, w http.ResponseWriter, r *http
 	for i := range keys {
 		dtos[i] = newAPIKeyDTO(&keys[i], authorityOf(keys[i].DomainID))
 	}
-	return RespondJSON(w, http.StatusOK, map[string]any{"data": dtos})
+	return result(DataList[apiKeyDTO]{Data: dtos})
 }
 
 // POST /rest/v1/api-keys (admin) — the plaintext key is returned exactly
 // once.
-func (a *App) apiCreateAPIKey(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
-	body, err := ReadJSON[CreateAPIKeyBody](w, r)
-	if err != nil {
-		return BadRequest(err.Error())
+func (a *App) opCreateAPIKey(ctx context.Context, key *AuthenticatedKey, in *BodyInput[CreateAPIKeyBody]) (*apiKeyDTO, error) {
+	if key.Role.Kind != core.RoleAdmin {
+		return nil, Forbidden("This operation requires an admin API key.")
 	}
+	body := &in.Body
 
 	var domain *data.DomainRow
+	var err error
 	if body.Domain != nil {
-		domain, err = data.DomainByAuthority(r.Context(), a.DB, strings.ToLower(strings.TrimSpace(*body.Domain)))
+		domain, err = data.DomainByAuthority(ctx, a.DB, strings.ToLower(strings.TrimSpace(*body.Domain)))
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -102,21 +106,21 @@ func (a *App) apiCreateAPIKey(_ *AuthenticatedKey, w http.ResponseWriter, r *htt
 		role = core.AuthorRole()
 	case "domain":
 		if domain == nil {
-			return BadRequest("domain-role keys need an existing 'domain'.")
+			return nil, BadRequest("domain-role keys need an existing 'domain'.")
 		}
 		role = core.DomainRole(domain.ID)
 	default:
-		return BadRequest(fmt.Sprintf("Unknown role '%s'. Use admin, author or domain.", roleSlug))
+		return nil, BadRequest(fmt.Sprintf("Unknown role '%s'. Use admin, author or domain.", roleSlug))
 	}
 
 	if body.ExpiresAt != nil && !body.ExpiresAt.After(time.Now().UTC()) {
-		return BadRequest("expiresAt must be in the future.")
+		return nil, BadRequest("expiresAt must be in the future.")
 	}
 
 	plainKey := GenerateAPIKey()
-	row, err := data.InsertAPIKey(r.Context(), a.DB, HashAPIKey(plainKey), body.Name, role, body.ExpiresAt)
+	row, err := data.InsertAPIKey(ctx, a.DB, HashAPIKey(plainKey), body.Name, role, body.ExpiresAt)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var domainAuthority *string
 	if domain != nil {
@@ -124,47 +128,49 @@ func (a *App) apiCreateAPIKey(_ *AuthenticatedKey, w http.ResponseWriter, r *htt
 	}
 	dto := newAPIKeyDTO(row, domainAuthority)
 	dto.APIKey = plainKey
-	return RespondJSON(w, http.StatusCreated, dto)
+	return result(dto)
 }
 
-func apiKeyIDFromPath(r *http.Request) (core.APIKeyID, bool) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+func apiKeyIDFromPath(raw string) (core.APIKeyID, bool) {
+	id, err := strconv.ParseInt(raw, 10, 64)
 	return core.APIKeyID(id), err == nil
 }
 
 // PATCH /rest/v1/api-keys/{id} (admin)
-func (a *App) apiPatchAPIKey(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
-	body, err := ReadJSON[PatchAPIKeyBody](w, r)
-	if err != nil {
-		return BadRequest(err.Error())
+func (a *App) opPatchAPIKey(ctx context.Context, key *AuthenticatedKey, in *IDBodyInput[PatchAPIKeyBody]) (*IDEnabled, error) {
+	if key.Role.Kind != core.RoleAdmin {
+		return nil, Forbidden("This operation requires an admin API key.")
 	}
-	id, ok := apiKeyIDFromPath(r)
+	body := &in.Body
+	id, ok := apiKeyIDFromPath(in.ID)
 	if !ok {
-		return NotFound("API key was not found.")
+		return nil, NotFound("API key was not found.")
 	}
-	updated, err := data.SetAPIKeyEnabled(r.Context(), a.DB, id, body.Enabled)
+	updated, err := data.SetAPIKeyEnabled(ctx, a.DB, id, body.Enabled)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !updated {
-		return NotFound(fmt.Sprintf("API key %d was not found.", id.Value()))
+		return nil, NotFound(fmt.Sprintf("API key %d was not found.", id.Value()))
 	}
-	return RespondJSON(w, http.StatusOK, map[string]any{"id": id.Value(), "enabled": body.Enabled})
+	return result(IDEnabled{ID: id.Value(), Enabled: body.Enabled})
 }
 
 // DELETE /rest/v1/api-keys/{id} (admin)
-func (a *App) apiDeleteAPIKey(_ *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
-	id, ok := apiKeyIDFromPath(r)
-	if !ok {
-		return NotFound("API key was not found.")
+func (a *App) opDeleteAPIKey(ctx context.Context, key *AuthenticatedKey, in *IDInput) (*Empty, error) {
+	if key.Role.Kind != core.RoleAdmin {
+		return nil, Forbidden("This operation requires an admin API key.")
 	}
-	deleted, err := data.DeleteAPIKey(r.Context(), a.DB, id)
+	id, ok := apiKeyIDFromPath(in.ID)
+	if !ok {
+		return nil, NotFound("API key was not found.")
+	}
+	deleted, err := data.DeleteAPIKey(ctx, a.DB, id)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !deleted {
-		return NotFound(fmt.Sprintf("API key %d was not found.", id.Value()))
+		return nil, NotFound(fmt.Sprintf("API key %d was not found.", id.Value()))
 	}
-	w.WriteHeader(http.StatusNoContent)
-	return nil
+	return nil, nil
 }

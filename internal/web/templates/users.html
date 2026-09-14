@@ -1,6 +1,6 @@
 {{define "content"}}{{with .Data}}
 <h1>Users</h1>
-<p class="muted">Dashboard accounts. Admins additionally manage domains, API keys, webhooks and users.</p>
+<p class="muted">Admins can manage domains, API keys,{{if $.WebhooksEnabled}} webhooks,{{end}} and users.</p>
 {{- if .Error}}
 <div class="alert error">{{.Error}}</div>
 {{- end}}
@@ -20,7 +20,7 @@
               <option value="user"{{if eq .Role "user"}} selected{{end}}>user</option>
               <option value="admin"{{if eq .Role "admin"}} selected{{end}}>admin</option>
             </select>
-            {{if ne .ID $.Data.LastAdminID}}<button class="secondary small">Set</button>{{end}}
+            {{if ne .ID $.Data.LastAdminID}}<button class="secondary small">Save</button>{{end}}
           </form>
         </td>
         <td class="muted">{{fmtDate .CreatedAt}}</td>

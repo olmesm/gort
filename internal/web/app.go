@@ -14,6 +14,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+
 	"github.com/olmesm/gort/internal/core"
 	"github.com/olmesm/gort/internal/data"
 )
@@ -38,7 +41,7 @@ type App struct {
 	webhookClient *http.Client
 	geoClient     *http.Client
 	limiter       *rateLimiter
-	mux           *http.ServeMux
+	mux           *chi.Mux
 }
 
 // NewApp builds the application: opens the database, runs migrations,
@@ -167,7 +170,7 @@ func (l *rateLimiter) allow(key string) bool {
 
 func (a *App) rateLimitMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		isMutatingRest := strings.HasPrefix(r.URL.Path, "/rest") &&
+		isMutatingRest := (strings.HasPrefix(r.URL.Path, "/rest") || r.URL.Path == "/graphql") &&
 			r.Method != http.MethodGet && r.Method != http.MethodHead
 		if isMutatingRest && a.Cfg.RateLimitPerMinute > 0 {
 			key := RemoteIP(r)
@@ -185,8 +188,9 @@ func (a *App) rateLimitMiddleware(next http.Handler) http.Handler {
 
 // ---- Routing ----
 
-func (a *App) buildRouter() *http.ServeMux {
-	mux := http.NewServeMux()
+func (a *App) buildRouter() *chi.Mux {
+	mux := chi.NewRouter()
+	mux.Use(middleware.GetHead)
 
 	// Static assets served from the embedded filesystem.
 	serveAsset := func(name string) http.HandlerFunc {
@@ -199,117 +203,74 @@ func (a *App) buildRouter() *http.ServeMux {
 			http.ServeFileFS(w, r, staticFiles, "static/"+name)
 		}
 	}
-	for _, asset := range []string{"app.css", "htmx.min.js", "inter-var.woff2"} {
-		mux.HandleFunc("GET /"+asset, serveAsset(asset))
+	for _, asset := range []string{"app.css", "htmx.min.js", "inter-var.woff2", "scalar-1.68.0.js", "api-docs.js"} {
+		mux.Get("/"+asset, serveAsset(asset))
 	}
 
-	// REST API
-	mux.Handle("GET /rest/health", a.handle(a.handleHealth))
-
-	mux.Handle("GET /rest/v1/short-urls", a.requireAPIKey(a.apiListShortURLs))
-	mux.Handle("POST /rest/v1/short-urls", a.requireAPIKey(a.apiCreateShortURL))
-	mux.Handle("GET /rest/v1/short-urls/{code}", a.requireAPIKey(a.apiGetShortURL))
-	mux.Handle("PATCH /rest/v1/short-urls/{code}", a.requireAPIKey(a.apiEditShortURL))
-	mux.Handle("DELETE /rest/v1/short-urls/{code}", a.requireAPIKey(a.apiDeleteShortURL))
-	mux.Handle("GET /rest/v1/short-urls/{code}/redirect-rules", a.requireAPIKey(a.apiGetRules))
-	mux.Handle("POST /rest/v1/short-urls/{code}/redirect-rules", a.requireAPIKey(a.apiSetRules))
-	mux.Handle("GET /rest/v1/short-urls/{code}/visits", a.requireAPIKey(a.apiListShortURLVisits))
-	mux.Handle("DELETE /rest/v1/short-urls/{code}/visits", a.requireAPIKey(a.apiDeleteShortURLVisits))
-
-	mux.Handle("GET /rest/v1/tags", a.requireAPIKey(a.apiListTags))
-	mux.Handle("PUT /rest/v1/tags", a.requireAPIKey(a.apiRenameTag))
-	mux.Handle("DELETE /rest/v1/tags", a.requireAPIKey(a.apiDeleteTags))
-	mux.Handle("GET /rest/v1/tags/{tag}/visits", a.requireAPIKey(a.apiTagVisits))
-
-	mux.Handle("GET /rest/v1/domains", a.requireAPIKey(a.apiListDomains))
-	mux.Handle("POST /rest/v1/domains", a.requireAdminKey(a.apiCreateDomain))
-	mux.Handle("PATCH /rest/v1/domains/redirects", a.requireAdminKey(a.apiSetDomainRedirects))
-	mux.Handle("DELETE /rest/v1/domains/{authority}", a.requireAdminKey(a.apiDeleteDomain))
-	mux.Handle("GET /rest/v1/domains/{authority}/visits", a.requireAPIKey(a.apiDomainVisits))
-
-	mux.Handle("GET /rest/v1/visits", a.requireAPIKey(a.apiVisitsOverview))
-	mux.Handle("GET /rest/v1/visits/non-orphan", a.requireAPIKey(a.apiListNonOrphanVisits))
-	mux.Handle("GET /rest/v1/visits/orphan", a.requireAPIKey(a.apiListOrphanVisits))
-	mux.Handle("DELETE /rest/v1/visits/orphan", a.requireAPIKey(a.apiDeleteOrphanVisits))
-	mux.Handle("GET /rest/v1/stats/visits-per-day", a.requireAPIKey(a.apiVisitsPerDay))
-	mux.Handle("GET /rest/v1/stats/breakdown", a.requireAPIKey(a.apiBreakdown))
-
-	mux.Handle("GET /rest/v1/api-keys", a.requireAdminKey(a.apiListAPIKeys))
-	mux.Handle("POST /rest/v1/api-keys", a.requireAdminKey(a.apiCreateAPIKey))
-	mux.Handle("PATCH /rest/v1/api-keys/{id}", a.requireAdminKey(a.apiPatchAPIKey))
-	mux.Handle("DELETE /rest/v1/api-keys/{id}", a.requireAdminKey(a.apiDeleteAPIKey))
-
-	if a.Cfg.WebhooksEnabled {
-		mux.Handle("GET /rest/v1/webhooks", a.requireAdminKey(a.apiListWebhooks))
-		mux.Handle("POST /rest/v1/webhooks", a.requireAdminKey(a.apiCreateWebhook))
-		mux.Handle("PATCH /rest/v1/webhooks/{id}", a.requireAdminKey(a.apiPatchWebhook))
-		mux.Handle("DELETE /rest/v1/webhooks/{id}", a.requireAdminKey(a.apiDeleteWebhook))
-	}
-
-	if !a.Cfg.WebhooksEnabled {
-		for _, path := range []string{"/rest/v1/webhooks", "/rest/v1/webhooks/", "/admin/webhooks", "/admin/webhooks/"} {
-			for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodDelete} {
-				mux.Handle(method+" "+path, http.NotFoundHandler())
-			}
-		}
-	}
+	a.registerREST(mux)
+	a.registerGraphQL(mux)
 
 	// Dashboard
-	mux.Handle("GET /admin", a.requireUser(a.uiOverview))
-	mux.Handle("GET /admin/login", a.handle(a.uiLoginForm))
-	mux.Handle("POST /admin/login", a.handle(a.uiLogin))
-	mux.Handle("POST /admin/logout", a.handle(a.uiLogout))
-	mux.Handle("GET /admin/oidc/login", a.handle(a.uiOIDCLogin))
-	mux.Handle("GET /admin/oidc/callback", a.handle(a.uiOIDCCallback))
+	mux.Method("GET", "/admin", a.requireUser(a.uiOverview))
+	mux.Method("GET", "/admin/login", a.handle(a.uiLoginForm))
+	mux.Method("POST", "/admin/login", a.handle(a.uiLogin))
+	mux.Method("POST", "/admin/logout", a.handle(a.uiLogout))
+	mux.Method("GET", "/admin/oidc/login", a.handle(a.uiOIDCLogin))
+	mux.Method("GET", "/admin/oidc/callback", a.handle(a.uiOIDCCallback))
 
-	mux.Handle("GET /admin/short-urls", a.requireUser(a.uiListShortURLs))
-	mux.Handle("GET /admin/short-urls/new", a.requireUser(a.uiCreateShortURLForm))
-	mux.Handle("POST /admin/short-urls/new", a.requireUser(a.uiCreateShortURL))
-	mux.Handle("GET /admin/short-urls/{id}/edit", a.requireUser(a.uiEditShortURLForm))
-	mux.Handle("POST /admin/short-urls/{id}/edit", a.requireUser(a.uiEditShortURL))
-	mux.Handle("POST /admin/short-urls/{id}/rules/add", a.requireUser(a.uiAddRule))
-	mux.Handle("POST /admin/short-urls/{id}/rules/delete", a.requireUser(a.uiDeleteRule))
-	mux.Handle("POST /admin/short-urls/{id}/delete", a.requireUser(a.uiDeleteShortURL))
-	mux.Handle("POST /admin/short-urls/{id}/visits/delete", a.requireUser(a.uiDeleteShortURLVisits))
-	mux.Handle("GET /admin/short-urls/{id}/visits", a.requireUser(a.uiShortURLVisits))
+	mux.Method("GET", "/admin/short-urls", a.requireUser(a.uiListShortURLs))
+	mux.Method("GET", "/admin/short-urls/new", a.requireUser(a.uiCreateShortURLForm))
+	mux.Method("POST", "/admin/short-urls/new", a.requireUser(a.uiCreateShortURL))
+	mux.Method("GET", "/admin/short-urls/{id}/edit", a.requireUser(a.uiEditShortURLForm))
+	mux.Method("POST", "/admin/short-urls/{id}/edit", a.requireUser(a.uiEditShortURL))
+	mux.Method("POST", "/admin/short-urls/{id}/rules/add", a.requireUser(a.uiAddRule))
+	mux.Method("POST", "/admin/short-urls/{id}/rules/delete", a.requireUser(a.uiDeleteRule))
+	mux.Method("POST", "/admin/short-urls/{id}/delete", a.requireUser(a.uiDeleteShortURL))
+	mux.Method("POST", "/admin/short-urls/{id}/visits/delete", a.requireUser(a.uiDeleteShortURLVisits))
+	mux.Method("GET", "/admin/short-urls/{id}/visits", a.requireUser(a.uiShortURLVisits))
 
-	mux.Handle("GET /admin/visits/orphan", a.requireUser(a.uiOrphanVisits))
-	mux.Handle("POST /admin/visits/orphan/delete", a.requireAdmin(a.uiDeleteOrphanVisits))
+	mux.Method("GET", "/admin/visits/orphan", a.requireUser(a.uiOrphanVisits))
+	mux.Method("POST", "/admin/visits/orphan/delete", a.requireAdmin(a.uiDeleteOrphanVisits))
 
-	mux.Handle("GET /admin/tags", a.requireUser(a.uiListTags))
-	mux.Handle("POST /admin/tags/rename", a.requireUser(a.uiRenameTag))
-	mux.Handle("POST /admin/tags/delete", a.requireUser(a.uiDeleteTag))
+	mux.Method("GET", "/admin/tags", a.requireUser(a.uiListTags))
+	mux.Method("POST", "/admin/tags/rename", a.requireUser(a.uiRenameTag))
+	mux.Method("POST", "/admin/tags/delete", a.requireUser(a.uiDeleteTag))
 
-	mux.Handle("GET /admin/domains", a.requireAdmin(a.uiListDomains))
-	mux.Handle("POST /admin/domains", a.requireAdmin(a.uiCreateDomain))
-	mux.Handle("POST /admin/domains/{id}/redirects", a.requireAdmin(a.uiSetDomainRedirects))
-	mux.Handle("POST /admin/domains/{id}/delete", a.requireAdmin(a.uiDeleteDomain))
+	mux.Method("GET", "/admin/domains", a.requireAdmin(a.uiListDomains))
+	mux.Method("POST", "/admin/domains", a.requireAdmin(a.uiCreateDomain))
+	mux.Method("POST", "/admin/domains/{id}/redirects", a.requireAdmin(a.uiSetDomainRedirects))
+	mux.Method("POST", "/admin/domains/{id}/delete", a.requireAdmin(a.uiDeleteDomain))
 
-	mux.Handle("GET /admin/api-keys", a.requireAdmin(a.uiListAPIKeys))
-	mux.Handle("POST /admin/api-keys", a.requireAdmin(a.uiCreateAPIKey))
-	mux.Handle("POST /admin/api-keys/{id}/toggle", a.requireAdmin(a.uiToggleAPIKey))
-	mux.Handle("POST /admin/api-keys/{id}/delete", a.requireAdmin(a.uiDeleteAPIKey))
+	mux.Method("GET", "/admin/api-keys", a.requireAdmin(a.uiListAPIKeys))
+	mux.Method("POST", "/admin/api-keys", a.requireAdmin(a.uiCreateAPIKey))
+	mux.Method("POST", "/admin/api-keys/{id}/toggle", a.requireAdmin(a.uiToggleAPIKey))
+	mux.Method("POST", "/admin/api-keys/{id}/delete", a.requireAdmin(a.uiDeleteAPIKey))
 
-	mux.Handle("GET /admin/users", a.requireAdmin(a.uiListUsers))
-	mux.Handle("POST /admin/users", a.requireAdmin(a.uiCreateUser))
-	mux.Handle("POST /admin/users/{id}/role", a.requireAdmin(a.uiSetUserRole))
-	mux.Handle("POST /admin/users/{id}/password", a.requireAdmin(a.uiSetUserPassword))
-	mux.Handle("POST /admin/users/{id}/delete", a.requireAdmin(a.uiDeleteUser))
+	mux.Method("GET", "/admin/users", a.requireAdmin(a.uiListUsers))
+	mux.Method("POST", "/admin/users", a.requireAdmin(a.uiCreateUser))
+	mux.Method("POST", "/admin/users/{id}/role", a.requireAdmin(a.uiSetUserRole))
+	mux.Method("POST", "/admin/users/{id}/password", a.requireAdmin(a.uiSetUserPassword))
+	mux.Method("POST", "/admin/users/{id}/delete", a.requireAdmin(a.uiDeleteUser))
 
 	if a.Cfg.WebhooksEnabled {
-		mux.Handle("GET /admin/webhooks", a.requireAdmin(a.uiListWebhooks))
-		mux.Handle("POST /admin/webhooks", a.requireAdmin(a.uiCreateWebhook))
-		mux.Handle("POST /admin/webhooks/{id}/toggle", a.requireAdmin(a.uiToggleWebhook))
-		mux.Handle("POST /admin/webhooks/{id}/delete", a.requireAdmin(a.uiDeleteWebhook))
+		mux.Method("GET", "/admin/webhooks", a.requireAdmin(a.uiListWebhooks))
+		mux.Method("POST", "/admin/webhooks", a.requireAdmin(a.uiCreateWebhook))
+		mux.Method("POST", "/admin/webhooks/{id}/toggle", a.requireAdmin(a.uiToggleWebhook))
+		mux.Method("POST", "/admin/webhooks/{id}/delete", a.requireAdmin(a.uiDeleteWebhook))
 	}
 
 	// Public
-	mux.Handle("GET /robots.txt", a.handle(a.handleRobots))
-	mux.Handle("GET /{code}/qr-code", a.handle(a.handleQRCode))
-	mux.Handle("GET /{$}", a.handle(a.handleBaseURL))
+	mux.Method("GET", "/robots.txt", a.handle(a.handleRobots))
+	mux.Method("GET", "/{code}/qr-code", a.handle(a.handleQRCode))
+	mux.Method("GET", "/", a.handle(a.handleBaseURL))
 	// A "GET" pattern also serves HEAD requests.
-	mux.Handle("GET /", a.handle(a.handleShortURL))
+	mux.Get("/*", a.handle(a.handleShortURL))
 
+	mux.Handle("/rest/*", http.NotFoundHandler())
+	if !a.Cfg.WebhooksEnabled {
+		mux.Handle("/admin/webhooks", http.NotFoundHandler())
+		mux.Handle("/admin/webhooks/*", http.NotFoundHandler())
+	}
 	return mux
 }
 

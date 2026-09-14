@@ -13,12 +13,13 @@ import (
 )
 
 type apiKeysView struct {
-	Filters  listControlsView
-	Pager    pagerView
-	Error    string
-	PlainKey string
-	Rows     []apiKeyRowView
-	Domains  []string
+	APIBaseURL string
+	Filters    listControlsView
+	Pager      pagerView
+	Error      string
+	PlainKey   string
+	Rows       []apiKeyRowView
+	Domains    []string
 }
 
 type apiKeyRowView struct {
@@ -86,6 +87,7 @@ func (a *App) renderAPIKeysPage(r *http.Request, w http.ResponseWriter, user *Cu
 	if err != nil {
 		return err
 	}
+	model.APIBaseURL = requestScheme(r) + "://" + r.Host
 	return a.renderPage(w, http.StatusOK, "apikeys", user, "/admin/api-keys", "API keys", model)
 }
 

@@ -11,7 +11,8 @@
 <body>
   <div class="login-wrap">
     <div class="card login-card">
-      <h1>Gort</h1>
+      <h1>gort.</h1>
+      <p class="login-intro">Log in to Gort</p>
       {{- if .Error}}
       <div class="alert error">{{.Error}}</div>
       {{- end}}
@@ -20,7 +21,7 @@
       {{- end}}
       {{- if .ShowPasswordForm}}
       {{- if .OIDCEnabled}}
-      <p class="muted" style="text-align:center;margin:0.75rem 0 0">or sign in with a local account</p>
+      <p class="muted" style="text-align:center;margin:0.75rem 0 0">or log in with a local account</p>
       {{- end}}
       <form class="stack" method="post" action="/admin/login">
         <input type="hidden" name="returnUrl" value="{{.ReturnURL}}">

@@ -117,6 +117,9 @@ func (a *App) insertWithCode(ctx context.Context, spec *core.ShortURLSpec, domai
 // (auto-registering unknown domains), code generation with collision retry,
 // atomic insert with tags, async title resolution and event publication.
 func (a *App) CreateShortURL(ctx context.Context, author *Author, spec *core.ShortURLSpec) (*ShortURLDTO, error) {
+	if spec.CustomSlug != nil && (spec.CustomSlug.Value() == "graphql" || strings.HasPrefix(spec.CustomSlug.Value(), "graphql/")) {
+		return nil, core.NewError(core.ErrInvalidSlug, "The graphql path is reserved for the GraphQL API.")
+	}
 	domain, err := a.resolveTargetDomain(ctx, spec.Domain)
 	if err != nil {
 		return nil, err

@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"net/url"
 	"strings"
 
@@ -12,8 +11,7 @@ import (
 )
 
 // scopeFromQuery builds a stats scope from query params
-// (?shortCode=&domain=&tag=&orphan=true). On failure it writes the error
-// response and returns nil.
+// (?shortCode=&domain=&tag=&orphan=true), enforcing API-key permissions.
 func (a *App) scopeFromQuery(ctx context.Context, key *AuthenticatedKey, q url.Values) (data.VisitScope, error) {
 	if queryBool(q, "orphan") {
 		if key.Role.Kind != core.RoleAdmin {
@@ -30,6 +28,9 @@ func (a *App) scopeFromQuery(ctx context.Context, key *AuthenticatedKey, q url.V
 		return data.ShortURLScope(detail.ID), nil
 	}
 	if tag := q.Get("tag"); tag != "" {
+		if key.Role.Kind != core.RoleAdmin {
+			return data.VisitScope{}, Forbidden("Only admin keys can query tag statistics.")
+		}
 		return data.TagScope(tag), nil
 	}
 	if authority := q.Get("domain"); authority != "" {
@@ -39,6 +40,9 @@ func (a *App) scopeFromQuery(ctx context.Context, key *AuthenticatedKey, q url.V
 		}
 		if d == nil {
 			return data.VisitScope{}, NotFound(fmt.Sprintf("Domain '%s' is not registered.", authority))
+		}
+		if key.Role.Kind != core.RoleAdmin && (key.Role.Kind != core.RoleDomain || key.Role.DomainID != d.ID) {
+			return data.VisitScope{}, Forbidden("This API key cannot view statistics for this domain.")
 		}
 		return data.DomainScope(d.ID), nil
 	}
@@ -54,90 +58,85 @@ func (a *App) scopeFromQuery(ctx context.Context, key *AuthenticatedKey, q url.V
 }
 
 // GET /rest/v1/visits — global counters.
-func (a *App) apiVisitsOverview(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
+func (a *App) opVisitsOverview(ctx context.Context, key *AuthenticatedKey, in *Empty) (*VisitOverviewDTO, error) {
 	if key.Role.Kind != core.RoleAdmin {
-		return Forbidden("Only admin keys can view the global visit summary.")
+		return nil, Forbidden("Only admin keys can view the global visit summary.")
 	}
-	o, err := data.Overview(r.Context(), a.DB)
+	o, err := data.Overview(ctx, a.DB)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	RespondJSON(w, http.StatusOK, map[string]int64{
-		"visitsCount":       o.VisitCount,
-		"orphanVisitsCount": o.OrphanVisitCount,
-		"shortUrlsCount":    o.ShortURLCount,
-		"tagsCount":         o.TagCount,
-		"botVisitsCount":    o.BotVisitCount,
+	return result(VisitOverviewDTO{
+		VisitsCount:       o.VisitCount,
+		OrphanVisitsCount: o.OrphanVisitCount,
+		ShortURLsCount:    o.ShortURLCount,
+		TagsCount:         o.TagCount,
+		BotVisitsCount:    o.BotVisitCount,
 	})
-	return nil
 }
 
 // GET /rest/v1/visits/non-orphan
-func (a *App) apiListNonOrphanVisits(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
+func (a *App) opListNonOrphanVisits(ctx context.Context, key *AuthenticatedKey, in *VisitQuery) (*PageDTO[VisitDTO], error) {
 	if key.Role.Kind != core.RoleAdmin {
-		return Forbidden("Only admin keys can list all visits.")
+		return nil, Forbidden("Only admin keys can list all visits.")
 	}
-	page, err := data.ListNonOrphanVisits(r.Context(), a.DB, visitFiltersFromQuery(r.URL.Query()))
+	page, err := data.ListNonOrphanVisits(ctx, a.DB, visitFiltersFromQuery(queryValues(in)))
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return RespondJSON(w, http.StatusOK, NewPageDTO(page, NewVisitDTO))
+	return result(NewPageDTO(page, NewVisitDTO))
 }
 
 // GET /rest/v1/visits/orphan?type=
-func (a *App) apiListOrphanVisits(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
+func (a *App) opListOrphanVisits(ctx context.Context, key *AuthenticatedKey, in *OrphanVisitsInput) (*PageDTO[VisitDTO], error) {
 	if key.Role.Kind != core.RoleAdmin {
-		return Forbidden("Only admin keys can list orphan visits.")
+		return nil, Forbidden("Only admin keys can list orphan visits.")
 	}
-	q := r.URL.Query()
+	q := queryValues(in)
 	var visitType *core.VisitType
 	if vt, ok := core.VisitTypeOfSlug(q.Get("type")); ok {
 		visitType = &vt
 	}
-	page, err := data.ListOrphanVisits(r.Context(), a.DB, visitType, visitFiltersFromQuery(q))
+	page, err := data.ListOrphanVisits(ctx, a.DB, visitType, visitFiltersFromQuery(q))
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return RespondJSON(w, http.StatusOK, NewPageDTO(page, NewVisitDTO))
+	return result(NewPageDTO(page, NewVisitDTO))
 }
 
 // DELETE /rest/v1/visits/orphan
-func (a *App) apiDeleteOrphanVisits(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
+func (a *App) opDeleteOrphanVisits(ctx context.Context, key *AuthenticatedKey, in *Empty) (*DeletedVisits, error) {
 	if key.Role.Kind != core.RoleAdmin {
-		return Forbidden("Only admin keys can delete orphan visits.")
+		return nil, Forbidden("Only admin keys can delete orphan visits.")
 	}
-	deleted, err := data.DeleteOrphanVisits(r.Context(), a.DB)
+	deleted, err := data.DeleteOrphanVisits(ctx, a.DB)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return RespondJSON(w, http.StatusOK, map[string]int{"deletedVisits": deleted})
+	return result(DeletedVisits{DeletedVisits: deleted})
 }
 
 // GET /rest/v1/stats/visits-per-day
-func (a *App) apiVisitsPerDay(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
-	q := r.URL.Query()
-	scope, err := a.scopeFromQuery(r.Context(), key, q)
+func (a *App) opVisitsPerDay(ctx context.Context, key *AuthenticatedKey, in *StatsInput) (*DataList[dayDTO], error) {
+	q := queryValues(in)
+	scope, err := a.scopeFromQuery(ctx, key, q)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	series, err := data.VisitsPerDay(r.Context(), a.DB, scope, queryDate(q, "startDate"), queryDate(q, "endDate"))
+	series, err := data.VisitsPerDay(ctx, a.DB, scope, queryDate(q, "startDate"), queryDate(q, "endDate"))
 	if err != nil {
-		return err
-	}
-	type dayDTO struct {
-		Date  string `json:"date"`
-		Count int64  `json:"count"`
+		return nil, err
 	}
 	days := make([]dayDTO, len(series))
 	for i, d := range series {
 		days[i] = dayDTO{Date: d.Day, Count: d.Count}
 	}
-	return RespondJSON(w, http.StatusOK, map[string]any{"data": days})
+	return result(DataList[dayDTO]{Data: days})
 }
 
 // GET /rest/v1/stats/breakdown?by=country|city|browser|os|referer|device
-func (a *App) apiBreakdown(key *AuthenticatedKey, w http.ResponseWriter, r *http.Request) error {
-	q := r.URL.Query()
+func (a *App) opBreakdown(ctx context.Context, key *AuthenticatedKey, in *BreakdownInput) (*DataList[breakdownDTO], error) {
+	q := queryValues(in)
 
 	var column string
 	switch strings.ToLower(q.Get("by")) {
@@ -156,15 +155,12 @@ func (a *App) apiBreakdown(key *AuthenticatedKey, w http.ResponseWriter, r *http
 	case "device":
 		column = "device"
 	default:
-		return BadRequest("Provide ?by= one of: country, countryCode, city, browser, os, referer, device.")
+		return nil, BadRequest("Provide ?by= one of: country, countryCode, city, browser, os, referer, device.")
 	}
 
-	scope, err := a.scopeFromQuery(r.Context(), key, q)
-
+	scope, err := a.scopeFromQuery(ctx, key, q)
 	if err != nil {
-
-		return err
-
+		return nil, err
 	}
 
 	limit := queryIntDefault(q, "limit", 25)
@@ -175,13 +171,9 @@ func (a *App) apiBreakdown(key *AuthenticatedKey, w http.ResponseWriter, r *http
 		limit = 100
 	}
 
-	rows, err := data.Breakdown(r.Context(), a.DB, scope, column, queryDate(q, "startDate"), queryDate(q, "endDate"), limit)
+	rows, err := data.Breakdown(ctx, a.DB, scope, column, queryDate(q, "startDate"), queryDate(q, "endDate"), limit)
 	if err != nil {
-		return err
-	}
-	type breakdownDTO struct {
-		Value string `json:"value"`
-		Count int64  `json:"count"`
+		return nil, err
 	}
 	items := make([]breakdownDTO, len(rows))
 	for i, row := range rows {
@@ -191,5 +183,15 @@ func (a *App) apiBreakdown(key *AuthenticatedKey, w http.ResponseWriter, r *http
 		}
 		items[i] = breakdownDTO{Value: value, Count: row.Count}
 	}
-	return RespondJSON(w, http.StatusOK, map[string]any{"data": items})
+	return result(DataList[breakdownDTO]{Data: items})
+}
+
+type dayDTO struct {
+	Date  string `json:"date"`
+	Count int64  `json:"count"`
+}
+
+type breakdownDTO struct {
+	Value string `json:"value"`
+	Count int64  `json:"count"`
 }

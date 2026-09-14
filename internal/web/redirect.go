@@ -23,16 +23,6 @@ func redirectWith(w http.ResponseWriter, status core.RedirectStatus, location st
 	w.WriteHeader(status.Code())
 }
 
-// GET /rest/health — no auth; checks database connectivity.
-func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) error {
-	const version = "1.0.0"
-	var one int64
-	if err := a.DB.QueryRow(r.Context(), "SELECT 1").Scan(&one); err != nil {
-		return RespondJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "fail", "version": version})
-	}
-	return RespondJSON(w, http.StatusOK, map[string]string{"status": "pass", "version": version})
-}
-
 // GET / — orphan-tracked; redirects when a base-url redirect is configured.
 func (a *App) handleBaseURL(w http.ResponseWriter, r *http.Request) error {
 	domain, err := a.ResolveRequestDomain(r.Context(), r.Host)
