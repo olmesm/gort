@@ -191,6 +191,11 @@ func (a *App) buildRouter() *http.ServeMux {
 	// Static assets served from the embedded filesystem.
 	serveAsset := func(name string) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
+			if name == "inter-var.woff2" {
+				// Reuse the font across full-page navigations. Its URL is not
+				// fingerprinted, so keep the cache lifetime bounded.
+				w.Header().Set("Cache-Control", "public, max-age=86400")
+			}
 			http.ServeFileFS(w, r, staticFiles, "static/"+name)
 		}
 	}

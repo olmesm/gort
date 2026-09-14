@@ -4,7 +4,8 @@
   font-family: "Inter Variable";
   font-style: normal;
   font-weight: 100 900;
-  font-display: swap;
+  /* Keep the fallback for this page if Inter misses the initial render. */
+  font-display: optional;
   src: url("/inter-var.woff2") format("woff2-variations");
 }
 
