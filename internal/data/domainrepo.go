@@ -108,3 +108,17 @@ func UpdateDomainRedirects(ctx context.Context, db *DB, id core.DomainID, baseUR
 func DeleteDomain(ctx context.Context, db *DB, id core.DomainID) (bool, error) {
 	return execAffected(ctx, db, "DELETE FROM domains WHERE id = ? AND is_default = ?", id.Value(), false)
 }
+
+func ListDomainsPage(ctx context.Context, db *DB, filters ListFilters, status string) (core.Page[DomainStatsRow], error) {
+	conditions, args := searchCondition(db, filters.Search, "d.authority")
+	if status == "default" || status == "additional" {
+		conditions = append(conditions, "d.is_default = ?")
+		args = append(args, status == "default")
+	}
+	return queryPage(ctx, db, scanDomainStatsRow,
+		`d.id, d.authority, d.base_url_redirect, d.regular_404_redirect,
+   d.invalid_short_url_redirect, d.is_default, d.created_at,
+   (SELECT COUNT(*) FROM short_urls su WHERE su.domain_id = d.id),
+   (SELECT COUNT(*) FROM visits v JOIN short_urls su ON su.id = v.short_url_id WHERE su.domain_id = d.id)`,
+		"domains d", "d.is_default DESC, d.authority, d.id", conditions, args, filters)
+}

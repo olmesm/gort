@@ -392,6 +392,7 @@ func ListShortURLs(ctx context.Context, db *DB, filters ShortURLFilters) (core.P
 		return empty, err
 	}
 
+	page = clampListPage(page, size, total)
 	listArgs := append(append([]any{}, args...), size, core.PageOffset(page, size))
 	items, err := queryAll(ctx, db, scanShortURLDetail,
 		fmt.Sprintf(`%s %s ORDER BY %s %s, su.id %s LIMIT ? OFFSET ?`,
@@ -432,23 +433,45 @@ func parseConditionRow(condType string, matchKey *string, matchValue string) (co
 	}
 }
 
-func RedirectRules(ctx context.Context, db *DB, shortURLID core.ShortURLID) ([]core.RedirectRule, error) {
-	type ruleRow struct {
-		id       int64
-		priority int
-		longURL  string
+type redirectRuleRow struct {
+	id       int64
+	priority int
+	longURL  string
+}
+
+func scanRedirectRuleRow(r rowScanner) (*redirectRuleRow, error) {
+	var row redirectRuleRow
+	if err := r.Scan(&row.id, &row.priority, &row.longURL); err != nil {
+		return nil, err
 	}
-	ruleRows, err := queryAll(ctx, db, func(r rowScanner) (*ruleRow, error) {
-		var row ruleRow
-		if err := r.Scan(&row.id, &row.priority, &row.longURL); err != nil {
-			return nil, err
-		}
-		return &row, nil
-	}, `SELECT id, priority, long_url FROM redirect_rules
-	    WHERE short_url_id = ? ORDER BY priority`, shortURLID.Value())
+	return &row, nil
+}
+
+func RedirectRules(ctx context.Context, db *DB, shortURLID core.ShortURLID) ([]core.RedirectRule, error) {
+	rows, err := queryAll(ctx, db, scanRedirectRuleRow,
+		"SELECT id, priority, long_url FROM redirect_rules WHERE short_url_id = ? ORDER BY priority, id", shortURLID.Value())
 	if err != nil {
 		return nil, err
 	}
+	return hydrateRedirectRules(ctx, db, rows)
+}
+
+func RedirectRulesPage(ctx context.Context, db *DB, shortURLID core.ShortURLID, filters ListFilters) (core.Page[core.RedirectRule], error) {
+	conditions, args := searchCondition(db, filters.Search, "rr.long_url")
+	conditions = append(conditions, "rr.short_url_id = ?")
+	args = append(args, shortURLID.Value())
+	page, err := queryPage(ctx, db, scanRedirectRuleRow, "rr.id, rr.priority, rr.long_url", "redirect_rules rr", "rr.priority, rr.id", conditions, args, filters)
+	if err != nil {
+		return core.Page[core.RedirectRule]{}, err
+	}
+	rules, err := hydrateRedirectRules(ctx, db, page.Items)
+	if err != nil {
+		return core.Page[core.RedirectRule]{}, err
+	}
+	return core.Page[core.RedirectRule]{Items: rules, CurrentPage: page.CurrentPage, ItemsPerPage: page.ItemsPerPage, TotalItems: page.TotalItems}, nil
+}
+
+func hydrateRedirectRules(ctx context.Context, db *DB, ruleRows []redirectRuleRow) ([]core.RedirectRule, error) {
 	if len(ruleRows) == 0 {
 		return []core.RedirectRule{}, nil
 	}

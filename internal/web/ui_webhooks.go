@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/olmesm/gort/internal/core"
@@ -16,6 +17,8 @@ func webhookEventFieldName(e core.WebhookEvent) string {
 }
 
 type webhooksView struct {
+	Filters     listControlsView
+	Pager       pagerView
 	Error       string
 	Secret      string
 	Webhooks    []data.WebhookRow
@@ -28,12 +31,19 @@ type eventCheckView struct {
 	Checked bool
 }
 
-func (a *App) webhooksViewModel(ctx context.Context, errorMessage, secret string) (webhooksView, error) {
-	hooks, err := data.ListWebhooks(ctx, a.DB)
+func (a *App) webhooksViewModel(ctx context.Context, q url.Values, errorMessage, secret string) (webhooksView, error) {
+	var event *core.WebhookEvent
+	if e, ok := core.WebhookEventOfSlug(q.Get("event")); ok {
+		event = &e
+	}
+	page, err := data.ListWebhooksPage(ctx, a.DB, listFilters(q), q.Get("status"), event)
 	if err != nil {
 		return webhooksView{}, err
 	}
-	model := webhooksView{Error: errorMessage, Secret: secret, Webhooks: hooks}
+	model := webhooksView{Error: errorMessage, Secret: secret, Webhooks: page.Items}
+	model.Pager = newPager(page, func(p int) string { return listPageURL("/admin/webhooks", q, p) })
+	model.Filters = listControls("/admin/webhooks", q, "Search name or URL…",
+		listSelect(q, "status", "Status", "enabled", "disabled"), listSelect(q, "event", "Event", strings.Split(allEventSlugs(), ", ")...))
 	for _, e := range core.AllWebhookEvents {
 		model.EventChecks = append(model.EventChecks, eventCheckView{
 			Field:   webhookEventFieldName(e),
@@ -44,8 +54,8 @@ func (a *App) webhooksViewModel(ctx context.Context, errorMessage, secret string
 	return model, nil
 }
 
-func (a *App) renderWebhooksPage(ctx context.Context, w http.ResponseWriter, user *CurrentUser, errorMessage, secret string) error {
-	model, err := a.webhooksViewModel(ctx, errorMessage, secret)
+func (a *App) renderWebhooksPage(r *http.Request, w http.ResponseWriter, user *CurrentUser, errorMessage, secret string) error {
+	model, err := a.webhooksViewModel(r.Context(), r.URL.Query(), errorMessage, secret)
 	if err != nil {
 		return err
 	}
@@ -54,7 +64,7 @@ func (a *App) renderWebhooksPage(ctx context.Context, w http.ResponseWriter, use
 
 // GET /admin/webhooks (admin)
 func (a *App) uiListWebhooks(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	return a.renderWebhooksPage(r.Context(), w, user, "", "")
+	return a.renderWebhooksPage(r, w, user, "", "")
 }
 
 // POST /admin/webhooks (admin) — shows the signing secret once.
@@ -68,13 +78,13 @@ func (a *App) uiCreateWebhook(user *CurrentUser, w http.ResponseWriter, r *http.
 		}
 	}
 	if name == "" || !isHTTPURL(hookURL) || len(events) == 0 {
-		return a.renderWebhooksPage(r.Context(), w, user, "Name, a valid http(s) URL and at least one event are required.", "")
+		return a.renderWebhooksPage(r, w, user, "Name, a valid http(s) URL and at least one event are required.", "")
 	}
 	secret := generateWebhookSecret()
 	if _, err := data.InsertWebhook(r.Context(), a.DB, name, hookURL, secret, events); err != nil {
 		return err
 	}
-	return a.renderWebhooksPage(r.Context(), w, user, "", secret)
+	return a.renderWebhooksPage(r, w, user, "", secret)
 }
 
 // POST /admin/webhooks/{id}/toggle (admin)

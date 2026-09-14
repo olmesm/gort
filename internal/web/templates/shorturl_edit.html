@@ -58,6 +58,7 @@
 <h2>Conditional redirect rules</h2>
 <div class="card">
   <p class="muted">Rules are evaluated top-down; the first rule whose conditions all match overrides the long URL.</p>
+  {{template "list-filters" .RuleFilters}}
   {{- if .Rules}}
   <div class="table-wrap">
     <table>
@@ -82,8 +83,9 @@
     </table>
   </div>
   {{- else}}
-  <p class="muted">No rules configured.</p>
+  <p class="muted">No rules match these filters.</p>
   {{- end}}
+  {{template "pager" .RulePager}}
   <h2>Add rule</h2>
   <form class="stack" method="post" action="{{.RuleAddAction}}">
     <div>

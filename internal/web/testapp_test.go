@@ -15,6 +15,11 @@ import (
 // newTestApp boots the full application with a throw-away SQLite database.
 func newTestApp(t *testing.T) *App {
 	t.Helper()
+	return newTestAppWithConfig(t, nil)
+}
+
+func newTestAppWithConfig(t *testing.T, overrides map[string]string) *App {
+	t.Helper()
 	dataDir := t.TempDir()
 
 	vars := map[string]string{
@@ -25,6 +30,9 @@ func newTestApp(t *testing.T) *App {
 		"INITIAL_ADMIN_USERNAME": "admin",
 		"INITIAL_ADMIN_PASSWORD": "test-password-123",
 		"RATE_LIMIT_PER_MINUTE":  "10000",
+	}
+	for key, value := range overrides {
+		vars[key] = value
 	}
 	cfg, err := ConfigFromLookup(func(name string) (string, bool) {
 		v, ok := vars[name]

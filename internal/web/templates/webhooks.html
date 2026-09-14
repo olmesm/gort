@@ -7,6 +7,7 @@
 {{- if .Secret}}
 <div class="alert success">Webhook created — its signing secret (copy it now, it will not be shown again): <br><strong class="mono">{{.Secret}}</strong></div>
 {{- end}}
+{{template "list-filters" .Filters}}
 <div class="table-wrap">
   <table>
     <thead>
@@ -28,10 +29,13 @@
           </form>
         </td>
       </tr>
+      {{- else}}
+      <tr><td colspan="5" class="muted">No webhooks match these filters.</td></tr>
       {{- end}}
     </tbody>
   </table>
 </div>
+{{template "pager" .Pager}}
 <h2>Create webhook</h2>
 <div class="card">
   <form class="stack" method="post" action="/admin/webhooks">

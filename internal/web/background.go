@@ -118,13 +118,16 @@ type titleJob struct {
 	LongURL    core.LongURL
 }
 
-func NewWorkQueues() *WorkQueues {
-	return &WorkQueues{
+func NewWorkQueues(webhooksEnabled bool) *WorkQueues {
+	queues := &WorkQueues{
 		Geo:           make(chan geoJob, 4096),
 		Title:         make(chan titleJob, 4096),
-		Events:        make(chan DomainEvent, 4096),
 		WebhookSignal: make(chan struct{}, 1),
 	}
+	if webhooksEnabled {
+		queues.Events = make(chan DomainEvent, 4096)
+	}
+	return queues
 }
 
 // PublishEvent publishes an integration event. Never blocks: fan-out to
@@ -169,6 +172,9 @@ func (a *App) StartWorkers(ctx context.Context) {
 
 // eventWorker turns published events into queued webhook deliveries.
 func (a *App) eventWorker(ctx context.Context) {
+	if !a.Cfg.WebhooksEnabled {
+		return
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -296,6 +302,9 @@ func signWebhookPayload(secret, payload string) string {
 // webhookWorker delivers queued webhook payloads with retries and HMAC
 // signatures.
 func (a *App) webhookWorker(ctx context.Context) {
+	if !a.Cfg.WebhooksEnabled {
+		return
+	}
 	deliver := func(due data.DueDelivery) {
 		delivery, hook := due.Delivery, due.Webhook
 		reqCtx, cancel := context.WithTimeout(ctx, 15*time.Second)

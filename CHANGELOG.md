@@ -7,6 +7,30 @@ uses [Semantic Versioning](https://semver.org/).
 The release workflow publishes the section matching the tag as the GitHub
 release notes, so every release needs an entry below.
 
+## [0.1.2] - 2026-09-14
+
+### Changed
+
+- Webhooks are now disabled by default. Set `GORT_WEBHOOKS_ENABLED=true`
+  and restart to enable webhook navigation, REST endpoints and delivery
+  workers. Existing webhook configurations and pending deliveries are
+  retained; pending deliveries resume when enabled. Events occurring while
+  disabled are not queued or replayed.
+- Dashboard lists consistently show 25 items per page. Domains, API keys,
+  users, webhooks and conditional redirect rules now have database-backed
+  pagination and relevant search or filter controls.
+
+### Fixed
+
+- Pagination preserves active filters, including tag searches and visit
+  filters. Invalid and out-of-range pages resolve to valid page boundaries.
+- Lists provide clear-filter links and explicit empty-result messages.
+- Domain names, counts, inputs and action buttons align vertically within
+  table rows. Narrow layouts scroll table contents without wrapping row
+  actions onto inconsistent lines.
+- Wrapped mobile navigation reserves space above page headings and filters.
+- Dashboard font loading no longer shifts navigation text between pages.
+
 ## [0.1.1] - 2026-09-09
 
 ### Fixed
@@ -50,5 +74,6 @@ release notes, so every release needs an entry below.
   link visibility and a configurable admin group.
 - Single static binary releases for Linux and macOS (amd64, arm64).
 
+[0.1.2]: https://github.com/olmesm/gort/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/olmesm/gort/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/olmesm/gort/releases/tag/v0.1.0

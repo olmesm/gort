@@ -4,9 +4,10 @@
 <div class="alert error">{{.Error}}</div>
 {{- else}}
 <div class="toolbar">
-  <form hx-get="/admin/tags" hx-target="#tag-table" hx-swap="outerHTML" hx-trigger="submit, input delay:400ms from:input[name='search']" method="get" action="/admin/tags">
-    <input type="search" name="search" value="{{.Search}}" placeholder="Search tags…">
+  <form hx-get="/admin/tags" hx-push-url="true" hx-target="#tag-table" hx-swap="outerHTML" hx-trigger="submit, input delay:400ms from:input[name='search']" method="get" action="/admin/tags">
+    <input type="search" name="search" value="{{.Search}}" aria-label="Search tags" placeholder="Search tags…">
     <button class="secondary">Search</button>
+    <a href="/admin/tags">Clear filters</a>
   </form>
 </div>
 {{- end}}

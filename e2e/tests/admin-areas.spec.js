@@ -7,7 +7,7 @@ test.describe('admin-only areas', () => {
   test('create an API key and see the plaintext exactly once', async ({ page }) => {
     await page.goto('/admin/api-keys');
     await page.fill('input[name="name"]', 'e2e-key');
-    await page.selectOption('select[name="role"]', 'author');
+    await page.locator('form[action="/admin/api-keys"][method="post"] select[name="role"]').selectOption('author');
     await page.click('button:has-text("Create")');
 
     const banner = page.locator('.alert.success');

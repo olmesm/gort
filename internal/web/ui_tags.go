@@ -2,8 +2,8 @@ package web
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
+	"net/url"
 
 	"github.com/olmesm/gort/internal/core"
 	"github.com/olmesm/gort/internal/data"
@@ -14,14 +14,11 @@ type tagTableView struct {
 	Pager pagerView
 }
 
-func tagTable(page core.Page[data.TagStatsRow]) tagTableView {
+func tagTable(page core.Page[data.TagStatsRow], search string) tagTableView {
 	return tagTableView{
 		Tags: page.Items,
 		Pager: newPager(page, func(p int) string {
-			if p == 1 {
-				return "/admin/tags"
-			}
-			return fmt.Sprintf("/admin/tags?page=%d", p)
+			return listPageURL("/admin/tags", url.Values{"search": {search}}, p)
 		}),
 	}
 }
@@ -36,11 +33,11 @@ type tagsView struct {
 func (a *App) uiListTags(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
 	q := r.URL.Query()
 	search := q.Get("search")
-	result, err := data.ListTags(r.Context(), a.DB, search, queryIntDefault(q, "page", 1), 25)
+	result, err := data.ListTags(r.Context(), a.DB, search, queryIntDefault(q, "page", 1), listPageSize)
 	if err != nil {
 		return err
 	}
-	table := tagTable(result)
+	table := tagTable(result, search)
 
 	if isHtmx(r) {
 		return a.renderShared(w, http.StatusOK, "tag-table", table)
@@ -73,13 +70,13 @@ func (a *App) uiRenameTag(user *CurrentUser, w http.ResponseWriter, r *http.Requ
 		return redirect(w, r, "/admin/tags")
 	}
 
-	result, err := data.ListTags(r.Context(), a.DB, "", 1, 25)
+	result, err := data.ListTags(r.Context(), a.DB, "", 1, listPageSize)
 	if err != nil {
 		return err
 	}
 	a.renderPage(w, http.StatusBadRequest, "tags", user, "/admin/tags", "Tags", tagsView{
 		Error: message,
-		Table: tagTable(result),
+		Table: tagTable(result, ""),
 	})
 	return nil
 }

@@ -132,3 +132,17 @@ func MarkFailedAttempt(ctx context.Context, db *DB, deliveryID int64, attempts, 
 		newAttempts, errorMessage, db.BindTime(time.Now().Add(delay)), deliveryID)
 	return err
 }
+
+// ListWebhooksPage lists webhook configurations, not individual deliveries.
+func ListWebhooksPage(ctx context.Context, db *DB, filters ListFilters, status string, event *core.WebhookEvent) (core.Page[WebhookRow], error) {
+	conditions, args := searchCondition(db, filters.Search, "name", "url")
+	if status == "enabled" || status == "disabled" {
+		conditions = append(conditions, "enabled = ?")
+		args = append(args, status == "enabled")
+	}
+	if event != nil {
+		conditions = append(conditions, "(',' || events || ',') LIKE ?")
+		args = append(args, "%,"+event.Slug()+",%")
+	}
+	return queryPage(ctx, db, scanWebhookRow, webhookSelectCols, "webhooks", "name, id", conditions, args, filters)
+}

@@ -59,7 +59,7 @@ install. Download the archive for your platform from the
 
 ```sh
 # pick one: linux_amd64, linux_arm64, darwin_amd64, darwin_arm64
-VERSION=0.1.0
+VERSION=0.1.2
 curl -sSL "https://github.com/olmesm/gort/releases/download/v${VERSION}/gort_${VERSION}_linux_amd64.tar.gz" | tar xz
 ./gort
 ```
@@ -176,6 +176,7 @@ Everything is configured through environment variables.
 | `GORT_DB_CONNECTION` | SQLite in data dir | SQLite file path or PostgreSQL connection string |
 | `GORT_SHORT_CODE_LENGTH` | `5` | Length of generated codes (min 4) |
 | `GORT_REDIRECT_STATUS` | `302` | Default redirect status (301/302/307/308) |
+| `GORT_WEBHOOKS_ENABLED` | `false` | Enable webhook management, event fan-out and delivery workers |
 | `GORT_AUTO_RESOLVE_TITLES` | `true` | Fetch page `<title>` in the background |
 | `GORT_DISABLE_TRACKING` | `false` | Record no visits at all |
 | `GORT_DISABLE_IP_TRACKING` | `false` | Track visits but never record IPs |
@@ -265,6 +266,12 @@ curl -H "X-Api-Key: $KEY" -H "Content-Type: application/json" \
 | `DELETE /rest/v1/api-keys/{id}` | |
 | `GET/POST /rest/v1/webhooks` | create returns the signing `secret` once |
 | `PATCH /rest/v1/webhooks/{id}` · `DELETE /rest/v1/webhooks/{id}` | |
+
+Webhooks are disabled by default. Set `GORT_WEBHOOKS_ENABLED=true` and restart
+to enable the dashboard page, REST endpoints and delivery workers. While disabled,
+no new events are queued or delivered; stored webhook configurations and pending
+deliveries are retained. Pending deliveries resume when webhooks are enabled again.
+Events that occur while disabled are not replayed.
 
 Webhook deliveries are JSON:
 `{"event":"visit.recorded","occurredAt":"…","data":{…}}` with an

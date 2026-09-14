@@ -36,6 +36,8 @@
           <td class="muted">{{.Created}}</td>
           <td class="actions"><a class="btn secondary small" href="{{.EditURL}}">Edit</a></td>
         </tr>
+        {{- else}}
+        <tr><td colspan="8" class="muted">No short URLs match these filters.</td></tr>
         {{- end}}
       </tbody>
     </table>
@@ -71,6 +73,8 @@
             </form>
           </td>
         </tr>
+        {{- else}}
+        <tr><td colspan="5" class="muted">No tags match this search.</td></tr>
         {{- end}}
       </tbody>
     </table>
@@ -129,6 +133,7 @@
     <input type="datetime-local" name="endDate" value="{{.EndVal}}">
   </div>
   <button class="secondary">Apply</button>
+  <a href="{{.BasePath}}">Clear filters</a>
 </form>
 <div class="card chart-card">
   <h2 style="margin-top:0">Visits per day</h2>
@@ -168,10 +173,34 @@
           <td>{{if .Referer}}<span class="truncate" style="max-width:220px">{{.Referer}}</span>{{else}}—{{end}}</td>
           <td>{{if .IsBot}}<span class="badge red">bot</span>{{end}}</td>
         </tr>
+        {{- else}}
+        <tr><td colspan="{{if $.ShowVisitedURL}}7{{else}}6{{end}}" class="muted">No visits match these filters.</td></tr>
         {{- end}}
       </tbody>
     </table>
   </div>
   {{template "pager" .Pager}}
 </div>
+{{end}}
+
+{{define "list-filters"}}
+<form class="toolbar" method="get" action="{{.BasePath}}" aria-label="List filters">
+  <div>
+    <label for="list-search">Search</label>
+    <input id="list-search" type="search" name="search" value="{{.Search}}" placeholder="{{.Placeholder}}">
+  </div>
+  {{- range .Selects}}
+  <div>
+    <label for="filter-{{.Name}}">{{.Label}}</label>
+    <select id="filter-{{.Name}}" name="{{.Name}}">
+      <option value="">All</option>
+      {{- range .Options}}
+      <option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Value}}</option>
+      {{- end}}
+    </select>
+  </div>
+  {{- end}}
+  <button class="secondary">Filter</button>
+  <a href="{{.BasePath}}">Clear filters</a>
+</form>
 {{end}}

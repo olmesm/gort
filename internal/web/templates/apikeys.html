@@ -7,6 +7,7 @@
 {{- if .PlainKey}}
 <div class="alert success">API key created — copy it now, it will not be shown again: <br><strong class="mono">{{.PlainKey}}</strong></div>
 {{- end}}
+{{template "list-filters" .Filters}}
 <div class="table-wrap">
   <table>
     <thead>
@@ -30,10 +31,13 @@
           </form>
         </td>
       </tr>
+      {{- else}}
+      <tr><td colspan="7" class="muted">No API keys match these filters.</td></tr>
       {{- end}}
     </tbody>
   </table>
 </div>
+{{template "pager" .Pager}}
 <h2>Create API key</h2>
 <div class="card">
   <form class="row" method="post" action="/admin/api-keys">

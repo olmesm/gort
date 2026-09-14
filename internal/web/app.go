@@ -65,7 +65,7 @@ func NewApp(cfg *AppConfig, logger *slog.Logger) (*App, error) {
 	a := &App{
 		Cfg:           cfg,
 		DB:            db,
-		Queues:        NewWorkQueues(),
+		Queues:        NewWorkQueues(cfg.WebhooksEnabled),
 		Logger:        logger,
 		sessionKey:    sessionKey,
 		titleClient:   &http.Client{Timeout: 10 * time.Second},
@@ -239,10 +239,20 @@ func (a *App) buildRouter() *http.ServeMux {
 	mux.Handle("PATCH /rest/v1/api-keys/{id}", a.requireAdminKey(a.apiPatchAPIKey))
 	mux.Handle("DELETE /rest/v1/api-keys/{id}", a.requireAdminKey(a.apiDeleteAPIKey))
 
-	mux.Handle("GET /rest/v1/webhooks", a.requireAdminKey(a.apiListWebhooks))
-	mux.Handle("POST /rest/v1/webhooks", a.requireAdminKey(a.apiCreateWebhook))
-	mux.Handle("PATCH /rest/v1/webhooks/{id}", a.requireAdminKey(a.apiPatchWebhook))
-	mux.Handle("DELETE /rest/v1/webhooks/{id}", a.requireAdminKey(a.apiDeleteWebhook))
+	if a.Cfg.WebhooksEnabled {
+		mux.Handle("GET /rest/v1/webhooks", a.requireAdminKey(a.apiListWebhooks))
+		mux.Handle("POST /rest/v1/webhooks", a.requireAdminKey(a.apiCreateWebhook))
+		mux.Handle("PATCH /rest/v1/webhooks/{id}", a.requireAdminKey(a.apiPatchWebhook))
+		mux.Handle("DELETE /rest/v1/webhooks/{id}", a.requireAdminKey(a.apiDeleteWebhook))
+	}
+
+	if !a.Cfg.WebhooksEnabled {
+		for _, path := range []string{"/rest/v1/webhooks", "/rest/v1/webhooks/", "/admin/webhooks", "/admin/webhooks/"} {
+			for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodDelete} {
+				mux.Handle(method+" "+path, http.NotFoundHandler())
+			}
+		}
+	}
 
 	// Dashboard
 	mux.Handle("GET /admin", a.requireUser(a.uiOverview))
@@ -286,10 +296,12 @@ func (a *App) buildRouter() *http.ServeMux {
 	mux.Handle("POST /admin/users/{id}/password", a.requireAdmin(a.uiSetUserPassword))
 	mux.Handle("POST /admin/users/{id}/delete", a.requireAdmin(a.uiDeleteUser))
 
-	mux.Handle("GET /admin/webhooks", a.requireAdmin(a.uiListWebhooks))
-	mux.Handle("POST /admin/webhooks", a.requireAdmin(a.uiCreateWebhook))
-	mux.Handle("POST /admin/webhooks/{id}/toggle", a.requireAdmin(a.uiToggleWebhook))
-	mux.Handle("POST /admin/webhooks/{id}/delete", a.requireAdmin(a.uiDeleteWebhook))
+	if a.Cfg.WebhooksEnabled {
+		mux.Handle("GET /admin/webhooks", a.requireAdmin(a.uiListWebhooks))
+		mux.Handle("POST /admin/webhooks", a.requireAdmin(a.uiCreateWebhook))
+		mux.Handle("POST /admin/webhooks/{id}/toggle", a.requireAdmin(a.uiToggleWebhook))
+		mux.Handle("POST /admin/webhooks/{id}/delete", a.requireAdmin(a.uiDeleteWebhook))
+	}
 
 	// Public
 	mux.Handle("GET /robots.txt", a.handle(a.handleRobots))

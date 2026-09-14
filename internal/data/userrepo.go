@@ -122,3 +122,12 @@ func UpsertOIDCUser(ctx context.Context, db *DB, subject, username string, role 
 func CountAdmins(ctx context.Context, db *DB) (int64, error) {
 	return queryScalar[int64](ctx, db, "SELECT COUNT(*) FROM users WHERE role = ?", core.UserAdmin.Slug())
 }
+
+func ListUsersPage(ctx context.Context, db *DB, filters ListFilters, role string) (core.Page[UserRow], error) {
+	conditions, args := searchCondition(db, filters.Search, "username")
+	if role == "admin" || role == "user" {
+		conditions = append(conditions, "role = ?")
+		args = append(args, role)
+	}
+	return queryPage(ctx, db, scanUserRow, userSelectCols, "users", "username, id", conditions, args, filters)
+}

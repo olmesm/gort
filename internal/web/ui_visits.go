@@ -6,7 +6,6 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/olmesm/gort/internal/core"
@@ -83,7 +82,7 @@ func (a *App) analyticsContent(
 		StartDate:    startDate,
 		EndDate:      endDate,
 		Page:         queryIntDefault(q, "page", 1),
-		ItemsPerPage: 25,
+		ItemsPerPage: listPageSize,
 	}
 
 	defaultedStart := startDate
@@ -125,20 +124,7 @@ func (a *App) analyticsContent(
 		model.Visits = append(model.Visits, newVisitRow(v))
 	}
 	model.Pager = newPager(page, func(p int) string {
-		var parts []string
-		if s := q.Get("startDate"); s != "" {
-			parts = append(parts, "startDate="+url.QueryEscape(s))
-		}
-		if s := q.Get("endDate"); s != "" {
-			parts = append(parts, "endDate="+url.QueryEscape(s))
-		}
-		if p > 1 {
-			parts = append(parts, fmt.Sprintf("page=%d", p))
-		}
-		if len(parts) == 0 {
-			return basePath
-		}
-		return basePath + "?" + strings.Join(parts, "&")
+		return listPageURL(basePath, q, p)
 	})
 	return model, nil
 }

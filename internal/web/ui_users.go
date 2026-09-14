@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/olmesm/gort/internal/core"
@@ -11,15 +12,17 @@ import (
 )
 
 type usersView struct {
-	Error string
-	Users []data.UserRow
+	Filters listControlsView
+	Pager   pagerView
+	Error   string
+	Users   []data.UserRow
 	// LastAdminId is the sole admin's id when only one is left (0 otherwise);
 	// that account can be neither demoted nor deleted.
 	LastAdminID core.UserID
 }
 
-func (a *App) usersViewModel(ctx context.Context, errorMessage string) (usersView, error) {
-	users, err := data.ListUsers(ctx, a.DB)
+func (a *App) usersViewModel(ctx context.Context, q url.Values, errorMessage string) (usersView, error) {
+	page, err := data.ListUsersPage(ctx, a.DB, listFilters(q), q.Get("role"))
 	if err != nil {
 		return usersView{}, err
 	}
@@ -28,9 +31,11 @@ func (a *App) usersViewModel(ctx context.Context, errorMessage string) (usersVie
 		return usersView{}, err
 	}
 
-	model := usersView{Error: errorMessage, Users: users}
+	model := usersView{Error: errorMessage, Users: page.Items}
+	model.Pager = newPager(page, func(p int) string { return listPageURL("/admin/users", q, p) })
+	model.Filters = listControls("/admin/users", q, "Search username…", listSelect(q, "role", "Role", "admin", "user"))
 	if adminCount <= 1 {
-		for _, u := range users {
+		for _, u := range page.Items {
 			if u.Role == core.UserAdmin.Slug() {
 				model.LastAdminID = u.ID
 			}
@@ -39,8 +44,8 @@ func (a *App) usersViewModel(ctx context.Context, errorMessage string) (usersVie
 	return model, nil
 }
 
-func (a *App) renderUsersPage(ctx context.Context, w http.ResponseWriter, user *CurrentUser, errorMessage string) error {
-	model, err := a.usersViewModel(ctx, errorMessage)
+func (a *App) renderUsersPage(r *http.Request, w http.ResponseWriter, user *CurrentUser, errorMessage string) error {
+	model, err := a.usersViewModel(r.Context(), r.URL.Query(), errorMessage)
 	if err != nil {
 		return err
 	}
@@ -49,7 +54,7 @@ func (a *App) renderUsersPage(ctx context.Context, w http.ResponseWriter, user *
 
 // GET /admin/users (admin)
 func (a *App) uiListUsers(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	return a.renderUsersPage(r.Context(), w, user, "")
+	return a.renderUsersPage(r, w, user, "")
 }
 
 // POST /admin/users (admin)
@@ -61,14 +66,14 @@ func (a *App) uiCreateUser(user *CurrentUser, w http.ResponseWriter, r *http.Req
 		role = core.UserAdmin
 	}
 	if username == "" || len(password) < 8 {
-		return a.renderUsersPage(r.Context(), w, user, "Username is required and the password needs at least 8 characters.")
+		return a.renderUsersPage(r, w, user, "Username is required and the password needs at least 8 characters.")
 	}
 	created, err := data.InsertUser(r.Context(), a.DB, username, HashPassword(password), role)
 	if err != nil {
 		return err
 	}
 	if created == nil {
-		return a.renderUsersPage(r.Context(), w, user, fmt.Sprintf("Username '%s' is already taken.", username))
+		return a.renderUsersPage(r, w, user, fmt.Sprintf("Username '%s' is already taken.", username))
 	}
 	return redirect(w, r, "/admin/users")
 }
@@ -109,7 +114,7 @@ func (a *App) uiSetUserPassword(user *CurrentUser, w http.ResponseWriter, r *htt
 	}
 	password := r.PostFormValue("password")
 	if len(password) < 8 {
-		return a.renderUsersPage(r.Context(), w, user, "Passwords need at least 8 characters.")
+		return a.renderUsersPage(r, w, user, "Passwords need at least 8 characters.")
 	}
 	if _, err := data.UpdateUserPassword(r.Context(), a.DB, id, HashPassword(password)); err != nil {
 		return err

@@ -10,6 +10,8 @@ import (
 )
 
 type domainsView struct {
+	Filters listControlsView
+	Pager   pagerView
 	Domains []data.DomainStatsRow
 }
 
@@ -21,11 +23,16 @@ type messageView struct {
 
 // GET /admin/domains (admin)
 func (a *App) uiListDomains(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	domains, err := data.ListDomainsWithStats(r.Context(), a.DB)
+	q := r.URL.Query()
+	page, err := data.ListDomainsPage(r.Context(), a.DB, listFilters(q), q.Get("status"))
 	if err != nil {
 		return err
 	}
-	return a.renderPage(w, http.StatusOK, "domains", user, "/admin/domains", "Domains", domainsView{Domains: domains})
+	return a.renderPage(w, http.StatusOK, "domains", user, "/admin/domains", "Domains", domainsView{
+		Domains: page.Items,
+		Pager:   newPager(page, func(p int) string { return listPageURL("/admin/domains", q, p) }),
+		Filters: listControls("/admin/domains", q, "Search domain…", listSelect(q, "status", "Type", "default", "additional")),
+	})
 }
 
 func (a *App) renderDomainsMessage(w http.ResponseWriter, status int, user *CurrentUser, message string) error {

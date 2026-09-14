@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -12,6 +13,8 @@ import (
 )
 
 type apiKeysView struct {
+	Filters  listControlsView
+	Pager    pagerView
 	Error    string
 	PlainKey string
 	Rows     []apiKeyRowView
@@ -30,8 +33,8 @@ type apiKeyRowView struct {
 	DeleteAction string
 }
 
-func (a *App) apiKeysViewModel(ctx context.Context, errorMessage, plainKey string) (apiKeysView, error) {
-	keys, err := data.ListAPIKeys(ctx, a.DB)
+func (a *App) apiKeysViewModel(ctx context.Context, q url.Values, errorMessage, plainKey string) (apiKeysView, error) {
+	page, err := data.ListAPIKeysPage(ctx, a.DB, listFilters(q), q.Get("status"), q.Get("role"))
 	if err != nil {
 		return apiKeysView{}, err
 	}
@@ -55,7 +58,10 @@ func (a *App) apiKeysViewModel(ctx context.Context, errorMessage, plainKey strin
 	for _, d := range domains {
 		model.Domains = append(model.Domains, d.Authority)
 	}
-	for _, k := range keys {
+	model.Pager = newPager(page, func(p int) string { return listPageURL("/admin/api-keys", q, p) })
+	model.Filters = listControls("/admin/api-keys", q, "Search key name…",
+		listSelect(q, "status", "Status", "enabled", "disabled", "expired"), listSelect(q, "role", "Role", "admin", "author", "domain"))
+	for _, k := range page.Items {
 		expires := "never"
 		if k.ExpiresAt != nil {
 			expires = formatDateTime(*k.ExpiresAt)
@@ -75,8 +81,8 @@ func (a *App) apiKeysViewModel(ctx context.Context, errorMessage, plainKey strin
 	return model, nil
 }
 
-func (a *App) renderAPIKeysPage(ctx context.Context, w http.ResponseWriter, user *CurrentUser, errorMessage, plainKey string) error {
-	model, err := a.apiKeysViewModel(ctx, errorMessage, plainKey)
+func (a *App) renderAPIKeysPage(r *http.Request, w http.ResponseWriter, user *CurrentUser, errorMessage, plainKey string) error {
+	model, err := a.apiKeysViewModel(r.Context(), r.URL.Query(), errorMessage, plainKey)
 	if err != nil {
 		return err
 	}
@@ -85,7 +91,7 @@ func (a *App) renderAPIKeysPage(ctx context.Context, w http.ResponseWriter, user
 
 // GET /admin/api-keys (admin)
 func (a *App) uiListAPIKeys(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	return a.renderAPIKeysPage(r.Context(), w, user, "", "")
+	return a.renderAPIKeysPage(r, w, user, "", "")
 }
 
 // POST /admin/api-keys (admin) — shows the plaintext key once.
@@ -109,7 +115,7 @@ func (a *App) uiCreateAPIKey(user *CurrentUser, w http.ResponseWriter, r *http.R
 		role = core.AuthorRole()
 	case "domain":
 		if domain == nil {
-			return a.renderAPIKeysPage(r.Context(), w, user, "Domain-role keys need a domain.", "")
+			return a.renderAPIKeysPage(r, w, user, "Domain-role keys need a domain.", "")
 		}
 		role = core.DomainRole(domain.ID)
 	default:
@@ -125,7 +131,7 @@ func (a *App) uiCreateAPIKey(user *CurrentUser, w http.ResponseWriter, r *http.R
 	if _, err := data.InsertAPIKey(r.Context(), a.DB, HashAPIKey(plainKey), name, role, expiresAt); err != nil {
 		return err
 	}
-	return a.renderAPIKeysPage(r.Context(), w, user, "", plainKey)
+	return a.renderAPIKeysPage(r, w, user, "", plainKey)
 }
 
 // POST /admin/api-keys/{id}/toggle (admin)

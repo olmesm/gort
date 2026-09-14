@@ -65,6 +65,7 @@ func TagsForShortURLs(ctx context.Context, db *DB, shortURLIDs []core.ShortURLID
 
 func ListTags(ctx context.Context, db *DB, searchTerm string, page, itemsPerPage int) (core.Page[TagStatsRow], error) {
 	empty := core.Page[TagStatsRow]{}
+	page, itemsPerPage = core.NormalizePaging(page, itemsPerPage)
 	whereClause := ""
 	var whereArgs []any
 	if searchTerm != "" {
@@ -78,6 +79,7 @@ func ListTags(ctx context.Context, db *DB, searchTerm string, page, itemsPerPage
 		return empty, err
 	}
 
+	page = clampListPage(page, itemsPerPage, total)
 	listArgs := append(append([]any{}, whereArgs...), itemsPerPage, core.PageOffset(page, itemsPerPage))
 	items, err := queryAll(ctx, db, func(r rowScanner) (*TagStatsRow, error) {
 		var t TagStatsRow

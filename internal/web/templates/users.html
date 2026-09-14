@@ -4,6 +4,7 @@
 {{- if .Error}}
 <div class="alert error">{{.Error}}</div>
 {{- end}}
+{{template "list-filters" .Filters}}
 <div class="table-wrap">
   <table>
     <thead>
@@ -37,10 +38,13 @@
           {{- end}}
         </td>
       </tr>
+      {{- else}}
+      <tr><td colspan="5" class="muted">No users match these filters.</td></tr>
       {{- end}}
     </tbody>
   </table>
 </div>
+{{template "pager" .Pager}}
 <h2>Create user</h2>
 <div class="card">
   <form class="row" method="post" action="/admin/users">

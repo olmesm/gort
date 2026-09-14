@@ -58,10 +58,11 @@ func parseTemplates() (base *template.Template, pages map[string]*template.Templ
 
 // view is what the layout template receives; Data carries the page's model.
 type view struct {
-	Title string
-	Path  string
-	User  *CurrentUser
-	Data  any
+	WebhooksEnabled bool
+	Title           string
+	Path            string
+	User            *CurrentUser
+	Data            any
 }
 
 // render executes a template into a buffer first, so a failure part-way
@@ -78,7 +79,7 @@ func (a *App) render(w http.ResponseWriter, status int, t *template.Template, na
 
 // renderPage renders a dashboard page inside the layout.
 func (a *App) renderPage(w http.ResponseWriter, status int, page string, user *CurrentUser, path, title string, data any) error {
-	return a.render(w, status, a.pages[page], "layout", view{Title: title, Path: path, User: user, Data: data})
+	return a.render(w, status, a.pages[page], "layout", view{Title: title, Path: path, User: user, Data: data, WebhooksEnabled: a.Cfg.WebhooksEnabled})
 }
 
 // renderShared renders a template from the shared set: the standalone

@@ -1,6 +1,7 @@
 {{define "content"}}{{with .Data}}
 <h1>Domains</h1>
 <p class="muted">Short URLs are unique per domain. Point extra domains at this server and register them here (or let them auto-register on first use).</p>
+{{template "list-filters" .Filters}}
 <div class="table-wrap">
   <table>
     <thead>
@@ -30,10 +31,13 @@
           {{- end}}
         </td>
       </tr>
+      {{- else}}
+      <tr><td colspan="5" class="muted">No domains match these filters.</td></tr>
       {{- end}}
     </tbody>
   </table>
 </div>
+{{template "pager" .Pager}}
 <h2>Add domain</h2>
 <div class="card">
   <form class="row" method="post" action="/admin/domains">

@@ -34,7 +34,7 @@ test.describe('short URL lifecycle', () => {
     await expect(page.locator('#su-table tbody tr')).toHaveCount(1);
 
     await page.fill('input[name="search"]', 'no-such-thing-xyz');
-    await expect(page.locator('#su-table tbody tr')).toHaveCount(0);
+    await expect(page.getByText('No short URLs match these filters.')).toBeVisible();
 
     await page.fill('input[name="search"]', SLUG);
     await expect(page.locator('#su-table tbody tr')).toHaveCount(1);

@@ -27,6 +27,8 @@ type AppConfig struct {
 	ShortCodeLength       int
 	DefaultRedirectStatus core.RedirectStatus
 	AutoResolveTitles     bool
+	// WebhooksEnabled opts in to webhook management, event fan-out and delivery.
+	WebhooksEnabled bool
 	// DisableTracking is the master switch: when true no visits are recorded
 	// at all.
 	DisableTracking bool
@@ -173,6 +175,7 @@ func ConfigFromLookup(get ConfigLookup) (*AppConfig, error) {
 		ShortCodeLength:         intVar(get, "SHORT_CODE_LENGTH", core.DefaultCodeLength),
 		DefaultRedirectStatus:   status,
 		AutoResolveTitles:       boolVar(get, "AUTO_RESOLVE_TITLES", true),
+		WebhooksEnabled:         boolVar(get, "WEBHOOKS_ENABLED", false),
 		DisableTracking:         boolVar(get, "DISABLE_TRACKING", false),
 		DisableIPTracking:       boolVar(get, "DISABLE_IP_TRACKING", false),
 		AnonymizeIPs:            boolVar(get, "ANONYMIZE_IPS", true),

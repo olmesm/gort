@@ -35,7 +35,7 @@ module.exports = defineConfig({
       'rm -rf "$PWD/.run" && mkdir -p "$PWD/.run" && ' +
       '(cd .. && go build -o e2e/.run/gort ./cmd/gort) && ' +
       `GORT_DATA_DIR="$PWD/.run" GORT_PORT=${PORT} GORT_DEFAULT_DOMAIN=localhost:${PORT} ` +
-      'GORT_AUTO_RESOLVE_TITLES=false ' +
+      'GORT_AUTO_RESOLVE_TITLES=false GORT_RATE_LIMIT_PER_MINUTE=10000 GORT_WEBHOOKS_ENABLED=true ' +
       'GORT_INITIAL_ADMIN_USERNAME=admin GORT_INITIAL_ADMIN_PASSWORD=e2e-password-123 ' +
       '"$PWD/.run/gort"',
     url: `${BASE_URL}/rest/health`,

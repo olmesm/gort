@@ -109,7 +109,7 @@ func suFiltersOf(lq suListQuery, user *CurrentUser) data.ShortURLFilters {
 	}
 	filters.Descending = lq.Dir != "asc"
 	filters.Page = lq.Page
-	filters.ItemsPerPage = 20
+	filters.ItemsPerPage = listPageSize
 	return filters
 }
 
@@ -412,6 +412,8 @@ func conditionLabel(c core.RuleCondition) string {
 }
 
 type suEditView struct {
+	RuleFilters        listControlsView
+	RulePager          pagerView
 	Error              string
 	ShortURL           string
 	QRURL              string
@@ -459,12 +461,14 @@ func (a *App) loadDetailFromPath(user *CurrentUser, r *http.Request) (*data.Shor
 	return detail, nil
 }
 
-func (a *App) respondEditPage(ctx context.Context, w http.ResponseWriter, status int, user *CurrentUser, detail *data.ShortURLDetail, errorMessage string) error {
+func (a *App) respondEditPage(r *http.Request, w http.ResponseWriter, status int, user *CurrentUser, detail *data.ShortURLDetail, errorMessage string) error {
+	ctx := r.Context()
+	q := r.URL.Query()
 	tags, err := data.TagsForShortURL(ctx, a.DB, detail.ID)
 	if err != nil {
 		return err
 	}
-	rules, err := data.RedirectRules(ctx, a.DB, detail.ID)
+	rules, err := data.RedirectRulesPage(ctx, a.DB, detail.ID, listFilters(q))
 	if err != nil {
 		return err
 	}
@@ -495,7 +499,9 @@ func (a *App) respondEditPage(ctx context.Context, w http.ResponseWriter, status
 		DeleteAction:       fmt.Sprintf("/admin/short-urls/%d/delete", detail.ID),
 		VisitsDeleteAction: fmt.Sprintf("/admin/short-urls/%d/visits/delete", detail.ID),
 	}
-	for _, rule := range rules {
+	model.RuleFilters = listControls(model.EditAction, q, "Search target URL…")
+	model.RulePager = newPager(rules, func(p int) string { return listPageURL(model.EditAction, q, p) })
+	for _, rule := range rules.Items {
 		rv := suRuleView{Priority: rule.Priority, LongURL: rule.LongURL}
 		for _, c := range rule.Conditions {
 			rv.Conditions = append(rv.Conditions, conditionLabel(c))
@@ -511,7 +517,7 @@ func (a *App) uiEditShortURLForm(user *CurrentUser, w http.ResponseWriter, r *ht
 	if err != nil {
 		return err
 	}
-	return a.respondEditPage(r.Context(), w, http.StatusOK, user, detail, "")
+	return a.respondEditPage(r, w, http.StatusOK, user, detail, "")
 }
 
 // POST /admin/short-urls/{id}/edit
@@ -553,7 +559,7 @@ func (a *App) uiEditShortURL(user *CurrentUser, w http.ResponseWriter, r *http.R
 			"You can only assign groups you are a member of.")
 	}
 	if serr != nil {
-		return a.respondEditPage(r.Context(), w, http.StatusBadRequest, user, detail, serr.Error())
+		return a.respondEditPage(r, w, http.StatusBadRequest, user, detail, serr.Error())
 	}
 	if _, err := a.EditShortURL(r.Context(), detail.ID, detail, edit); err != nil {
 		return err
@@ -585,10 +591,10 @@ func (a *App) uiAddRule(user *CurrentUser, w http.ResponseWriter, r *http.Reques
 
 	target, err := core.NewLongURL(get("ruleLongUrl"))
 	if err != nil {
-		return a.respondEditPage(r.Context(), w, http.StatusBadRequest, user, detail, "Could not add rule: "+err.Error())
+		return a.respondEditPage(r, w, http.StatusBadRequest, user, detail, "Could not add rule: "+err.Error())
 	}
 	if len(conditions) == 0 {
-		return a.respondEditPage(r.Context(), w, http.StatusBadRequest, user, detail,
+		return a.respondEditPage(r, w, http.StatusBadRequest, user, detail,
 			"A rule needs at least one condition (device, language, query param or IP).")
 	}
 

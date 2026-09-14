@@ -142,6 +142,7 @@ func pageVisitQuery(ctx context.Context, db *DB, baseWhere string, baseArgs []an
 		return empty, err
 	}
 
+	page = clampListPage(page, size, total)
 	listArgs := append(append([]any{}, args...), size, core.PageOffset(page, size))
 	items, err := queryAll(ctx, db, scanVisitRow,
 		fmt.Sprintf(`SELECT %s FROM visits vi WHERE %s

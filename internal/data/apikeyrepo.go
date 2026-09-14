@@ -60,3 +60,20 @@ func SetAPIKeyEnabled(ctx context.Context, db *DB, id core.APIKeyID, enabled boo
 func DeleteAPIKey(ctx context.Context, db *DB, id core.APIKeyID) (bool, error) {
 	return execAffected(ctx, db, "DELETE FROM api_keys WHERE id = ?", id.Value())
 }
+
+func ListAPIKeysPage(ctx context.Context, db *DB, filters ListFilters, status, role string) (core.Page[APIKeyRow], error) {
+	conditions, args := searchCondition(db, filters.Search, "name")
+	if role == "admin" || role == "author" || role == "domain" {
+		conditions = append(conditions, "role = ?")
+		args = append(args, role)
+	}
+	switch status {
+	case "expired":
+		conditions = append(conditions, "expires_at <= ?")
+		args = append(args, db.BindTime(time.Now()))
+	case "enabled", "disabled":
+		conditions = append(conditions, "enabled = ?", "(expires_at IS NULL OR expires_at > ?)")
+		args = append(args, status == "enabled", db.BindTime(time.Now()))
+	}
+	return queryPage(ctx, db, scanAPIKeyRow, apiKeySelectCols, "api_keys", "created_at DESC, id DESC", conditions, args, filters)
+}
