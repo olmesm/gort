@@ -66,16 +66,7 @@ func scopeWhere(scope VisitScope) (string, []any) {
 }
 
 func rangeWhere(db *DB, startDate, endDate *time.Time) (string, []any) {
-	var parts []string
-	var args []any
-	if startDate != nil {
-		parts = append(parts, "vi.visited_at >= ?")
-		args = append(args, db.BindTime(*startDate))
-	}
-	if endDate != nil {
-		parts = append(parts, "vi.visited_at <= ?")
-		args = append(args, db.BindTime(*endDate))
-	}
+	parts, args := buildVisitFilterSQL(db, VisitFilters{StartDate: startDate, EndDate: endDate})
 	if len(parts) == 0 {
 		return "", nil
 	}

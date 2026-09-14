@@ -3,8 +3,6 @@ package web
 import (
 	"context"
 	"fmt"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/olmesm/gort/internal/core"
@@ -83,69 +81,19 @@ func (a *App) opCreateAPIKey(ctx context.Context, key *AuthenticatedKey, in *Bod
 	if key.Role.Kind != core.RoleAdmin {
 		return nil, Forbidden("This operation requires an admin API key.")
 	}
-	body := &in.Body
-
-	var domain *data.DomainRow
-	var err error
-	if body.Domain != nil {
-		domain, err = data.DomainByAuthority(ctx, a.DB, strings.ToLower(strings.TrimSpace(*body.Domain)))
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	var role core.APIKeyRole
-	roleSlug := "admin"
-	if body.Role != nil {
-		roleSlug = strings.ToLower(*body.Role)
-	}
-	switch roleSlug {
-	case "admin":
-		role = core.AdminRole()
-	case "author":
-		role = core.AuthorRole()
-	case "domain":
-		if domain == nil {
-			return nil, BadRequest("domain-role keys need an existing 'domain'.")
-		}
-		role = core.DomainRole(domain.ID)
-	default:
-		return nil, BadRequest(fmt.Sprintf("Unknown role '%s'. Use admin, author or domain.", roleSlug))
-	}
-
-	if body.ExpiresAt != nil && !body.ExpiresAt.After(time.Now().UTC()) {
-		return nil, BadRequest("expiresAt must be in the future.")
-	}
-
-	plainKey := GenerateAPIKey()
-	row, err := data.InsertAPIKey(ctx, a.DB, HashAPIKey(plainKey), body.Name, role, body.ExpiresAt)
-	if err != nil {
-		return nil, err
-	}
-	var domainAuthority *string
-	if domain != nil {
-		domainAuthority = &domain.Authority
-	}
-	dto := newAPIKeyDTO(row, domainAuthority)
-	dto.APIKey = plainKey
-	return result(dto)
-}
-
-func apiKeyIDFromPath(raw string) (core.APIKeyID, bool) {
-	id, err := strconv.ParseInt(raw, 10, 64)
-	return core.APIKeyID(id), err == nil
+	return a.issueAPIKey(ctx, &in.Body)
 }
 
 // PATCH /rest/v1/api-keys/{id} (admin)
-func (a *App) opPatchAPIKey(ctx context.Context, key *AuthenticatedKey, in *IDBodyInput[PatchAPIKeyBody]) (*IDEnabled, error) {
+func (a *App) opPatchAPIKey(ctx context.Context, key *AuthenticatedKey, in *idBodyOptions[PatchAPIKeyBody]) (*IDEnabled, error) {
 	if key.Role.Kind != core.RoleAdmin {
 		return nil, Forbidden("This operation requires an admin API key.")
 	}
 	body := &in.Body
-	id, ok := apiKeyIDFromPath(in.ID)
-	if !ok {
+	if in.ID == nil {
 		return nil, NotFound("API key was not found.")
 	}
+	id := core.APIKeyID(*in.ID)
 	updated, err := data.SetAPIKeyEnabled(ctx, a.DB, id, body.Enabled)
 	if err != nil {
 		return nil, err
@@ -157,14 +105,14 @@ func (a *App) opPatchAPIKey(ctx context.Context, key *AuthenticatedKey, in *IDBo
 }
 
 // DELETE /rest/v1/api-keys/{id} (admin)
-func (a *App) opDeleteAPIKey(ctx context.Context, key *AuthenticatedKey, in *IDInput) (*Empty, error) {
+func (a *App) opDeleteAPIKey(ctx context.Context, key *AuthenticatedKey, in *idOptions) (*Empty, error) {
 	if key.Role.Kind != core.RoleAdmin {
 		return nil, Forbidden("This operation requires an admin API key.")
 	}
-	id, ok := apiKeyIDFromPath(in.ID)
-	if !ok {
+	if in.ID == nil {
 		return nil, NotFound("API key was not found.")
 	}
+	id := core.APIKeyID(*in.ID)
 	deleted, err := data.DeleteAPIKey(ctx, a.DB, id)
 	if err != nil {
 		return nil, err

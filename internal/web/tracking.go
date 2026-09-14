@@ -29,15 +29,15 @@ func headerValue(r *http.Request, name string) *string {
 	return nil
 }
 
-// RemoteIP is the client address, honoring X-Forwarded-For (first hop) the
-// way the reverse-proxy middleware resolved it.
+// RemoteIP uses proxy metadata only after browserSecurity verifies the peer.
 func RemoteIP(r *http.Request) string {
-	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-		first := strings.TrimSpace(strings.Split(forwarded, ",")[0])
-		if net.ParseIP(first) != nil {
-			return first
-		}
+	if info, ok := r.Context().Value(requestNetworkKey{}).(requestNetwork); ok {
+		return info.ip
 	}
+	return peerIP(r)
+}
+
+func peerIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		if net.ParseIP(r.RemoteAddr) != nil {
@@ -48,10 +48,9 @@ func RemoteIP(r *http.Request) string {
 	return host
 }
 
-// requestScheme honors X-Forwarded-Proto behind a reverse proxy.
 func requestScheme(r *http.Request) string {
-	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
-		return strings.TrimSpace(strings.Split(proto, ",")[0])
+	if info, ok := r.Context().Value(requestNetworkKey{}).(requestNetwork); ok {
+		return info.scheme
 	}
 	if r.TLS != nil {
 		return "https"

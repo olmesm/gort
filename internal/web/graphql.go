@@ -29,7 +29,7 @@ func (a *App) registerGraphQL(r chi.Router) {
 		if !errors.As(err, &problem) {
 			// Syntax and validation errors originate in gqlgen.
 			var queryError *gqlerror.Error
-			if errors.As(err, &queryError) {
+			if errors.As(err, &queryError) && (queryError.Err == nil || graphql.GetFieldContext(ctx) == nil) {
 				return graphql.DefaultErrorPresenter(ctx, err)
 			}
 			problem = a.apiError(err).(*Problem)
@@ -50,9 +50,9 @@ func (a *App) registerGraphQL(r chi.Router) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte(sources[0].Input))
 	})
-	r.Get("/graphql/docs", func(w http.ResponseWriter, r *http.Request) {
-		_ = a.render(w, http.StatusOK, a.baseTemplates, "graphql-docs", nil)
-	})
+	r.Get("/graphql/docs", a.handle(func(w http.ResponseWriter, r *http.Request) error {
+		return a.renderShared(w, http.StatusOK, "graphql-docs", nil)
+	}))
 	r.Handle("/graphql/*", http.NotFoundHandler())
 }
 

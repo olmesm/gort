@@ -51,7 +51,7 @@ func NewApp(cfg *AppConfig, logger *slog.Logger) (*App, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
+	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
 		return nil, err
 	}
 
@@ -71,8 +71,8 @@ func NewApp(cfg *AppConfig, logger *slog.Logger) (*App, error) {
 		Queues:        NewWorkQueues(cfg.WebhooksEnabled),
 		Logger:        logger,
 		sessionKey:    sessionKey,
-		titleClient:   &http.Client{Timeout: 10 * time.Second},
-		webhookClient: &http.Client{Timeout: 15 * time.Second},
+		titleClient:   newOutboundClient(10*time.Second, cfg.AllowPrivateOutbound),
+		webhookClient: newOutboundClient(15*time.Second, cfg.AllowPrivateOutbound),
 		geoClient:     &http.Client{Timeout: 5 * time.Minute},
 		limiter:       newRateLimiter(cfg.RateLimitPerMinute),
 	}
@@ -121,7 +121,11 @@ func (a *App) initialize(ctx context.Context) error {
 			password = base64.RawURLEncoding.EncodeToString(bytes)
 			generated = true
 		}
-		created, err := data.InsertUser(ctx, a.DB, username, HashPassword(password), core.UserAdmin)
+		hash, err := HashPassword(password)
+		if err != nil {
+			return fmt.Errorf("invalid initial admin password: %w", err)
+		}
+		created, err := data.InsertUser(ctx, a.DB, username, hash, core.UserAdmin)
 		if err != nil {
 			return err
 		}
@@ -140,7 +144,7 @@ func (a *App) initialize(ctx context.Context) error {
 
 // ---- Rate limiting ----
 
-// rateLimiter is a fixed-window limiter for mutating REST calls, partitioned
+// rateLimiter is a fixed-window limiter for API writes and login attempts, partitioned
 // by client IP.
 type rateLimiter struct {
 	limit  int
@@ -170,9 +174,9 @@ func (l *rateLimiter) allow(key string) bool {
 
 func (a *App) rateLimitMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		isMutatingRest := (strings.HasPrefix(r.URL.Path, "/rest") || r.URL.Path == "/graphql") &&
+		isLimited := (strings.HasPrefix(r.URL.Path, "/rest") || r.URL.Path == "/graphql" || r.URL.Path == "/admin/login") &&
 			r.Method != http.MethodGet && r.Method != http.MethodHead
-		if isMutatingRest && a.Cfg.RateLimitPerMinute > 0 {
+		if isLimited && a.Cfg.RateLimitPerMinute > 0 {
 			key := RemoteIP(r)
 			if key == "" {
 				key = "unknown"
@@ -229,12 +233,12 @@ func (a *App) buildRouter() *chi.Mux {
 	mux.Method("POST", "/admin/short-urls/{id}/visits/delete", a.requireUser(a.uiDeleteShortURLVisits))
 	mux.Method("GET", "/admin/short-urls/{id}/visits", a.requireUser(a.uiShortURLVisits))
 
-	mux.Method("GET", "/admin/visits/orphan", a.requireUser(a.uiOrphanVisits))
+	mux.Method("GET", "/admin/visits/orphan", a.requireAdmin(a.uiOrphanVisits))
 	mux.Method("POST", "/admin/visits/orphan/delete", a.requireAdmin(a.uiDeleteOrphanVisits))
 
-	mux.Method("GET", "/admin/tags", a.requireUser(a.uiListTags))
-	mux.Method("POST", "/admin/tags/rename", a.requireUser(a.uiRenameTag))
-	mux.Method("POST", "/admin/tags/delete", a.requireUser(a.uiDeleteTag))
+	mux.Method("GET", "/admin/tags", a.requireAdmin(a.uiListTags))
+	mux.Method("POST", "/admin/tags/rename", a.requireAdmin(a.uiRenameTag))
+	mux.Method("POST", "/admin/tags/delete", a.requireAdmin(a.uiDeleteTag))
 
 	mux.Method("GET", "/admin/domains", a.requireAdmin(a.uiListDomains))
 	mux.Method("POST", "/admin/domains", a.requireAdmin(a.uiCreateDomain))
@@ -276,7 +280,7 @@ func (a *App) buildRouter() *chi.Mux {
 
 // Handler is the full middleware + routing pipeline.
 func (a *App) Handler() http.Handler {
-	return a.rateLimitMiddleware(a.mux)
+	return a.browserSecurity(a.rateLimitMiddleware(a.mux))
 }
 
 // Run serves HTTP until the context is cancelled.

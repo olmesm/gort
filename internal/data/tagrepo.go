@@ -64,47 +64,24 @@ func TagsForShortURLs(ctx context.Context, db *DB, shortURLIDs []core.ShortURLID
 }
 
 func ListTags(ctx context.Context, db *DB, searchTerm string, page, itemsPerPage int) (core.Page[TagStatsRow], error) {
-	empty := core.Page[TagStatsRow]{}
-	page, itemsPerPage = core.NormalizePaging(page, itemsPerPage)
-	whereClause := ""
-	var whereArgs []any
+	var conditions []string
+	var args []any
 	if searchTerm != "" {
-		whereClause = fmt.Sprintf("WHERE %s", db.ILike("t.name", "?"))
-		whereArgs = append(whereArgs, "%"+searchTerm+"%")
+		conditions = append(conditions, db.ILike("t.name", "?"))
+		args = append(args, "%"+searchTerm+"%")
 	}
-
-	total, err := queryScalar[int64](ctx, db,
-		fmt.Sprintf("SELECT COUNT(*) FROM tags t %s", whereClause), whereArgs...)
-	if err != nil {
-		return empty, err
-	}
-
-	page = clampListPage(page, itemsPerPage, total)
-	listArgs := append(append([]any{}, whereArgs...), itemsPerPage, core.PageOffset(page, itemsPerPage))
-	items, err := queryAll(ctx, db, func(r rowScanner) (*TagStatsRow, error) {
+	return queryPage(ctx, db, func(r rowScanner) (*TagStatsRow, error) {
 		var t TagStatsRow
 		if err := r.Scan(&t.ID, &t.Name, &t.ShortURLCount, &t.VisitCount); err != nil {
 			return nil, err
 		}
 		return &t, nil
-	}, fmt.Sprintf(`SELECT t.id, t.name,
+	}, `t.id, t.name,
 	        (SELECT COUNT(*) FROM short_url_tags st WHERE st.tag_id = t.id) AS short_url_count,
 	        (SELECT COUNT(*) FROM visits v
 	           JOIN short_url_tags st ON st.short_url_id = v.short_url_id
-	          WHERE st.tag_id = t.id) AS visit_count
-	 FROM tags t %s
-	 ORDER BY t.name
-	 LIMIT ? OFFSET ?`, whereClause), listArgs...)
-	if err != nil {
-		return empty, err
-	}
-
-	return core.Page[TagStatsRow]{
-		Items:        items,
-		CurrentPage:  page,
-		ItemsPerPage: itemsPerPage,
-		TotalItems:   total,
-	}, nil
+	          WHERE st.tag_id = t.id) AS visit_count`,
+		"tags t", "t.name", conditions, args, ListFilters{Page: page, ItemsPerPage: itemsPerPage})
 }
 
 // RenameTag renames a tag; oldName is a caller-supplied candidate, newName is

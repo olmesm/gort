@@ -5,10 +5,10 @@ package web
 
 import (
 	"context"
-	"strconv"
-)
 
-type GraphResolver struct{ App *App }
+	"github.com/olmesm/gort/internal/core"
+	"github.com/olmesm/gort/internal/data"
+)
 
 // CreateShortURL is the resolver for the createShortURL field.
 func (r *mutationGraphResolver) CreateShortURL(ctx context.Context, input CreateShortURLBody) (*ShortURLDTO, error) {
@@ -48,7 +48,7 @@ func (r *mutationGraphResolver) RenameTag(ctx context.Context, oldName string, n
 
 // DeleteTags is the resolver for the deleteTags field.
 func (r *mutationGraphResolver) DeleteTags(ctx context.Context, tags []string) (int64, error) {
-	out, err := r.App.opDeleteTags(ctx, keyFromContext(ctx), &DeleteTagsInput{Tags: tags})
+	out, err := r.App.opDeleteTags(ctx, keyFromContext(ctx), &tags)
 	if err != nil {
 		return 0, err
 	}
@@ -87,12 +87,12 @@ func (r *mutationGraphResolver) CreateAPIKey(ctx context.Context, input CreateAP
 
 // SetAPIKeyEnabled is the resolver for the setAPIKeyEnabled field.
 func (r *mutationGraphResolver) SetAPIKeyEnabled(ctx context.Context, id int64, enabled bool) (*IDEnabled, error) {
-	return r.App.opPatchAPIKey(ctx, keyFromContext(ctx), &IDBodyInput[PatchAPIKeyBody]{IDInput: IDInput{ID: strconv.FormatInt(id, 10)}, Body: PatchAPIKeyBody{Enabled: enabled}})
+	return r.App.opPatchAPIKey(ctx, keyFromContext(ctx), &idBodyOptions[PatchAPIKeyBody]{idOptions: idOptions{ID: &id}, Body: PatchAPIKeyBody{Enabled: enabled}})
 }
 
 // DeleteAPIKey is the resolver for the deleteAPIKey field.
 func (r *mutationGraphResolver) DeleteAPIKey(ctx context.Context, id int64) (bool, error) {
-	_, err := r.App.opDeleteAPIKey(ctx, keyFromContext(ctx), &IDInput{ID: strconv.FormatInt(id, 10)})
+	_, err := r.App.opDeleteAPIKey(ctx, keyFromContext(ctx), &idOptions{ID: &id})
 	return err == nil, err
 }
 
@@ -103,12 +103,12 @@ func (r *mutationGraphResolver) CreateWebhook(ctx context.Context, input CreateW
 
 // SetWebhookEnabled is the resolver for the setWebhookEnabled field.
 func (r *mutationGraphResolver) SetWebhookEnabled(ctx context.Context, id int64, enabled bool) (*IDEnabled, error) {
-	return r.App.opPatchWebhook(ctx, keyFromContext(ctx), &IDBodyInput[PatchWebhookBody]{IDInput: IDInput{ID: strconv.FormatInt(id, 10)}, Body: PatchWebhookBody{Enabled: enabled}})
+	return r.App.opPatchWebhook(ctx, keyFromContext(ctx), &idBodyOptions[PatchWebhookBody]{idOptions: idOptions{ID: &id}, Body: PatchWebhookBody{Enabled: enabled}})
 }
 
 // DeleteWebhook is the resolver for the deleteWebhook field.
 func (r *mutationGraphResolver) DeleteWebhook(ctx context.Context, id int64) (bool, error) {
-	_, err := r.App.opDeleteWebhook(ctx, keyFromContext(ctx), &IDInput{ID: strconv.FormatInt(id, 10)})
+	_, err := r.App.opDeleteWebhook(ctx, keyFromContext(ctx), &idOptions{ID: &id})
 	return err == nil, err
 }
 
@@ -124,7 +124,11 @@ func (r *queryGraphResolver) ShortURL(ctx context.Context, code string, domain *
 
 // Tags is the resolver for the tags field.
 func (r *queryGraphResolver) Tags(ctx context.Context, searchTerm *string, page *int, itemsPerPage *int) (*PageDTO[tagStatsDTO], error) {
-	return r.App.opTagStats(ctx, keyFromContext(ctx), &TagListInput{PageQuery: pageQuery(page, itemsPerPage), SearchTerm: value(searchTerm), WithStats: "true"})
+	pageResult, err := r.App.listTags(ctx, keyFromContext(ctx), &tagListOptions{ListFilters: data.ListFilters{Search: value(searchTerm), Page: valueOr(page, 1), ItemsPerPage: valueOr(itemsPerPage, core.MaxPageSize)}, WithStats: true})
+	if err != nil {
+		return nil, err
+	}
+	return result(NewPageDTO(pageResult, newTagStatsDTO))
 }
 
 // Domains is the resolver for the domains field.
@@ -143,22 +147,22 @@ func (r *queryGraphResolver) VisitsOverview(ctx context.Context) (*VisitOverview
 
 // Visits is the resolver for the visits field.
 func (r *queryGraphResolver) Visits(ctx context.Context, filter *VisitFilter) (*PageDTO[VisitDTO], error) {
-	return r.App.opListNonOrphanVisits(ctx, keyFromContext(ctx), ptr(visitQuery(filter)))
+	return r.App.opListNonOrphanVisits(ctx, keyFromContext(ctx), ptr(visitFilters(filter)))
 }
 
 // OrphanVisits is the resolver for the orphanVisits field.
 func (r *queryGraphResolver) OrphanVisits(ctx context.Context, typeArg *string, filter *VisitFilter) (*PageDTO[VisitDTO], error) {
-	return r.App.opListOrphanVisits(ctx, keyFromContext(ctx), &OrphanVisitsInput{VisitQuery: visitQuery(filter), Type: value(typeArg)})
+	return r.App.opListOrphanVisits(ctx, keyFromContext(ctx), &orphanVisitOptions{VisitFilters: visitFilters(filter), Type: value(typeArg)})
 }
 
 // TagVisits is the resolver for the tagVisits field.
 func (r *queryGraphResolver) TagVisits(ctx context.Context, tag string, filter *VisitFilter) (*PageDTO[VisitDTO], error) {
-	return r.App.opTagVisits(ctx, keyFromContext(ctx), &TagVisitsInput{Tag: tag, VisitQuery: visitQuery(filter)})
+	return r.App.opTagVisits(ctx, keyFromContext(ctx), &tagVisitOptions{Tag: tag, VisitFilters: visitFilters(filter)})
 }
 
 // DomainVisits is the resolver for the domainVisits field.
 func (r *queryGraphResolver) DomainVisits(ctx context.Context, authority string, filter *VisitFilter) (*PageDTO[VisitDTO], error) {
-	return r.App.opDomainVisits(ctx, keyFromContext(ctx), &DomainVisitsInput{AuthorityInput: AuthorityInput{Authority: authority}, VisitQuery: visitQuery(filter)})
+	return r.App.opDomainVisits(ctx, keyFromContext(ctx), &domainVisitOptions{AuthorityInput: AuthorityInput{Authority: authority}, VisitFilters: visitFilters(filter)})
 }
 
 // VisitsPerDay is the resolver for the visitsPerDay field.
@@ -172,7 +176,7 @@ func (r *queryGraphResolver) VisitsPerDay(ctx context.Context, scope *StatsScope
 
 // Breakdown is the resolver for the breakdown field.
 func (r *queryGraphResolver) Breakdown(ctx context.Context, by string, scope *StatsScope, limit *int) ([]breakdownDTO, error) {
-	out, err := r.App.opBreakdown(ctx, keyFromContext(ctx), &BreakdownInput{StatsInput: statsInput(scope), By: by, Limit: intQuery(limit)})
+	out, err := r.App.opBreakdown(ctx, keyFromContext(ctx), &breakdownOptions{statsOptions: statsInput(scope), By: by, Limit: valueOr(limit, 25)})
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +203,7 @@ func (r *queryGraphResolver) Webhooks(ctx context.Context) ([]webhookDTO, error)
 
 // Visits is the resolver for the visits field.
 func (r *shortURLGraphResolver) Visits(ctx context.Context, obj *ShortURLDTO, filter *VisitFilter) (*PageDTO[VisitDTO], error) {
-	return r.App.opListShortURLVisits(ctx, keyFromContext(ctx), &ShortURLVisitsInput{ShortURLInput: ShortURLInput{Code: obj.ShortCode, Domain: obj.Domain}, VisitQuery: visitQuery(filter)})
+	return r.App.opListShortURLVisits(ctx, keyFromContext(ctx), &shortURLVisitOptions{ShortURLInput: ShortURLInput{Code: obj.ShortCode, Domain: obj.Domain}, VisitFilters: visitFilters(filter)})
 }
 
 // RedirectRules is the resolver for the redirectRules field.
@@ -221,13 +225,3 @@ type (
 	queryGraphResolver    struct{ *GraphResolver }
 	shortURLGraphResolver struct{ *GraphResolver }
 )
-
-// !!! WARNING !!!
-// The code below was going to be deleted when updating resolvers. It has been copied here so you have
-// one last chance to move it out of harms way if you want. There are two reasons this happens:
-//  - When renaming or deleting a resolver the old code will be put in here. You can safely delete
-//    it when you're done.
-//  - You have helper methods in this file. Move them out to keep these resolver files clean.
-/*
-	type GraphResolver struct{ App *App }
-*/

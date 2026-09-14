@@ -195,8 +195,8 @@ func TestKeysWithUnparseableStoredRolesAreRejectedNotAdmin(t *testing.T) {
 	plain := GenerateAPIKey()
 	_, err := app.DB.Exec(t.Context(),
 		`INSERT INTO api_keys (key_hash, name, role, domain_id, enabled, expires_at, created_at)
-		 VALUES (?, 'corrupt', 'superuser', NULL, 1, NULL, ?)`,
-		HashAPIKey(plain), app.DB.BindTime(time.Now()))
+		 VALUES (?, 'corrupt', 'superuser', NULL, ?, NULL, ?)`,
+		HashAPIKey(plain), true, app.DB.BindTime(time.Now()))
 	if err != nil {
 		t.Fatal(err)
 	}

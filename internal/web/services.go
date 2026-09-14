@@ -71,12 +71,12 @@ func (a *App) resolveTargetDomain(ctx context.Context, domain *core.DomainAuthor
 
 // Author says who created a short URL: a dashboard user or an API key.
 type Author struct {
-	UserID   *core.UserID
-	APIKeyID *core.APIKeyID
+	UserID *core.UserID
+	APIKey *AuthenticatedKey
 }
 
-func UserAuthor(id core.UserID) *Author     { return &Author{UserID: &id} }
-func APIKeyAuthor(id core.APIKeyID) *Author { return &Author{APIKeyID: &id} }
+func UserAuthor(id core.UserID) *Author          { return &Author{UserID: &id} }
+func APIKeyAuthor(key *AuthenticatedKey) *Author { return &Author{APIKey: key} }
 
 // insertWithCode inserts with the spec's slug, or retries generated codes
 // until one is free.
@@ -129,7 +129,12 @@ func (a *App) CreateShortURL(ctx context.Context, author *Author, spec *core.Sho
 	}
 
 	if spec.FindIfExists {
-		existing, err := data.ShortURLDetailByLongURL(ctx, a.DB, domain.ID, spec.LongURL)
+		var authorID *core.APIKeyID
+		if author != nil && author.APIKey != nil && author.APIKey.Role.Kind == core.RoleAuthor {
+			id := author.APIKey.ID()
+			authorID = &id
+		}
+		existing, err := data.ShortURLDetailByLongURL(ctx, a.DB, domain.ID, spec.LongURL, authorID)
 		if err != nil {
 			return nil, err
 		}
@@ -172,7 +177,10 @@ func (a *App) CreateShortURL(ctx context.Context, author *Author, spec *core.Sho
 		}
 		if author != nil {
 			nu.AuthorUserID = author.UserID
-			nu.AuthorAPIKeyID = author.APIKeyID
+			if author.APIKey != nil {
+				id := author.APIKey.ID()
+				nu.AuthorAPIKeyID = &id
+			}
 		}
 		return nu
 	}
@@ -218,13 +226,15 @@ func (a *App) EditShortURL(ctx context.Context, id core.ShortURLID, current *dat
 		update.GroupName = &group
 	}
 
-	if _, err := data.UpdateShortURL(ctx, a.DB, id, update); err != nil {
+	if edit.ChangeTags {
+		update.Tags = &edit.Tags
+	}
+	found, err := data.UpdateShortURL(ctx, a.DB, id, update)
+	if err != nil {
 		return nil, err
 	}
-	if edit.ChangeTags {
-		if err := data.SetShortURLTags(ctx, a.DB, id, edit.Tags); err != nil {
-			return nil, err
-		}
+	if !found {
+		return nil, NotFound("Short URL was not found.")
 	}
 
 	updated, err := data.ShortURLDetailByID(ctx, a.DB, id)
@@ -235,7 +245,9 @@ func (a *App) EditShortURL(ctx context.Context, id core.ShortURLID, current *dat
 	if err != nil {
 		return nil, err
 	}
-	// The row was just updated under this id; absence would be a bug.
+	if updated == nil {
+		return nil, NotFound("Short URL was not found.")
+	}
 	dto := NewShortURLDTO(a.Cfg, tagNames, updated)
 	return &dto, nil
 }

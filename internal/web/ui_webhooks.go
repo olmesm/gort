@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -69,22 +70,21 @@ func (a *App) uiListWebhooks(user *CurrentUser, w http.ResponseWriter, r *http.R
 
 // POST /admin/webhooks (admin) — shows the signing secret once.
 func (a *App) uiCreateWebhook(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
-	name := strings.TrimSpace(r.PostFormValue("name"))
-	hookURL := strings.TrimSpace(r.PostFormValue("url"))
-	var events []core.WebhookEvent
+	body := CreateWebhookBody{Name: strings.TrimSpace(r.PostFormValue("name")), URL: strings.TrimSpace(r.PostFormValue("url"))}
 	for _, e := range core.AllWebhookEvents {
 		if r.PostFormValue(webhookEventFieldName(e)) == "true" {
-			events = append(events, e)
+			body.Events = append(body.Events, e.Slug())
 		}
 	}
-	if name == "" || !isHTTPURL(hookURL) || len(events) == 0 {
-		return a.renderWebhooksPage(r, w, user, "Name, a valid http(s) URL and at least one event are required.", "")
-	}
-	secret := generateWebhookSecret()
-	if _, err := data.InsertWebhook(r.Context(), a.DB, name, hookURL, secret, events); err != nil {
+	hook, err := a.createWebhook(r.Context(), &body)
+	if err != nil {
+		var problem *Problem
+		if errors.As(err, &problem) && problem.Status == http.StatusBadRequest {
+			return a.renderWebhooksPage(r, w, user, problem.Detail, "")
+		}
 		return err
 	}
-	return a.renderWebhooksPage(r, w, user, "", secret)
+	return a.renderWebhooksPage(r, w, user, "", hook.Secret)
 }
 
 // POST /admin/webhooks/{id}/toggle (admin)
@@ -93,17 +93,8 @@ func (a *App) uiToggleWebhook(_ *CurrentUser, w http.ResponseWriter, r *http.Req
 	if err != nil {
 		return err
 	}
-	hooks, err := data.ListWebhooks(r.Context(), a.DB)
-	if err != nil {
+	if _, err := data.ToggleWebhook(r.Context(), a.DB, id); err != nil {
 		return err
-	}
-	for _, hook := range hooks {
-		if hook.ID == id {
-			if _, err := data.SetWebhookEnabled(r.Context(), a.DB, id, !hook.Enabled); err != nil {
-				return err
-			}
-			break
-		}
 	}
 	return redirect(w, r, "/admin/webhooks")
 }

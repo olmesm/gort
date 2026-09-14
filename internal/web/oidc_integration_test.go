@@ -241,8 +241,8 @@ func TestOIDCLoginProvisionsUserAndGrantsAdminByGroup(t *testing.T) {
 	// Plain member → regular user, no admin pages.
 	userSession := oidcLogin(t, app, idp, "sub-user", "bob", []string{"/marketing"})
 	userClient := withSession(app.client(t), userSession)
-	if resp := userClient.get("/admin"); resp.Code != http.StatusOK {
-		t.Fatalf("user overview: %d", resp.Code)
+	if resp := userClient.get("/admin"); resp.Code != http.StatusFound || resp.Header().Get("Location") != "/admin/short-urls" {
+		t.Fatalf("user landing: %d", resp.Code)
 	}
 	if resp := userClient.get("/admin/users"); resp.Code != http.StatusForbidden {
 		t.Fatalf("user should be forbidden from /admin/users, got %d", resp.Code)

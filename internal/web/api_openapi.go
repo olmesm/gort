@@ -93,7 +93,9 @@ func (a *App) registerREST(router chi.Router) {
 	config.Servers = []*huma.Server{{URL: "/"}}
 	config.Security = []map[string][]string{{"apiKey": {}}, {"bearerAuth": {}}}
 	config.Info.Description = "Use an API key in X-Api-Key or Authorization: Bearer. Admin keys have full access. Author keys manage links created with that key. Domain keys manage links on their assigned domain. Only admin keys can change shared tags or view global statistics. PATCH distinguishes omitted values from explicit null. Webhook operations appear only when enabled."
-	router.Get("/rest/docs", func(w http.ResponseWriter, r *http.Request) { _ = a.render(w, 200, a.baseTemplates, "rest-docs", nil) })
+	router.Get("/rest/docs", a.handle(func(w http.ResponseWriter, r *http.Request) error {
+		return a.renderShared(w, http.StatusOK, "rest-docs", nil)
+	}))
 	api := humachi.New(router, config)
 	api.UseMiddleware(func(ctx huma.Context, next func(huma.Context)) {
 		if ctx.Operation().OperationID == "health" {
@@ -116,39 +118,39 @@ func (a *App) registerREST(router chi.Router) {
 		return out, nil
 	})
 
-	registerOperation(a, api, "GET", "/rest/v1/short-urls", "listShortURLs", "List short URLs", 200, a.opListShortURLs)
+	registerOperation(a, api, "GET", "/rest/v1/short-urls", "listShortURLs", "List short URLs", 200, restInput((*ShortURLListInput).options, a.opListShortURLs))
 	registerOperation(a, api, "POST", "/rest/v1/short-urls", "createShortURL", "Create short URL", 201, a.opCreateShortURL)
 	registerOperation(a, api, "GET", "/rest/v1/short-urls/{code}", "getShortURL", "Get short URL", 200, a.opGetShortURL)
 	registerOperation(a, api, "PATCH", "/rest/v1/short-urls/{code}", "editShortURL", "Edit short URL", 200, a.opEditShortURL)
 	registerOperation(a, api, "DELETE", "/rest/v1/short-urls/{code}", "deleteShortURL", "Delete short URL", 204, a.opDeleteShortURL)
 	registerOperation(a, api, "GET", "/rest/v1/short-urls/{code}/redirect-rules", "getRules", "Get redirect rules", 200, a.opGetRules)
 	registerOperation(a, api, "POST", "/rest/v1/short-urls/{code}/redirect-rules", "setRules", "Set redirect rules", 200, a.opSetRules)
-	registerOperation(a, api, "GET", "/rest/v1/short-urls/{code}/visits", "listShortURLVisits", "List visits for a short URL", 200, a.opListShortURLVisits)
+	registerOperation(a, api, "GET", "/rest/v1/short-urls/{code}/visits", "listShortURLVisits", "List visits for a short URL", 200, restInput((*ShortURLVisitsInput).options, a.opListShortURLVisits))
 	registerOperation(a, api, "DELETE", "/rest/v1/short-urls/{code}/visits", "deleteShortURLVisits", "Delete visits for a short URL", 200, a.opDeleteShortURLVisits)
-	registerOperation(a, api, "GET", "/rest/v1/tags", "listTags", "List tags", 200, a.opListTags)
+	registerOperation(a, api, "GET", "/rest/v1/tags", "listTags", "List tags", 200, a.restListTags)
 	registerOperation(a, api, "PUT", "/rest/v1/tags", "renameTag", "Rename tag (admin)", 200, a.opRenameTag)
-	registerOperation(a, api, "DELETE", "/rest/v1/tags", "deleteTags", "Delete tags (admin)", 200, a.opDeleteTags)
-	registerOperation(a, api, "GET", "/rest/v1/tags/{tag}/visits", "tagVisits", "List tag visits (admin)", 200, a.opTagVisits)
+	registerOperation(a, api, "DELETE", "/rest/v1/tags", "deleteTags", "Delete tags (admin)", 200, restInput((*DeleteTagsInput).options, a.opDeleteTags))
+	registerOperation(a, api, "GET", "/rest/v1/tags/{tag}/visits", "tagVisits", "List tag visits (admin)", 200, restInput((*TagVisitsInput).options, a.opTagVisits))
 	registerOperation(a, api, "GET", "/rest/v1/domains", "listDomains", "List domains", 200, a.opListDomains)
 	registerOperation(a, api, "POST", "/rest/v1/domains", "createDomain", "Create domain (admin)", 201, a.opCreateDomain)
 	registerOperation(a, api, "PATCH", "/rest/v1/domains/redirects", "setDomainRedirects", "Set domain redirects (admin)", 200, a.opSetDomainRedirects)
 	registerOperation(a, api, "DELETE", "/rest/v1/domains/{authority}", "deleteDomain", "Delete domain (admin)", 204, a.opDeleteDomain)
-	registerOperation(a, api, "GET", "/rest/v1/domains/{authority}/visits", "domainVisits", "List domain visits", 200, a.opDomainVisits)
+	registerOperation(a, api, "GET", "/rest/v1/domains/{authority}/visits", "domainVisits", "List domain visits", 200, restInput((*DomainVisitsInput).options, a.opDomainVisits))
 	registerOperation(a, api, "GET", "/rest/v1/visits", "visitsOverview", "Visit totals (admin)", 200, a.opVisitsOverview)
-	registerOperation(a, api, "GET", "/rest/v1/visits/non-orphan", "listNonOrphanVisits", "List non-orphan visits", 200, a.opListNonOrphanVisits)
-	registerOperation(a, api, "GET", "/rest/v1/visits/orphan", "listOrphanVisits", "List orphan visits (admin)", 200, a.opListOrphanVisits)
+	registerOperation(a, api, "GET", "/rest/v1/visits/non-orphan", "listNonOrphanVisits", "List non-orphan visits", 200, restInput((*VisitQuery).options, a.opListNonOrphanVisits))
+	registerOperation(a, api, "GET", "/rest/v1/visits/orphan", "listOrphanVisits", "List orphan visits (admin)", 200, restInput((*OrphanVisitsInput).options, a.opListOrphanVisits))
 	registerOperation(a, api, "DELETE", "/rest/v1/visits/orphan", "deleteOrphanVisits", "Delete orphan visits (admin)", 200, a.opDeleteOrphanVisits)
-	registerOperation(a, api, "GET", "/rest/v1/stats/visits-per-day", "visitsPerDay", "Visits per day", 200, a.opVisitsPerDay)
-	registerOperation(a, api, "GET", "/rest/v1/stats/breakdown", "breakdown", "Visit breakdown", 200, a.opBreakdown)
+	registerOperation(a, api, "GET", "/rest/v1/stats/visits-per-day", "visitsPerDay", "Visits per day", 200, restInput((*StatsInput).options, a.opVisitsPerDay))
+	registerOperation(a, api, "GET", "/rest/v1/stats/breakdown", "breakdown", "Visit breakdown", 200, restInput((*BreakdownInput).options, a.opBreakdown))
 	registerOperation(a, api, "GET", "/rest/v1/api-keys", "listAPIKeys", "List API keys (admin)", 200, a.opListAPIKeys)
 	registerOperation(a, api, "POST", "/rest/v1/api-keys", "createAPIKey", "Create API key (admin)", 201, a.opCreateAPIKey)
-	registerOperation(a, api, "PATCH", "/rest/v1/api-keys/{id}", "patchAPIKey", "Patch API key (admin)", 200, a.opPatchAPIKey)
-	registerOperation(a, api, "DELETE", "/rest/v1/api-keys/{id}", "deleteAPIKey", "Delete API key (admin)", 204, a.opDeleteAPIKey)
+	registerOperation(a, api, "PATCH", "/rest/v1/api-keys/{id}", "patchAPIKey", "Patch API key (admin)", 200, restInput((*IDBodyInput[PatchAPIKeyBody]).options, a.opPatchAPIKey))
+	registerOperation(a, api, "DELETE", "/rest/v1/api-keys/{id}", "deleteAPIKey", "Delete API key (admin)", 204, restInput((*IDInput).options, a.opDeleteAPIKey))
 	if a.Cfg.WebhooksEnabled {
 		registerOperation(a, api, "GET", "/rest/v1/webhooks", "listWebhooks", "List webhooks (admin)", 200, a.opListWebhooks)
 		registerOperation(a, api, "POST", "/rest/v1/webhooks", "createWebhook", "Create webhook (admin)", 201, a.opCreateWebhook)
-		registerOperation(a, api, "PATCH", "/rest/v1/webhooks/{id}", "patchWebhook", "Update webhook (admin)", 200, a.opPatchWebhook)
-		registerOperation(a, api, "DELETE", "/rest/v1/webhooks/{id}", "deleteWebhook", "Delete webhook (admin)", 204, a.opDeleteWebhook)
+		registerOperation(a, api, "PATCH", "/rest/v1/webhooks/{id}", "patchWebhook", "Update webhook (admin)", 200, restInput((*IDBodyInput[PatchWebhookBody]).options, a.opPatchWebhook))
+		registerOperation(a, api, "DELETE", "/rest/v1/webhooks/{id}", "deleteWebhook", "Delete webhook (admin)", 204, restInput((*IDInput).options, a.opDeleteWebhook))
 	}
 	// Tags have two documented response shapes, selected by withStats.
 	tags := api.OpenAPI().Paths["/rest/v1/tags"].Get.Responses["200"].Content["application/json"]

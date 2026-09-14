@@ -36,12 +36,3 @@ func NormalizePaging(page, itemsPerPage int) (int, int) {
 }
 
 func PageOffset(page, itemsPerPage int) int { return (page - 1) * itemsPerPage }
-
-// MapPage converts a page of one item type into another.
-func MapPage[A, B any](p Page[A], f func(A) B) Page[B] {
-	items := make([]B, len(p.Items))
-	for i, a := range p.Items {
-		items[i] = f(a)
-	}
-	return Page[B]{Items: items, CurrentPage: p.CurrentPage, ItemsPerPage: p.ItemsPerPage, TotalItems: p.TotalItems}
-}

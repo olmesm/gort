@@ -42,11 +42,10 @@ func (a *App) uiListTags(user *CurrentUser, w http.ResponseWriter, r *http.Reque
 	if isHtmx(r) {
 		return a.renderShared(w, http.StatusOK, "tag-table", table)
 	}
-	a.renderPage(w, http.StatusOK, "tags", user, "/admin/tags", "Tags", tagsView{
+	return a.renderPage(w, http.StatusOK, "tags", user, "/admin/tags", "Tags", tagsView{
 		Search: search,
 		Table:  table,
 	})
-	return nil
 }
 
 // POST /admin/tags/rename
@@ -74,11 +73,10 @@ func (a *App) uiRenameTag(user *CurrentUser, w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		return err
 	}
-	a.renderPage(w, http.StatusBadRequest, "tags", user, "/admin/tags", "Tags", tagsView{
+	return a.renderPage(w, http.StatusBadRequest, "tags", user, "/admin/tags", "Tags", tagsView{
 		Error: message,
 		Table: tagTable(result, ""),
 	})
-	return nil
 }
 
 // POST /admin/tags/delete

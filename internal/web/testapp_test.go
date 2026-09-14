@@ -1,10 +1,15 @@
 package web
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"os"
 	"strings"
 	"testing"
 
@@ -12,7 +17,8 @@ import (
 	"github.com/olmesm/gort/internal/data"
 )
 
-// newTestApp boots the full application with a throw-away SQLite database.
+// newTestApp uses a temporary SQLite database, or an isolated PostgreSQL schema
+// when GORT_TEST_POSTGRES_DSN is set to a PostgreSQL URL.
 func newTestApp(t *testing.T) *App {
 	t.Helper()
 	return newTestAppWithConfig(t, nil)
@@ -30,6 +36,35 @@ func newTestAppWithConfig(t *testing.T, overrides map[string]string) *App {
 		"INITIAL_ADMIN_USERNAME": "admin",
 		"INITIAL_ADMIN_PASSWORD": "test-password-123",
 		"RATE_LIMIT_PER_MINUTE":  "10000",
+	}
+	if dsn := os.Getenv("GORT_TEST_POSTGRES_DSN"); dsn != "" {
+		pg, err := data.Open(data.Postgres, dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		token := make([]byte, 12)
+		if _, err := rand.Read(token); err != nil {
+			t.Fatal(err)
+		}
+		schema := "gort_test_" + hex.EncodeToString(token)
+		if _, err := pg.Exec(t.Context(), "CREATE SCHEMA "+schema); err != nil {
+			_ = pg.Close()
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			if _, err := pg.Exec(context.Background(), "DROP SCHEMA "+schema+" CASCADE"); err != nil {
+				t.Error(err)
+			}
+			_ = pg.Close()
+		})
+		parsed, err := url.Parse(dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		q := parsed.Query()
+		q.Set("search_path", schema)
+		parsed.RawQuery = q.Encode()
+		vars["DB_DRIVER"], vars["DB_CONNECTION"] = "postgres", parsed.String()
 	}
 	for key, value := range overrides {
 		vars[key] = value

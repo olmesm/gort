@@ -3,37 +3,35 @@ package web
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"strings"
 
 	"github.com/olmesm/gort/internal/core"
 	"github.com/olmesm/gort/internal/data"
 )
 
-// scopeFromQuery builds a stats scope from query params
-// (?shortCode=&domain=&tag=&orphan=true), enforcing API-key permissions.
-func (a *App) scopeFromQuery(ctx context.Context, key *AuthenticatedKey, q url.Values) (data.VisitScope, error) {
-	if queryBool(q, "orphan") {
+// statsScope resolves the requested scope and enforces API-key permissions.
+func (a *App) statsScope(ctx context.Context, key *AuthenticatedKey, in *statsOptions) (data.VisitScope, error) {
+	if in.Orphan {
 		if key.Role.Kind != core.RoleAdmin {
 			return data.VisitScope{}, Forbidden("Only admin keys can query orphan visit stats.")
 		}
 		return data.OrphanScope(), nil
 	}
 
-	if code := q.Get("shortCode"); code != "" {
-		detail, err := a.findAccessibleShortURL(ctx, key, code, q.Get("domain"))
+	if code := in.ShortCode; code != "" {
+		detail, err := a.findAccessibleShortURL(ctx, key, code, in.Domain)
 		if err != nil {
 			return data.VisitScope{}, err
 		}
 		return data.ShortURLScope(detail.ID), nil
 	}
-	if tag := q.Get("tag"); tag != "" {
+	if tag := in.Tag; tag != "" {
 		if key.Role.Kind != core.RoleAdmin {
 			return data.VisitScope{}, Forbidden("Only admin keys can query tag statistics.")
 		}
 		return data.TagScope(tag), nil
 	}
-	if authority := q.Get("domain"); authority != "" {
+	if authority := in.Domain; authority != "" {
 		d, err := data.DomainByAuthority(ctx, a.DB, strings.ToLower(authority))
 		if err != nil {
 			return data.VisitScope{}, err
@@ -76,11 +74,11 @@ func (a *App) opVisitsOverview(ctx context.Context, key *AuthenticatedKey, in *E
 }
 
 // GET /rest/v1/visits/non-orphan
-func (a *App) opListNonOrphanVisits(ctx context.Context, key *AuthenticatedKey, in *VisitQuery) (*PageDTO[VisitDTO], error) {
+func (a *App) opListNonOrphanVisits(ctx context.Context, key *AuthenticatedKey, in *data.VisitFilters) (*PageDTO[VisitDTO], error) {
 	if key.Role.Kind != core.RoleAdmin {
 		return nil, Forbidden("Only admin keys can list all visits.")
 	}
-	page, err := data.ListNonOrphanVisits(ctx, a.DB, visitFiltersFromQuery(queryValues(in)))
+	page, err := data.ListNonOrphanVisits(ctx, a.DB, *in)
 	if err != nil {
 		return nil, err
 	}
@@ -88,16 +86,15 @@ func (a *App) opListNonOrphanVisits(ctx context.Context, key *AuthenticatedKey, 
 }
 
 // GET /rest/v1/visits/orphan?type=
-func (a *App) opListOrphanVisits(ctx context.Context, key *AuthenticatedKey, in *OrphanVisitsInput) (*PageDTO[VisitDTO], error) {
+func (a *App) opListOrphanVisits(ctx context.Context, key *AuthenticatedKey, in *orphanVisitOptions) (*PageDTO[VisitDTO], error) {
 	if key.Role.Kind != core.RoleAdmin {
 		return nil, Forbidden("Only admin keys can list orphan visits.")
 	}
-	q := queryValues(in)
 	var visitType *core.VisitType
-	if vt, ok := core.VisitTypeOfSlug(q.Get("type")); ok {
+	if vt, ok := core.VisitTypeOfSlug(in.Type); ok {
 		visitType = &vt
 	}
-	page, err := data.ListOrphanVisits(ctx, a.DB, visitType, visitFiltersFromQuery(q))
+	page, err := data.ListOrphanVisits(ctx, a.DB, visitType, in.VisitFilters)
 	if err != nil {
 		return nil, err
 	}
@@ -117,13 +114,12 @@ func (a *App) opDeleteOrphanVisits(ctx context.Context, key *AuthenticatedKey, i
 }
 
 // GET /rest/v1/stats/visits-per-day
-func (a *App) opVisitsPerDay(ctx context.Context, key *AuthenticatedKey, in *StatsInput) (*DataList[dayDTO], error) {
-	q := queryValues(in)
-	scope, err := a.scopeFromQuery(ctx, key, q)
+func (a *App) opVisitsPerDay(ctx context.Context, key *AuthenticatedKey, in *statsOptions) (*DataList[dayDTO], error) {
+	scope, err := a.statsScope(ctx, key, in)
 	if err != nil {
 		return nil, err
 	}
-	series, err := data.VisitsPerDay(ctx, a.DB, scope, queryDate(q, "startDate"), queryDate(q, "endDate"))
+	series, err := data.VisitsPerDay(ctx, a.DB, scope, in.StartDate, in.EndDate)
 	if err != nil {
 		return nil, err
 	}
@@ -135,11 +131,9 @@ func (a *App) opVisitsPerDay(ctx context.Context, key *AuthenticatedKey, in *Sta
 }
 
 // GET /rest/v1/stats/breakdown?by=country|city|browser|os|referer|device
-func (a *App) opBreakdown(ctx context.Context, key *AuthenticatedKey, in *BreakdownInput) (*DataList[breakdownDTO], error) {
-	q := queryValues(in)
-
+func (a *App) opBreakdown(ctx context.Context, key *AuthenticatedKey, in *breakdownOptions) (*DataList[breakdownDTO], error) {
 	var column string
-	switch strings.ToLower(q.Get("by")) {
+	switch strings.ToLower(in.By) {
 	case "country":
 		column = "country_name"
 	case "countrycode":
@@ -158,12 +152,12 @@ func (a *App) opBreakdown(ctx context.Context, key *AuthenticatedKey, in *Breakd
 		return nil, BadRequest("Provide ?by= one of: country, countryCode, city, browser, os, referer, device.")
 	}
 
-	scope, err := a.scopeFromQuery(ctx, key, q)
+	scope, err := a.statsScope(ctx, key, &in.statsOptions)
 	if err != nil {
 		return nil, err
 	}
 
-	limit := queryIntDefault(q, "limit", 25)
+	limit := in.Limit
 	if limit < 1 {
 		limit = 1
 	}
@@ -171,7 +165,7 @@ func (a *App) opBreakdown(ctx context.Context, key *AuthenticatedKey, in *Breakd
 		limit = 100
 	}
 
-	rows, err := data.Breakdown(ctx, a.DB, scope, column, queryDate(q, "startDate"), queryDate(q, "endDate"), limit)
+	rows, err := data.Breakdown(ctx, a.DB, scope, column, in.StartDate, in.EndDate, limit)
 	if err != nil {
 		return nil, err
 	}

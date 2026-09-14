@@ -2,6 +2,7 @@ package web
 
 import (
 	"fmt"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -27,6 +28,10 @@ type AppConfig struct {
 	ShortCodeLength       int
 	DefaultRedirectStatus core.RedirectStatus
 	AutoResolveTitles     bool
+	// AllowPrivateOutbound permits title/webhook requests to internal networks.
+	AllowPrivateOutbound bool
+	// TrustedProxies are peers allowed to supply forwarded client IP and scheme.
+	TrustedProxies []netip.Prefix
 	// WebhooksEnabled opts in to webhook management, event fan-out and delivery.
 	WebhooksEnabled bool
 	// DisableTracking is the master switch: when true no visits are recorded
@@ -166,6 +171,15 @@ func ConfigFromLookup(get ConfigLookup) (*AppConfig, error) {
 		status = core.Found
 	}
 
+	var trustedProxies []netip.Prefix
+	for _, raw := range splitList(strVar(get, "TRUSTED_PROXIES")) {
+		prefix, err := netip.ParsePrefix(raw)
+		if err != nil {
+			return nil, fmt.Errorf("invalid GORT_TRUSTED_PROXIES CIDR %q: %w", raw, err)
+		}
+		trustedProxies = append(trustedProxies, prefix.Masked())
+	}
+
 	return &AppConfig{
 		DefaultDomain:           defaultDomain,
 		UseHTTPS:                boolVar(get, "USE_HTTPS", false),
@@ -175,6 +189,8 @@ func ConfigFromLookup(get ConfigLookup) (*AppConfig, error) {
 		ShortCodeLength:         intVar(get, "SHORT_CODE_LENGTH", core.DefaultCodeLength),
 		DefaultRedirectStatus:   status,
 		AutoResolveTitles:       boolVar(get, "AUTO_RESOLVE_TITLES", true),
+		AllowPrivateOutbound:    boolVar(get, "ALLOW_PRIVATE_OUTBOUND", false),
+		TrustedProxies:          trustedProxies,
 		WebhooksEnabled:         boolVar(get, "WEBHOOKS_ENABLED", false),
 		DisableTracking:         boolVar(get, "DISABLE_TRACKING", false),
 		DisableIPTracking:       boolVar(get, "DISABLE_IP_TRACKING", false),

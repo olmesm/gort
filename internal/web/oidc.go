@@ -40,7 +40,7 @@ type oidcClient struct {
 }
 
 func newOIDCClient(cfg *AppConfig) *oidcClient {
-	return &oidcClient{cfg: cfg}
+	return &oidcClient{cfg: cfg, httpClient: &http.Client{Timeout: 15 * time.Second}}
 }
 
 // wrapContext threads the override client through go-oidc and oauth2.
@@ -128,6 +128,7 @@ func (a *App) uiOIDCLogin(w http.ResponseWriter, r *http.Request) error {
 		Value:    a.signSession(payload),
 		Path:     "/admin/oidc",
 		HttpOnly: true,
+		Secure:   a.Cfg.UseHTTPS,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(oidcStateLifetime.Seconds()),
 	})
@@ -164,6 +165,7 @@ func (a *App) clearOIDCState(w http.ResponseWriter) {
 		Value:    "",
 		Path:     "/admin/oidc",
 		HttpOnly: true,
+		Secure:   a.Cfg.UseHTTPS,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	})
@@ -229,7 +231,7 @@ func (a *App) uiOIDCCallback(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("provisioning OIDC user: %w", err)
 	}
 
-	a.SignInWithGroups(w, user, identity.Groups)
+	a.signInUntil(w, user, identity.Groups, idToken.Expiry)
 	return redirect(w, r, state.ReturnURL)
 }
 

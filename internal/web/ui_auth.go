@@ -31,7 +31,8 @@ func (a *App) renderLogin(w http.ResponseWriter, status int, errorMessage, retur
 }
 
 func safeReturnURL(url string) string {
-	if strings.HasPrefix(url, "/") && !strings.HasPrefix(url, "//") {
+	if strings.HasPrefix(url, "/") && !strings.HasPrefix(url, "//") &&
+		!strings.ContainsAny(url, "\\\r\n\t") {
 		return url
 	}
 	return "/admin"
@@ -63,7 +64,7 @@ func (a *App) uiLogin(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	if user != nil && VerifyPassword(password, user.PasswordHash) {
+	if user != nil && user.AuthSource == "local" && VerifyPassword(password, user.PasswordHash) {
 		a.SignIn(w, user)
 		return redirect(w, r, returnURL)
 	}

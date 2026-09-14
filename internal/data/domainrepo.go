@@ -69,18 +69,6 @@ func scanDomainStatsRow(r rowScanner) (*DomainStatsRow, error) {
 	return &d, nil
 }
 
-func ListDomainsWithStats(ctx context.Context, db *DB) ([]DomainStatsRow, error) {
-	return queryAll(ctx, db, scanDomainStatsRow,
-		`SELECT d.id, d.authority, d.base_url_redirect, d.regular_404_redirect,
-		        d.invalid_short_url_redirect, d.is_default, d.created_at,
-		        (SELECT COUNT(*) FROM short_urls su WHERE su.domain_id = d.id) AS short_url_count,
-		        (SELECT COUNT(*) FROM visits v
-		           JOIN short_urls su ON su.id = v.short_url_id
-		          WHERE su.domain_id = d.id) AS visit_count
-		 FROM domains d
-		 ORDER BY d.is_default DESC, d.authority`)
-}
-
 // CreateDomain creates a non-default domain. Returns nil if the authority
 // already exists.
 func CreateDomain(ctx context.Context, db *DB, authority core.DomainAuthority) (*DomainRow, error) {

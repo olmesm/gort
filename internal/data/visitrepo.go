@@ -41,10 +41,6 @@ type VisitFilters struct {
 	ItemsPerPage int
 }
 
-func EmptyVisitFilters() VisitFilters {
-	return VisitFilters{Page: 1, ItemsPerPage: core.DefaultPageSize}
-}
-
 const visitSelectCols = `id, short_url_id, visit_type, visited_at, referer, user_agent, browser, os, device,
 	is_bot, remote_ip, country_code, country_name, city, latitude, longitude, visited_url, geo_resolved`
 
@@ -125,33 +121,18 @@ func buildVisitFilterSQL(db *DB, filters VisitFilters) ([]string, []any) {
 	return conditions, args
 }
 
-func pageVisitQuery(ctx context.Context, db *DB, baseWhere string, baseArgs []any, filters VisitFilters) (core.Page[VisitRow], error) {
-	empty := core.Page[VisitRow]{}
-	page, size := core.NormalizePaging(filters.Page, filters.ItemsPerPage)
-	extra, extraArgs := buildVisitFilterSQL(db, filters)
-
-	whereClause := baseWhere
-	if len(extra) > 0 {
-		whereClause += " AND " + strings.Join(extra, " AND ")
+func pageVisitQuery(ctx context.Context, db *DB, scope VisitScope, visitType *core.VisitType, filters VisitFilters) (core.Page[VisitRow], error) {
+	baseWhere, baseArgs := scopeWhere(scope)
+	if visitType != nil {
+		baseWhere += " AND vi.visit_type = ?"
+		baseArgs = append(baseArgs, visitType.Slug())
 	}
+	conditions, extraArgs := buildVisitFilterSQL(db, filters)
+	conditions = append([]string{baseWhere}, conditions...)
 	args := append(append([]any{}, baseArgs...), extraArgs...)
-
-	total, err := queryScalar[int64](ctx, db,
-		fmt.Sprintf("SELECT COUNT(*) FROM visits vi WHERE %s", whereClause), args...)
-	if err != nil {
-		return empty, err
-	}
-
-	page = clampListPage(page, size, total)
-	listArgs := append(append([]any{}, args...), size, core.PageOffset(page, size))
-	items, err := queryAll(ctx, db, scanVisitRow,
-		fmt.Sprintf(`SELECT %s FROM visits vi WHERE %s
-		             ORDER BY vi.visited_at DESC, vi.id DESC
-		             LIMIT ? OFFSET ?`, visitSelectColsAliased(), whereClause), listArgs...)
-	if err != nil {
-		return empty, err
-	}
-	return core.Page[VisitRow]{Items: items, CurrentPage: page, ItemsPerPage: size, TotalItems: total}, nil
+	return queryPage(ctx, db, scanVisitRow, visitSelectColsAliased(), "visits vi",
+		"vi.visited_at DESC, vi.id DESC", conditions, args,
+		ListFilters{Page: filters.Page, ItemsPerPage: filters.ItemsPerPage})
 }
 
 func visitSelectColsAliased() string {
@@ -163,39 +144,24 @@ func visitSelectColsAliased() string {
 }
 
 func ListVisitsForShortURL(ctx context.Context, db *DB, shortURLID core.ShortURLID, filters VisitFilters) (core.Page[VisitRow], error) {
-	return pageVisitQuery(ctx, db,
-		fmt.Sprintf("vi.short_url_id = ? AND %s", IsValidVisit("vi")),
-		[]any{shortURLID.Value()}, filters)
+	return pageVisitQuery(ctx, db, ShortURLScope(shortURLID), nil, filters)
 }
 
 // ListNonOrphanVisits lists all non-orphan visits, optionally filtered.
 func ListNonOrphanVisits(ctx context.Context, db *DB, filters VisitFilters) (core.Page[VisitRow], error) {
-	return pageVisitQuery(ctx, db, IsValidVisit("vi"), nil, filters)
+	return pageVisitQuery(ctx, db, GlobalScope(), nil, filters)
 }
 
 func ListOrphanVisits(ctx context.Context, db *DB, visitType *core.VisitType, filters VisitFilters) (core.Page[VisitRow], error) {
-	if visitType != nil {
-		return pageVisitQuery(ctx, db,
-			fmt.Sprintf("vi.visit_type = ? AND %s", IsOrphanVisit("vi")),
-			[]any{visitType.Slug()}, filters)
-	}
-	return pageVisitQuery(ctx, db, IsOrphanVisit("vi"), nil, filters)
+	return pageVisitQuery(ctx, db, OrphanScope(), visitType, filters)
 }
 
 func ListVisitsForTag(ctx context.Context, db *DB, tagName string, filters VisitFilters) (core.Page[VisitRow], error) {
-	return pageVisitQuery(ctx, db,
-		fmt.Sprintf(`%s AND EXISTS (
-		     SELECT 1 FROM short_url_tags st JOIN tags t ON t.id = st.tag_id
-		     WHERE st.short_url_id = vi.short_url_id AND t.name = ?)`, IsValidVisit("vi")),
-		[]any{tagName}, filters)
+	return pageVisitQuery(ctx, db, TagScope(tagName), nil, filters)
 }
 
 func ListVisitsForDomain(ctx context.Context, db *DB, domainID core.DomainID, filters VisitFilters) (core.Page[VisitRow], error) {
-	return pageVisitQuery(ctx, db,
-		fmt.Sprintf(`%s AND EXISTS (
-		     SELECT 1 FROM short_urls su WHERE su.id = vi.short_url_id AND su.domain_id = ?)`,
-			IsValidVisit("vi")),
-		[]any{domainID.Value()}, filters)
+	return pageVisitQuery(ctx, db, DomainScope(domainID), nil, filters)
 }
 
 func DeleteVisitsForShortURL(ctx context.Context, db *DB, shortURLID core.ShortURLID) (int, error) {

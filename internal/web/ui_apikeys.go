@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -102,38 +103,25 @@ func (a *App) uiCreateAPIKey(user *CurrentUser, w http.ResponseWriter, r *http.R
 	if n := strings.TrimSpace(r.PostFormValue("name")); n != "" {
 		name = &n
 	}
-	var domain *data.DomainRow
-	if authority := r.PostFormValue("domain"); authority != "" {
-		var err error
-		domain, err = data.DomainByAuthority(r.Context(), a.DB, strings.ToLower(authority))
-		if err != nil {
-			return err
+	body := CreateAPIKeyBody{Name: name, ExpiresAt: TryParseDate(r.PostFormValue("expiresAt"))}
+	if r.PostFormValue("expiresAt") != "" && body.ExpiresAt == nil {
+		return a.renderAPIKeysPage(r, w, user, "expiresAt must be a valid date.", "")
+	}
+	if role := r.PostFormValue("role"); role != "" {
+		body.Role = &role
+	}
+	if domain := r.PostFormValue("domain"); domain != "" {
+		body.Domain = &domain
+	}
+	key, err := a.issueAPIKey(r.Context(), &body)
+	if err != nil {
+		var problem *Problem
+		if errors.As(err, &problem) && problem.Status == http.StatusBadRequest {
+			return a.renderAPIKeysPage(r, w, user, problem.Detail, "")
 		}
-	}
-
-	var role core.APIKeyRole
-	switch r.PostFormValue("role") {
-	case "author":
-		role = core.AuthorRole()
-	case "domain":
-		if domain == nil {
-			return a.renderAPIKeysPage(r, w, user, "Domain-role keys need a domain.", "")
-		}
-		role = core.DomainRole(domain.ID)
-	default:
-		role = core.AdminRole()
-	}
-
-	var expiresAt *time.Time
-	if v := r.PostFormValue("expiresAt"); v != "" {
-		expiresAt = TryParseDate(v)
-	}
-
-	plainKey := GenerateAPIKey()
-	if _, err := data.InsertAPIKey(r.Context(), a.DB, HashAPIKey(plainKey), name, role, expiresAt); err != nil {
 		return err
 	}
-	return a.renderAPIKeysPage(r, w, user, "", plainKey)
+	return a.renderAPIKeysPage(r, w, user, "", key.APIKey)
 }
 
 // POST /admin/api-keys/{id}/toggle (admin)

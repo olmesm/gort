@@ -22,16 +22,13 @@ import (
 
 // ---- Passwords ----
 
-func HashPassword(password string) string {
+func HashPassword(password string) (string, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		panic(err) // only fails on invalid cost
-	}
-	return string(hash)
+	return string(hash), err
 }
 
 func VerifyPassword(password, hash string) bool {
-	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
+	return len(password) <= 72 && bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
 }
 
 // ---- API keys ----
@@ -147,11 +144,20 @@ func (u *CurrentUser) VisibleGroups() []string {
 }
 
 type sessionPayload struct {
-	UID      int64    `json:"uid"`
-	Username string   `json:"u"`
-	Role     string   `json:"r"`
-	Groups   []string `json:"g,omitempty"`
-	Expires  int64    `json:"exp"`
+	UID             int64    `json:"uid"`
+	Groups          []string `json:"g,omitempty"`
+	Expires         int64    `json:"exp"`
+	OIDCExpires     int64    `json:"oidc_exp,omitempty"`
+	PasswordVersion string   `json:"pv,omitempty"`
+}
+
+// passwordVersion invalidates local sessions when their stored password hash
+// changes, without exposing that hash in the readable cookie payload.
+func (a *App) passwordVersion(passwordHash string) string {
+	mac := hmac.New(sha256.New, a.sessionKey)
+	mac.Write([]byte("local-password-version\x00"))
+	mac.Write([]byte(passwordHash))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
 // loadOrCreateSessionKey persists the signing key under the data dir so
@@ -223,25 +229,29 @@ func (a *App) verifySession(cookie string) *sessionPayload {
 
 // SignIn issues the session cookie for a local user.
 func (a *App) SignIn(w http.ResponseWriter, user *data.UserRow) {
-	a.SignInWithGroups(w, user, nil)
+	a.signInUntil(w, user, nil, time.Now().Add(sessionLifetime))
 }
 
-// SignInWithGroups issues the session cookie carrying the user's OIDC groups.
-func (a *App) SignInWithGroups(w http.ResponseWriter, user *data.UserRow, groups []string) {
-	payload, _ := json.Marshal(sessionPayload{
-		UID:      user.ID.Value(),
-		Username: user.Username,
-		Role:     user.Role,
-		Groups:   groups,
-		Expires:  time.Now().Add(sessionLifetime).Unix(),
-	})
+// signInUntil caps the session at its authentication source's expiry.
+func (a *App) signInUntil(w http.ResponseWriter, user *data.UserRow, groups []string, expires time.Time) {
+	if maximum := time.Now().Add(sessionLifetime); expires.After(maximum) {
+		expires = maximum
+	}
+	session := sessionPayload{UID: user.ID.Value(), Groups: groups, Expires: expires.Unix()}
+	if user.AuthSource == "oidc" {
+		session.OIDCExpires = expires.Unix()
+	} else {
+		session.PasswordVersion = a.passwordVersion(user.PasswordHash)
+	}
+	payload, _ := json.Marshal(session)
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    a.signSession(payload),
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   a.Cfg.UseHTTPS,
 		SameSite: http.SameSiteLaxMode,
-		MaxAge:   int(sessionLifetime.Seconds()),
+		MaxAge:   max(1, int(time.Until(expires).Seconds())),
 	})
 }
 
@@ -251,6 +261,7 @@ func (a *App) SignOut(w http.ResponseWriter) {
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   a.Cfg.UseHTTPS,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	})
@@ -267,13 +278,28 @@ func (a *App) currentUser(r *http.Request) *CurrentUser {
 	if session == nil {
 		return nil
 	}
-	role, ok := core.UserRoleOfSlug(session.Role)
+	user, err := data.UserByID(r.Context(), a.DB, core.UserID(session.UID))
+	if err != nil || user == nil {
+		return nil
+	}
+	if a.Cfg.OIDCEnabled() && a.Cfg.OIDCOnly && user.AuthSource != "oidc" {
+		return nil
+	}
+	// Older OIDC cookies did not carry the verified token's expiry. Require
+	// a new login rather than retaining their former 14-day group grants.
+	if user.AuthSource == "oidc" && time.Now().Unix() >= session.OIDCExpires {
+		return nil
+	}
+	if user.AuthSource == "local" && !hmac.Equal([]byte(session.PasswordVersion), []byte(a.passwordVersion(user.PasswordHash))) {
+		return nil
+	}
+	role, ok := core.UserRoleOfSlug(user.Role)
 	if !ok {
 		return nil
 	}
 	return &CurrentUser{
-		ID:       core.UserID(session.UID),
-		Username: session.Username,
+		ID:       user.ID,
+		Username: user.Username,
 		Role:     role,
 		Groups:   core.NormalizeGroups(session.Groups),
 	}

@@ -12,7 +12,7 @@
 </div>
 <div class="card chart-card overview-chart">
   <div class="section-heading"><h2>Visits in the last 30 days</h2><span class="muted mono">UTC</span></div>
-  {{.Chart}}
+  {{template "visit-chart" .Chart}}
 </div>
 <div class="section-heading"><h2>Latest short URLs</h2><a href="/admin/short-urls">View all short URLs</a></div>
 <div class="table-wrap">

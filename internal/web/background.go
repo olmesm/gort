@@ -425,7 +425,9 @@ func (a *App) downloadGeoDB(ctx context.Context) (bool, error) {
 	}
 	defer gz.Close()
 
-	tr := tar.NewReader(gz)
+	// Bound both the database and skipped archive entries before extraction.
+	const maxGeoDBSize = 256 << 20
+	tr := tar.NewReader(io.LimitReader(gz, 2*maxGeoDBSize))
 	for {
 		header, err := tr.Next()
 		if err == io.EOF {
@@ -437,7 +439,10 @@ func (a *App) downloadGeoDB(ctx context.Context) (bool, error) {
 		if !strings.HasSuffix(strings.ToLower(header.Name), ".mmdb") {
 			continue
 		}
-		if err := os.MkdirAll(a.Cfg.DataDir, 0o755); err != nil {
+		if header.Typeflag != tar.TypeReg || header.Size > maxGeoDBSize {
+			return false, fmt.Errorf("GeoIP database entry is not a regular file within the 256 MiB limit")
+		}
+		if err := os.MkdirAll(a.Cfg.DataDir, 0o700); err != nil {
 			return false, err
 		}
 		target := a.Cfg.GeoDBPath()

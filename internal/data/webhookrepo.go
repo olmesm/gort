@@ -66,6 +66,10 @@ func SetWebhookEnabled(ctx context.Context, db *DB, id core.WebhookID, enabled b
 	return execAffected(ctx, db, "UPDATE webhooks SET enabled = ? WHERE id = ?", enabled, id.Value())
 }
 
+func ToggleWebhook(ctx context.Context, db *DB, id core.WebhookID) (bool, error) {
+	return execAffected(ctx, db, "UPDATE webhooks SET enabled = NOT enabled WHERE id = ?", id.Value())
+}
+
 func DeleteWebhook(ctx context.Context, db *DB, id core.WebhookID) (bool, error) {
 	return execAffected(ctx, db, "DELETE FROM webhooks WHERE id = ?", id.Value())
 }

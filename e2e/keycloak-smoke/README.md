@@ -1,45 +1,56 @@
-# Keycloak smoke test
+# PostgreSQL and Keycloak smoke tests
 
-Verifies gort's OIDC SSO and group-scoped authorization against a **real
-Keycloak** container — a real browser goes through the actual Keycloak login
-form, so discovery, PKCE, the code exchange, ID-token verification and the
-group-membership mapper are all exercised for real (the Go integration tests
-cover the same flow against an in-process fake IdP).
+The local Compose project starts PostgreSQL 16 on `localhost:15432` and Keycloak
+26.7.3 on `localhost:8081`. Both ports bind only to loopback. The imported `gort`
+realm includes the dashboard client and two test users:
 
-Requires Docker, Go, Node and the Playwright install from `../` (`npm install`
-in `e2e/`). Fresh databases only — use a throw-away `GORT_DATA_DIR`.
+- `alice` / `alice-pass-123`: `gort-admins` and `team-a`.
+- `bob` / `bob-pass-123`: `team-a` only.
+
+These credentials and the imported client secret are for this local test stack.
+Requires Docker, Go, Node, and `npm ci` in `e2e/`.
+
+From the repository root:
 
 ```sh
-# 1. Boot and configure Keycloak (realm gort, client gort-dashboard,
-#    groups gort-admins/team-a/team-b, users alice + bob):
-./setup.sh
+./e2e/keycloak-smoke/setup.sh
 
-# 2. Start gort against it (fresh data dir):
-cd ../..
-GORT_DATA_DIR=$(mktemp -d) GORT_PORT=18300 \
-GORT_AUTO_RESOLVE_TITLES=false \
-GORT_INITIAL_ADMIN_PASSWORD=local-admin-123 \
-GORT_OIDC_ISSUER=http://localhost:8081/realms/gort \
-GORT_OIDC_CLIENT_ID=gort-dashboard \
-GORT_OIDC_CLIENT_SECRET=gort-secret \
-GORT_OIDC_PROVIDER_NAME=Keycloak \
-go run ./cmd/gort &
-
-# 3. Run the checks (set PLAYWRIGHT_CHROMIUM_PATH to reuse a local browser):
-cd e2e/keycloak-smoke
-node test.js
-
-# 4. Teardown
-docker rm -f gort-kc-smoke
+# Each Go test uses its own schema and removes it on completion.
+GORT_TEST_POSTGRES_DSN='postgres://gort:gort-local-test@localhost:15432/gort?sslmode=disable' \
+  go test ./...
 ```
 
-What it asserts:
+Start Gort with fresh data and a fresh PostgreSQL schema for each browser run.
+This keeps the smoke test's link counts deterministic without touching other data:
 
-- alice (member of `gort-admins` + `team-a`) signs in through Keycloak, is
-  auto-provisioned, and gets the dashboard **admin** role; she creates an
-  ungrouped link plus one in `team-a` and one in `team-b`.
-- bob (member of `team-a` only) signs in as a **regular** user: no admin
-  navigation, 403 on `/admin/users`, sees only the ungrouped and `team-a`
-  links, gets a 404 on the `team-b` link's edit page, and his group picker
-  offers exactly `[No group, team-a]`.
-- Keycloak's "full group path" values (`/team-a`) are normalized to `team-a`.
+```sh
+SMOKE_SCHEMA="smoke_$(date +%s)"
+docker compose -f e2e/compose.yaml exec -T postgres \
+  psql -U gort -d gort -c "CREATE SCHEMA $SMOKE_SCHEMA"
+
+GORT_DATA_DIR=$(mktemp -d) GORT_PORT=18300 GORT_DEFAULT_DOMAIN=localhost:18300 \
+GORT_DB_DRIVER=postgres \
+GORT_DB_CONNECTION="postgres://gort:gort-local-test@localhost:15432/gort?sslmode=disable&search_path=$SMOKE_SCHEMA" \
+GORT_AUTO_RESOLVE_TITLES=false GORT_INITIAL_ADMIN_PASSWORD=local-admin-123 \
+GORT_OIDC_ISSUER=http://localhost:8081/realms/gort \
+GORT_OIDC_CLIENT_ID=gort-dashboard GORT_OIDC_CLIENT_SECRET=gort-secret \
+GORT_OIDC_PROVIDER_NAME=Keycloak go run ./cmd/gort
+```
+
+In another terminal:
+
+```sh
+# Set PLAYWRIGHT_CHROMIUM_PATH if using an installed Chrome/Chromium binary.
+node e2e/keycloak-smoke/test.js
+```
+
+The browser follows discovery, PKCE, code exchange and token verification against
+real Keycloak. It checks provisioning, admin access, group normalization, link
+visibility, unauthorized edit rejection, and scoped link creation. Regular users
+land on their links page; global tags, analytics and orphan visits require admin.
+
+Stop the local containers when finished:
+
+```sh
+docker compose -f e2e/compose.yaml down -v
+```

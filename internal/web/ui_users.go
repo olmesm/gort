@@ -68,7 +68,11 @@ func (a *App) uiCreateUser(user *CurrentUser, w http.ResponseWriter, r *http.Req
 	if username == "" || len(password) < 8 {
 		return a.renderUsersPage(r, w, user, "Username is required and the password needs at least 8 characters.")
 	}
-	created, err := data.InsertUser(r.Context(), a.DB, username, HashPassword(password), role)
+	hash, err := HashPassword(password)
+	if err != nil {
+		return a.renderUsersPage(r, w, user, "Passwords must be no longer than 72 bytes.")
+	}
+	created, err := data.InsertUser(r.Context(), a.DB, username, hash, role)
 	if err != nil {
 		return err
 	}
@@ -116,7 +120,11 @@ func (a *App) uiSetUserPassword(user *CurrentUser, w http.ResponseWriter, r *htt
 	if len(password) < 8 {
 		return a.renderUsersPage(r, w, user, "Passwords need at least 8 characters.")
 	}
-	if _, err := data.UpdateUserPassword(r.Context(), a.DB, id, HashPassword(password)); err != nil {
+	hash, err := HashPassword(password)
+	if err != nil {
+		return a.renderUsersPage(r, w, user, "Passwords must be no longer than 72 bytes.")
+	}
+	if _, err := data.UpdateUserPassword(r.Context(), a.DB, id, hash); err != nil {
 		return err
 	}
 	return redirect(w, r, "/admin/users")

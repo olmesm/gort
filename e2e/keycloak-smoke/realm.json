@@ -1,0 +1,81 @@
+{
+  "realm": "gort",
+  "enabled": true,
+  "groups": [
+    {
+      "name": "gort-admins"
+    },
+    {
+      "name": "team-a"
+    },
+    {
+      "name": "team-b"
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "gort-dashboard",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "gort-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://localhost:18300/admin/oidc/callback"
+      ],
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "claim.name": "groups",
+            "full.path": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "alice",
+      "enabled": true,
+      "email": "alice@example.test",
+      "emailVerified": true,
+      "firstName": "alice",
+      "lastName": "Test",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "alice-pass-123",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "gort-admins",
+        "team-a"
+      ]
+    },
+    {
+      "username": "bob",
+      "enabled": true,
+      "email": "bob@example.test",
+      "emailVerified": true,
+      "firstName": "bob",
+      "lastName": "Test",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "bob-pass-123",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "team-a"
+      ]
+    }
+  ]
+}

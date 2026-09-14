@@ -65,17 +65,6 @@ func NewTagNames(tags []string) ([]TagName, error) {
 	return out, nil
 }
 
-// ParseTagCsv splits a comma-separated form field into tags.
-func ParseTagCSV(csv string) ([]TagName, error) {
-	var parts []string
-	for _, p := range strings.Split(csv, ",") {
-		if p = strings.TrimSpace(p); p != "" {
-			parts = append(parts, p)
-		}
-	}
-	return NewTagNames(parts)
-}
-
 func TagValues(tags []TagName) []string {
 	out := make([]string, len(tags))
 	for i, t := range tags {

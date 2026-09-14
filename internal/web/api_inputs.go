@@ -1,9 +1,7 @@
 package web
 
 import (
-	"net/url"
 	"reflect"
-	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
 )
@@ -30,7 +28,7 @@ type AuthorityInput struct {
 }
 
 // String parameters preserve v1's permissive date, boolean and pagination
-// parsing. The same input types are used by the GraphQL operation adapters.
+// parsing at the REST boundary.
 type PageQuery struct {
 	Page         string `query:"page" doc:"Page number, starting at 1. Invalid values use the default."`
 	ItemsPerPage string `query:"itemsPerPage" doc:"Page size. Values are clamped to the supported range."`
@@ -93,49 +91,6 @@ type BreakdownInput struct {
 	StatsInput
 	By    string `query:"by" doc:"country, countryCode, city, browser, os, referer or device"`
 	Limit string `query:"limit" doc:"Maximum results, from 1 to 100. Defaults to 25."`
-}
-
-// queryValues translates the declared query fields to the existing v1 parser.
-// OptionalQuery retains the distinction between missing and empty parameters.
-func queryValues(input any) url.Values {
-	q := url.Values{}
-	var visit func(reflect.Value)
-	visit = func(v reflect.Value) {
-		for i := 0; i < v.NumField(); i++ {
-			field, value := v.Type().Field(i), v.Field(i)
-			if field.Anonymous {
-				visit(value)
-				continue
-			}
-			name := strings.Split(field.Tag.Get("query"), ",")[0]
-			if name == "" {
-				continue
-			}
-			if value.Type() == reflect.TypeFor[OptionalQuery]() {
-				opt := value.Interface().(OptionalQuery)
-				if opt.IsSet {
-					q.Set(name, opt.Value)
-				}
-				continue
-			}
-			if value.Kind() == reflect.Pointer {
-				if value.IsNil() {
-					continue
-				}
-				value = value.Elem()
-			}
-			switch value.Kind() {
-			case reflect.String:
-				q.Set(name, value.String())
-			case reflect.Slice:
-				for j := 0; j < value.Len(); j++ {
-					q.Add(name, value.Index(j).String())
-				}
-			}
-		}
-	}
-	visit(reflect.ValueOf(input).Elem())
-	return q
 }
 
 func result[T any](value T) (*T, error) { return &value, nil }

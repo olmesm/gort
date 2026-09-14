@@ -87,6 +87,12 @@ archives. (macOS: if you downloaded through a browser rather than `curl`,
 Gatekeeper may quarantine the binary — `xattr -d com.apple.quarantine gort`
 clears it.)
 
+On Unix, Gort creates new data directories with mode `0700` and new SQLite
+files with mode `0600`. Existing directories and files keep their permissions.
+For an existing installation, restrict the data directory and database to the
+service account, including any SQLite WAL files and backups. The database can
+contain visit data and webhook signing secrets.
+
 #### Try it out manually
 
 1. Open <http://localhost:8080/admin> and log in as `admin` with the printed
@@ -169,13 +175,18 @@ throw-away SQLite database, so no setup is needed.
 
 ## Configuration
 
+Set `GORT_USE_HTTPS=true` behind HTTPS termination so session cookies are marked
+Secure, and configure only the actual proxy CIDRs in `GORT_TRUSTED_PROXIES`.
+
+For real PostgreSQL and Keycloak tests, see [the local integration stack](e2e/keycloak-smoke/README.md).
+
 Everything is configured through environment variables.
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `GORT_PORT` | `8080` | HTTP listen port |
 | `GORT_DEFAULT_DOMAIN` | `localhost:<port>` | Authority used to build short URLs when no domain is given |
-| `GORT_USE_HTTPS` | `false` | Render short URLs with `https://` |
+| `GORT_USE_HTTPS` | `false` | Render HTTPS short URLs and set Secure session cookies |
 | `GORT_DATA_DIR` | `./data` | SQLite db, GeoLite2 db, session signing keys |
 | `GORT_DB_DRIVER` | `sqlite` | `sqlite` or `postgres` |
 | `GORT_DB_CONNECTION` | SQLite in data dir | SQLite file path or PostgreSQL connection string |
@@ -194,7 +205,9 @@ Everything is configured through environment variables.
 | `GORT_GEOLITE_LICENSE_KEY` | *(unset)* | Enables GeoLite2 download + visit geolocation |
 | `GORT_INITIAL_ADMIN_USERNAME` | `admin` | First-run dashboard admin |
 | `GORT_INITIAL_ADMIN_PASSWORD` | *(generated)* | First-run admin password |
-| `GORT_RATE_LIMIT_PER_MINUTE` | `120` | Mutating REST calls and GraphQL POSTs per minute per IP (0 disables) |
+| `GORT_TRUSTED_PROXIES` | *(unset)* | Comma-separated proxy CIDRs allowed to supply forwarded client IP and scheme. Headers from other peers are ignored. |
+| `GORT_ALLOW_PRIVATE_OUTBOUND` | `false` | Allow title fetching and webhooks to private/loopback destinations. Enable only for trusted deployments that need internal targets. |
+| `GORT_RATE_LIMIT_PER_MINUTE` | `120` | Mutating REST calls, GraphQL POSTs and password login attempts per minute per IP (0 disables) |
 | `GORT_OIDC_ISSUER` | *(unset)* | Enables SSO; the IdP's issuer URL (e.g. `https://kc.example.com/realms/main`) |
 | `GORT_OIDC_CLIENT_ID` | *(unset)* | OIDC client id (required with issuer) |
 | `GORT_OIDC_CLIENT_SECRET` | *(unset)* | OIDC client secret (confidential clients) |

@@ -7,6 +7,43 @@ uses [Semantic Versioning](https://semver.org/).
 The release workflow publishes the section matching the tag as the GitHub
 release notes, so every release needs an entry below.
 
+## [Unreleased]
+
+### Changed
+
+- REST parses query parameters before shared operations; GraphQL passes typed
+  filters and IDs directly. Existing REST defaults and aliases are retained.
+- Dashboard and API key/webhook creation share validation and persistence.
+- Tag, visit and short URL lists reuse the shared pagination query. Removed
+  unused helpers and obsolete repository queries.
+
+### Fixed
+
+- Link edits save fields and tags in one transaction, rolling back both on failure.
+- Dashboard key creation rejects expired keys and unknown roles.
+- Dashboard handlers return server errors when templates fail to render.
+- GraphQL hides internal database errors from clients.
+- Webhook toggles update only the requested row in one query.
+
+### Security
+
+- Restrict author-key link reuse and global dashboard resources to authorized users.
+- Refresh session authorization after account changes and invalidate local sessions
+  after password resets. OIDC sessions are bounded by verified token expiry.
+- Protect dashboard forms with Go's cross-origin checks, reject unsafe login return
+  URLs, and rate-limit password login attempts. HTTPS configuration enables Secure cookies.
+- Block private/special outbound destinations for title resolution and webhooks by
+  default. Forwarded headers require explicitly trusted proxy CIDRs.
+- Reject overlong bcrypt passwords, create private data paths, and bound GeoIP extraction.
+- Update x/crypto to v0.56.0. Add routine database/race and vulnerability checks.
+
+### Testing
+
+- Add an isolated PostgreSQL/Keycloak Compose stack and run Go integration tests in
+  separate PostgreSQL schemas. Chart SVG now uses the shared HTML template system.
+- Record findings, residual session limitations and library tradeoffs in
+  `docs/security-review.md`.
+
 ## [0.2.0] - 2026-09-14
 
 ### Added

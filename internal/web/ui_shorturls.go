@@ -226,13 +226,12 @@ func (a *App) uiListShortURLs(user *CurrentUser, w http.ResponseWriter, r *http.
 		return err
 	}
 
-	a.renderPage(w, http.StatusOK, "shorturls", user, "/admin/short-urls", "Short URLs", suListView{
+	return a.renderPage(w, http.StatusOK, "shorturls", user, "/admin/short-urls", "Short URLs", suListView{
 		Search:       lq.Search,
 		TagOptions:   optionsOf(allTags, lq.Tag),
 		GroupOptions: optionsOf(filterGroups, core.NormalizeGroup(lq.Group)),
 		Table:        table,
 	})
-	return nil
 }
 
 // ---- create ----

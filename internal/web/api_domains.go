@@ -124,7 +124,7 @@ func (a *App) opDeleteDomain(ctx context.Context, key *AuthenticatedKey, in *Aut
 }
 
 // GET /rest/v1/domains/{authority}/visits
-func (a *App) opDomainVisits(ctx context.Context, key *AuthenticatedKey, in *DomainVisitsInput) (*PageDTO[VisitDTO], error) {
+func (a *App) opDomainVisits(ctx context.Context, key *AuthenticatedKey, in *domainVisitOptions) (*PageDTO[VisitDTO], error) {
 	authority := in.Authority
 	domain, err := data.DomainByAuthority(ctx, a.DB, strings.ToLower(authority))
 	if err != nil {
@@ -143,7 +143,7 @@ func (a *App) opDomainVisits(ctx context.Context, key *AuthenticatedKey, in *Dom
 	if !allowed {
 		return nil, Forbidden("This API key cannot view visits for this domain.")
 	}
-	page, err := data.ListVisitsForDomain(ctx, a.DB, domain.ID, visitFiltersFromQuery(queryValues(in)))
+	page, err := data.ListVisitsForDomain(ctx, a.DB, domain.ID, in.VisitFilters)
 	if err != nil {
 		return nil, err
 	}

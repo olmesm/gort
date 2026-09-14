@@ -41,11 +41,6 @@ func UserByID(ctx context.Context, db *DB, id core.UserID) (*UserRow, error) {
 		fmt.Sprintf("SELECT %s FROM users WHERE id = ?", userSelectCols), id.Value())
 }
 
-func ListUsers(ctx context.Context, db *DB) ([]UserRow, error) {
-	return queryAll(ctx, db, scanUserRow,
-		fmt.Sprintf("SELECT %s FROM users ORDER BY username", userSelectCols))
-}
-
 func UpdateUserPassword(ctx context.Context, db *DB, id core.UserID, passwordHash string) (bool, error) {
 	return execAffected(ctx, db, "UPDATE users SET password_hash = ? WHERE id = ?", passwordHash, id.Value())
 }

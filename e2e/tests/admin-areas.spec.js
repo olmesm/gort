@@ -67,17 +67,23 @@ test.describe('admin-only areas', () => {
     await userPage.fill('input[name="username"]', 'viewer');
     await userPage.fill('input[name="password"]', 'viewer-pass-123');
     await userPage.click('button:has-text("Log in")');
-    await expect(userPage.locator('h1')).toHaveText('Overview');
+    await expect(userPage.locator('h1')).toHaveText('Short URLs');
 
     const nav = userPage.locator('.topbar nav');
     await expect(nav.locator('a', { hasText: 'Short URLs' })).toBeVisible();
     await expect(nav.locator('a', { hasText: 'Users' })).toHaveCount(0);
     await expect(nav.locator('a', { hasText: 'API keys' })).toHaveCount(0);
     await expect(nav.locator('a', { hasText: 'Webhooks' })).toHaveCount(0);
+    for (const label of ['Tags', 'Domains', 'Orphan visits']) {
+      await expect(nav.getByRole('link', { name: label, exact: true })).toHaveCount(0);
+    }
 
     // Deep-linking into an admin page is refused too.
     const response = await userPage.goto('/admin/users');
     expect(response.status()).toBe(403);
+    for (const path of ['/admin/tags', '/admin/domains', '/admin/visits/orphan']) {
+      expect((await userPage.goto(path)).status()).toBe(403);
+    }
     await context.close();
   });
 

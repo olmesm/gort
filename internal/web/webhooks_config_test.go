@@ -84,7 +84,7 @@ func TestWebhooksDisabledByDefault(t *testing.T) {
 }
 
 func TestWebhooksOptInDeliversQueuedAndNewEvents(t *testing.T) {
-	app := newTestAppWithConfig(t, map[string]string{"WEBHOOKS_ENABLED": "true"})
+	app := newTestAppWithConfig(t, map[string]string{"WEBHOOKS_ENABLED": "true", "ALLOW_PRIVATE_OUTBOUND": "true"})
 	received := make(chan string, 2)
 	endpoint := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)

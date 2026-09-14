@@ -34,6 +34,9 @@ type DB struct {
 func Open(dialect Dialect, connectionString string) (*DB, error) {
 	switch dialect {
 	case Sqlite:
+		if err := createSQLiteFile(connectionString); err != nil {
+			return nil, err
+		}
 		sep := "?"
 		if strings.Contains(connectionString, "?") {
 			sep = "&"

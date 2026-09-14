@@ -146,12 +146,11 @@ func shortURLProblem(err error) error {
 }
 
 // GET /rest/v1/short-urls
-func (a *App) opListShortURLs(ctx context.Context, key *AuthenticatedKey, in *ShortURLListInput) (*PageDTO[ShortURLDTO], error) {
-	q := queryValues(in)
+func (a *App) opListShortURLs(ctx context.Context, key *AuthenticatedKey, in *shortURLListOptions) (*PageDTO[ShortURLDTO], error) {
 
 	// An unknown ?domain= filter matches nothing (-1 is an impossible id).
 	var domainFilter *core.DomainID
-	if authority := q.Get("domain"); authority != "" {
+	if authority := in.Domain; authority != "" {
 		d, err := data.DomainByAuthority(ctx, a.DB, strings.ToLower(authority))
 		if err != nil {
 			return nil, err
@@ -163,47 +162,11 @@ func (a *App) opListShortURLs(ctx context.Context, key *AuthenticatedKey, in *Sh
 		domainFilter = &id
 	}
 
-	orderBy, descending := data.OrderDateCreated, true
-	if value := q.Get("orderBy"); value != "" {
-		field, dir := value, "ASC"
-		if parts := strings.Split(value, "-"); len(parts) == 2 {
-			field, dir = parts[0], strings.ToUpper(parts[1])
-		}
-		switch field {
-		case "shortCode":
-			orderBy = data.OrderShortCode
-		case "longUrl":
-			orderBy = data.OrderLongURL
-		case "title":
-			orderBy = data.OrderTitle
-		case "visits":
-			orderBy = data.OrderVisits
-		default:
-			orderBy = data.OrderDateCreated
-		}
-		descending = dir == "DESC"
-	}
-
-	var groupFilter *string
-	if q.Has("group") {
-		group := core.NormalizeGroup(q.Get("group"))
-		groupFilter = &group
-	}
-
-	filters := data.ShortURLFilters{
-		SearchTerm:              q.Get("searchTerm"),
-		Tags:                    queryStringList(q, "tags"),
-		Group:                   groupFilter,
-		TagsMatchAll:            strings.ToLower(q.Get("tagsMode")) == "all",
-		StartDate:               queryDate(q, "startDate"),
-		EndDate:                 queryDate(q, "endDate"),
-		DomainID:                domainFilter,
-		ExcludeMaxVisitsReached: queryBool(q, "excludeMaxVisitsReached"),
-		ExcludePastValidUntil:   queryBool(q, "excludePastValidUntil"),
-		OrderBy:                 orderBy,
-		Descending:              descending,
-		Page:                    queryIntDefault(q, "page", 1),
-		ItemsPerPage:            queryIntDefault(q, "itemsPerPage", core.DefaultPageSize),
+	filters := in.ShortURLFilters
+	filters.DomainID = domainFilter
+	if filters.Group != nil {
+		group := core.NormalizeGroup(*filters.Group)
+		filters.Group = &group
 	}
 	filters = applyKeyScope(key, filters)
 
@@ -263,7 +226,7 @@ func (a *App) opCreateShortURL(ctx context.Context, key *AuthenticatedKey, in *B
 		return nil, shortURLProblem(err)
 	}
 
-	dto, err := a.CreateShortURL(ctx, APIKeyAuthor(key.ID()), spec)
+	dto, err := a.CreateShortURL(ctx, APIKeyAuthor(key), spec)
 	if err != nil {
 		return nil, shortURLProblem(err)
 	}
@@ -396,14 +359,13 @@ func (a *App) opSetRules(ctx context.Context, key *AuthenticatedKey, in *ShortUR
 }
 
 // GET /rest/v1/short-urls/{code}/visits
-func (a *App) opListShortURLVisits(ctx context.Context, key *AuthenticatedKey, in *ShortURLVisitsInput) (*PageDTO[VisitDTO], error) {
+func (a *App) opListShortURLVisits(ctx context.Context, key *AuthenticatedKey, in *shortURLVisitOptions) (*PageDTO[VisitDTO], error) {
 	code := in.Code
-	q := queryValues(in)
-	detail, err := a.findAccessibleShortURL(ctx, key, code, q.Get("domain"))
+	detail, err := a.findAccessibleShortURL(ctx, key, code, in.Domain)
 	if err != nil {
 		return nil, err
 	}
-	page, err := data.ListVisitsForShortURL(ctx, a.DB, detail.ID, visitFiltersFromQuery(q))
+	page, err := data.ListVisitsForShortURL(ctx, a.DB, detail.ID, in.VisitFilters)
 	if err != nil {
 		return nil, err
 	}

@@ -26,7 +26,7 @@ async function keycloakLogin(page, username, password) {
   await page.fill('#username', username);
   await page.fill('#password', password);
   await page.click('#kc-login');
-  await page.waitForURL(`${GORT}/admin`);
+  await page.waitForURL(username === 'bob' ? `${GORT}/admin/short-urls` : `${GORT}/admin`);
 }
 
 async function main() {
@@ -71,12 +71,16 @@ async function main() {
   const bob = await bobCtx.newPage();
   await keycloakLogin(bob, 'bob', 'bob-pass-123');
 
-  check('bob lands on the overview', (await bob.locator('h1').textContent()) === 'Overview');
+  check('bob lands on his links', (await bob.locator('h1').textContent()) === 'Short URLs');
   check('bob has no admin nav (Users hidden)',
     (await bob.locator('.topbar nav a', { hasText: 'Users' }).count()) === 0);
   const usersResp = await bob.goto(`${GORT}/admin/users`);
   check('bob gets 403 on /admin/users', usersResp.status() === 403);
 
+  for (const path of ['/admin/tags', '/admin/visits/orphan', '/admin/domains']) {
+    const response = await bob.goto(`${GORT}${path}`);
+    check(`bob cannot access global page ${path}`, response.status() === 403);
+  }
   await bob.goto(`${GORT}/admin/short-urls`);
   const bobBody = await bob.locator('#su-table').textContent();
   check('bob sees the ungrouped link', bobBody.includes('kc-open'));

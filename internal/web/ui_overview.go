@@ -1,7 +1,6 @@
 package web
 
 import (
-	"html/template"
 	"net/http"
 	"time"
 
@@ -11,12 +10,15 @@ import (
 type overviewView struct {
 	GeoWarning bool
 	Stats      data.OverviewRow
-	Chart      template.HTML
+	Chart      visitChartView
 	Recent     []data.ShortURLDetail
 }
 
 // GET /admin — dashboard overview.
 func (a *App) uiOverview(user *CurrentUser, w http.ResponseWriter, r *http.Request) error {
+	if !user.IsAdmin() {
+		return redirect(w, r, "/admin/short-urls")
+	}
 	stats, err := data.Overview(r.Context(), a.DB)
 	if err != nil {
 		return err

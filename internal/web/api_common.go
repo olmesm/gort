@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/olmesm/gort/internal/core"
@@ -105,44 +104,11 @@ func queryInt(q url.Values, name string) *int {
 }
 
 func queryIntDefault(q url.Values, name string, defaultVal int) int {
-	if v := queryInt(q, name); v != nil {
-		return *v
-	}
-	return defaultVal
+	return parseIntDefault(q.Get(name), defaultVal)
 }
 
 func queryDate(q url.Values, name string) *time.Time {
-	if v := q.Get(name); v != "" {
-		return TryParseDate(v)
-	}
-	return nil
-}
-
-func queryBool(q url.Values, name string) bool {
-	switch strings.ToLower(q.Get(name)) {
-	case "true", "1", "yes":
-		return true
-	default:
-		return false
-	}
-}
-
-// queryStringList mirrors ASP.NET binding: repeated params, `name[]` params
-// and nothing else.
-func queryStringList(q url.Values, name string) []string {
-	values := append([]string{}, q[name]...)
-	values = append(values, q[name+"[]"]...)
-	return values
-}
-
-func visitFiltersFromQuery(q url.Values) data.VisitFilters {
-	return data.VisitFilters{
-		StartDate:    queryDate(q, "startDate"),
-		EndDate:      queryDate(q, "endDate"),
-		ExcludeBots:  queryBool(q, "excludeBots"),
-		Page:         queryIntDefault(q, "page", 1),
-		ItemsPerPage: queryIntDefault(q, "itemsPerPage", core.DefaultPageSize),
-	}
+	return TryParseDate(q.Get(name))
 }
 
 // ---- API key scoping ----

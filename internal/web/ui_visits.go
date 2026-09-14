@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"fmt"
-	"html/template"
 	"net/http"
 	"net/url"
 	"time"
@@ -16,7 +15,7 @@ type analyticsView struct {
 	BasePath       string
 	StartVal       string
 	EndVal         string
-	Chart          template.HTML
+	Chart          visitChartView
 	Breakdowns     []breakdownCardView
 	ShowVisitedURL bool
 	Visits         []visitRowView
@@ -160,14 +159,13 @@ func (a *App) uiShortURLVisits(user *CurrentUser, w http.ResponseWriter, r *http
 		return err
 	}
 
-	a.renderPage(w, http.StatusOK, "visits_shorturl", user, "/admin/short-urls", "Visits", shortURLVisitsView{
+	return a.renderPage(w, http.StatusOK, "visits_shorturl", user, "/admin/short-urls", "Visits", shortURLVisitsView{
 		Display:   detail.Authority + "/" + detail.ShortCode,
 		EditURL:   fmt.Sprintf("/admin/short-urls/%d/edit", detail.ID),
 		ShortURL:  ShortURLFor(a.Cfg, detail.Authority, detail.ShortCode),
 		LongURL:   detail.LongURL,
 		Analytics: analytics,
 	})
-	return nil
 }
 
 type orphanVisitsView struct {
@@ -190,11 +188,10 @@ func (a *App) uiOrphanVisits(user *CurrentUser, w http.ResponseWriter, r *http.R
 	if err != nil {
 		return err
 	}
-	a.renderPage(w, http.StatusOK, "visits_orphan", user, "/admin/visits/orphan", "Orphan visits", orphanVisitsView{
+	return a.renderPage(w, http.StatusOK, "visits_orphan", user, "/admin/visits/orphan", "Orphan visits", orphanVisitsView{
 		ShowDelete: user.IsAdmin(),
 		Analytics:  analytics,
 	})
-	return nil
 }
 
 // POST /admin/visits/orphan/delete (admin)
