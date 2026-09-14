@@ -9,6 +9,8 @@ release notes, so every release needs an entry below.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-15
+
 ### Changed
 
 - REST parses query parameters before shared operations; GraphQL passes typed
@@ -43,6 +45,16 @@ release notes, so every release needs an entry below.
   separate PostgreSQL schemas. Chart SVG now uses the shared HTML template system.
 - Record findings, residual session limitations and library tradeoffs in
   `docs/security-review.md`.
+
+### Upgrade notes
+
+- No database migration is required. Existing session cookies require a new login.
+- Behind a reverse proxy, configure `GORT_TRUSTED_PROXIES` with its CIDRs so client
+  IP addresses and forwarded schemes are accepted. Set `GORT_USE_HTTPS=true` when
+  serving the dashboard over HTTPS.
+- Title resolution and webhook delivery block private destinations by default.
+  Installations that intentionally use internal destinations can opt in with
+  `GORT_ALLOW_PRIVATE_OUTBOUND=true`.
 
 ## [0.2.0] - 2026-09-14
 
@@ -152,6 +164,8 @@ release notes, so every release needs an entry below.
   link visibility and a configurable admin group.
 - Single static binary releases for Linux and macOS (amd64, arm64).
 
+[Unreleased]: https://github.com/olmesm/gort/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/olmesm/gort/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/olmesm/gort/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/olmesm/gort/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/olmesm/gort/compare/v0.1.0...v0.1.1

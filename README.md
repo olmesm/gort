@@ -64,7 +64,7 @@ install. Download the archive for your platform from the
 
 ```sh
 # pick one: linux_amd64, linux_arm64, darwin_amd64, darwin_arm64
-VERSION=0.2.0
+VERSION=0.2.1
 curl -sSL "https://github.com/olmesm/gort/releases/download/v${VERSION}/gort_${VERSION}_linux_amd64.tar.gz" | tar xz
 ./gort
 ```
