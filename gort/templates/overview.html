@@ -1,0 +1,38 @@
+{% extends "layout.html" %}
+{% block content %}
+{% with data1=d.Data %}
+<div class="page-heading"><h1>Overview</h1><a class="btn" href="/admin/short-urls/new">+ New short URL</a></div>
+
+<div class="stat-grid">
+  <div class="stat"><div class="num">{{ data1.Stats.ShortURLCount }}</div><div class="label"><a href="/admin/short-urls">Short URLs</a></div></div>
+  <div class="stat"><div class="num">{{ data1.Stats.VisitCount }}</div><div class="label">Visits</div></div>
+  <div class="stat"><div class="num">{{ data1.Stats.OrphanVisitCount }}</div><div class="label"><a href="/admin/visits/orphan">Orphan visits</a></div></div>
+  <div class="stat"><div class="num">{{ data1.Stats.TagCount }}</div><div class="label"><a href="/admin/tags">Tags</a></div></div>
+  <div class="stat"><div class="num">{{ data1.Stats.BotVisitCount }}</div><div class="label">Bot visits</div></div>
+</div>
+<div class="card chart-card overview-chart">
+  <div class="section-heading"><h2>Visits in the last 30 days</h2><span class="muted mono">UTC</span></div>
+  {% with d=data1.Chart, root=data1.Chart %}{% include "visit-chart.html" %}{% endwith %}
+</div>
+<div class="section-heading"><h2>Latest short URLs</h2><a href="/admin/short-urls">View all short URLs</a></div>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Short URL</th><th>Long URL</th><th>Visits</th><th>Created (UTC)</th></tr>
+    </thead>
+    <tbody>
+      {% for item2 in data1.Recent %}
+      <tr>
+        <td><a class="mono" href="/admin/short-urls/{{ item2.ID }}/edit">{{ item2.Authority }}/{{ item2.ShortCode }}</a></td>
+        <td><span class="truncate">{{ item2.LongURL }}</span></td>
+        <td>{{ item2.VisitCount }}</td>
+        <td class="muted">{{ fmtDate(item2.CreatedAt) }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">No short URLs yet. Create one to start tracking visits.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endwith %}
+{% endblock %}

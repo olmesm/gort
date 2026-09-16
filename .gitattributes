@@ -1,3 +1,1 @@
-internal/web/gql_generated.go linguist-generated=true
-internal/web/gql_models.go linguist-generated=true
-internal/web/static/scalar-1.68.0.js linguist-vendored=true -whitespace
+gort/static/scalar-1.68.0.js linguist-vendored=true -whitespace

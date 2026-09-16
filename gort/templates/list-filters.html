@@ -1,0 +1,20 @@
+
+<form class="toolbar" method="get" action="{{ d.BasePath }}" aria-label="List filters">
+  <div>
+    <label for="list-search">Search</label>
+    <input id="list-search" type="search" name="search" value="{{ d.Search }}" placeholder="{{ d.Placeholder }}">
+  </div>
+  {% for item9 in d.Selects %}
+  <div>
+    <label for="filter-{{ item9.Name }}">{{ item9.Label }}</label>
+    <select id="filter-{{ item9.Name }}" name="{{ item9.Name }}">
+      <option value="">All</option>
+      {% for item10 in item9.Options %}
+      <option value="{{ item10.Value }}"{% if item10.Selected %} selected{% endif %}>{{ item10.Value }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endfor %}
+  <button class="secondary">Filter</button>
+  <a href="{{ d.BasePath }}">Clear filters</a>
+</form>

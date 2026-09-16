@@ -1,0 +1,84 @@
+# Deployment
+
+[Back to the README](../README.md) · [Configuration](configuration.md)
+
+Gort requires Python 3.12 and PostgreSQL. Run `uv sync --frozen` to install
+the pinned dependencies. Set `GORT_DB_CONNECTION` to a PostgreSQL URL or libpq
+connection string, then start the application with `uv run gort`.
+
+## Database
+
+Create a database owned by the application role. Startup applies Alembic
+migrations before accepting requests. The role needs permission to create and
+alter the application tables. Connections use UTC and the database stores
+timestamps with time zones.
+
+The migration history starts with `0001_initial`, a complete application
+schema. Use an empty database for a new deployment. Unrecognized revision
+histories fail startup rather than being silently stamped or modified.
+
+The application and Alembic CLI read the same process environment. `PGOPTIONS`
+is preserved unless the connection string supplies its own `options`; each
+connection uses UTC. For example:
+
+```sh
+export GORT_DB_CONNECTION='postgresql://localhost/gort'
+uv run alembic upgrade head
+uv run alembic check
+```
+
+For schema changes, create and review a migration before applying it:
+
+```sh
+uv run alembic revision --autogenerate -m "Describe the change"
+uv run alembic upgrade head
+```
+
+Back up PostgreSQL and the signing key at `GORT_DATA_DIR/keys/session.key`.
+The application creates new key directories with mode `0700` and keys with
+mode `0600`. The Docker container runs as UID/GID 65532.
+
+## Processes and background work
+
+The CLI starts one Uvicorn process with background threads for page-title
+lookup and webhook delivery. `GORT_WORKERS_ENABLED=false` disables those
+threads. Use `uv run gort` so the server lets Gort validate forwarded headers
+against `GORT_TRUSTED_PROXIES`.
+
+Webhook deliveries persist across restarts. A conditional database update
+claims each due delivery for five minutes. Failed requests retry with
+exponential backoff, up to six attempts. Receivers should tolerate duplicate
+events if a process stops between sending a request and saving its result.
+Deliveries that exhaust
+all attempts remain marked failed; there is no automatic replay.
+
+Rate limits are per process. When deploying multiple web processes, designate
+one for background work and enforce shared rate limits at the reverse proxy.
+All processes must use the same PostgreSQL database and session-signing key.
+Apply migrations before starting additional web processes; startup migrations
+do not have a lock shared between processes.
+
+Outbound title and webhook requests validate DNS answers and connect to the
+validated address while preserving TLS hostname verification. Every redirect
+receives the same checks. Proxy environment variables cannot bypass them.
+
+## Testing
+
+Set `GORT_TEST_POSTGRES_DSN` to a disposable database. `make check` runs Ruff
+and pytest; database tests create and drop isolated schemas. The browser suite
+uses the same setting and an isolated schema for each run:
+
+```sh
+export GORT_TEST_POSTGRES_DSN='postgresql://localhost/gort_test'
+createdb gort_test
+make check
+cd e2e
+npm ci
+npx playwright install chromium
+npm test
+```
+
+The test role must be able to create schemas and drop the schemas it owns.
+CI supplies PostgreSQL to the Python and browser jobs. See the
+[live Keycloak test stack](../e2e/keycloak-smoke/README.md) for identity-provider
+login and group-access checks.

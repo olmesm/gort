@@ -11,12 +11,15 @@ test.describe('admin-only areas', () => {
     await page.click('button:has-text("Create")');
 
     const banner = page.locator('.alert.success');
-    await expect(banner).toContainText('Copy it now');
+    await expect(banner).toContainText('Copy it before leaving this page. It is shown only once.');
     await expect(banner.locator('.mono')).toContainText(/^gort_/);
+    const plaintext = await banner.locator('.mono').textContent();
 
     const row = page.locator('tr', { hasText: 'e2e-key' });
     await expect(row.locator('.badge', { hasText: 'author' })).toBeVisible();
     await expect(row.locator('.badge.green')).toHaveText('enabled');
+    await page.goto('/admin/api-keys');
+    await expect(page.locator('body')).not.toContainText(plaintext);
   });
 
   test('disable and re-enable the API key', async ({ page }) => {
@@ -43,10 +46,14 @@ test.describe('admin-only areas', () => {
     await page.check('input[name="event_visit_recorded"]');
     await page.click('button:has-text("Create webhook")');
 
-    await expect(page.locator('.alert.success')).toContainText('signing secret');
+    const banner = page.locator('.alert.success');
+    await expect(banner).toContainText('Copy the signing secret before leaving this page. It is shown only once.');
+    const secret = await banner.locator('.mono').textContent();
     const row = page.locator('tr', { hasText: 'e2e-hook' });
     await expect(row.locator('.badge.gray', { hasText: 'url.created' })).toBeVisible();
     await expect(row.locator('.badge.gray', { hasText: 'visit.recorded' })).toBeVisible();
+    await page.goto('/admin/webhooks');
+    await expect(page.locator('body')).not.toContainText(secret);
   });
 
   test('create a regular user who sees no admin navigation', async ({ page, browser, baseURL }) => {

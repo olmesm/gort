@@ -1,0 +1,144 @@
+"UTC timestamp in ISO 8601 format."
+scalar Time
+"Signed 64-bit integer."
+scalar Long
+
+
+type Query {
+ shortURLs(filter: ShortURLFilter): ShortURLPage!
+ shortURL(code: String!, domain: String): ShortURL!
+ tags(searchTerm: String, page: Int, itemsPerPage: Int): TagPage!
+ domains: [Domain!]!
+ visitsOverview: VisitOverview!
+ visits(filter: VisitFilter): VisitPage!
+ orphanVisits(type: String, filter: VisitFilter): VisitPage!
+ tagVisits(tag: String!, filter: VisitFilter): VisitPage!
+ domainVisits(authority: String!, filter: VisitFilter): VisitPage!
+ visitsPerDay(scope: StatsScope): [DayCount!]!
+ breakdown(by: String!, scope: StatsScope, limit: Int): [BreakdownCount!]!
+ apiKeys: [APIKey!]!
+ webhooks: [Webhook!]!
+}
+type Mutation {
+ createShortURL(input: CreateShortURLInput!): ShortURL!
+ updateShortURL(code: String!, domain: String, input: UpdateShortURLInput!): ShortURL!
+ deleteShortURL(code: String!, domain: String): Boolean!
+ setRedirectRules(code: String!, domain: String, rules: [RedirectRuleInput!]!): RedirectRules!
+ deleteShortURLVisits(code: String!, domain: String): Long!
+ renameTag(oldName: String!, newName: String!): TagRename!
+ deleteTags(tags: [String!]!): Long!
+ createDomain(domain: String!): Domain!
+ updateDomainRedirects(input: DomainRedirectsInput!): Domain!
+ deleteDomain(authority: String!): Boolean!
+ deleteOrphanVisits: Long!
+ createAPIKey(input: CreateAPIKeyInput!): APIKey!
+ setAPIKeyEnabled(id: Long!, enabled: Boolean!): IDEnabled!
+ deleteAPIKey(id: Long!): Boolean!
+ createWebhook(input: CreateWebhookInput!): Webhook!
+ setWebhookEnabled(id: Long!, enabled: Boolean!): IDEnabled!
+ deleteWebhook(id: Long!): Boolean!
+}
+input ShortURLFilter {
+ searchTerm: String
+ tags: [String!]
+ tagsMode: String
+ group: String
+ domain: String
+ orderBy: String
+ startDate: String
+ endDate: String
+ excludeMaxVisitsReached: Boolean
+ excludePastValidUntil: Boolean
+ page: Int
+ itemsPerPage: Int
+}
+input VisitFilter { startDate: String, endDate: String, excludeBots: Boolean, page: Int, itemsPerPage: Int }
+input StatsScope { shortCode: String, domain: String, tag: String, orphan: Boolean, startDate: String, endDate: String }
+input CreateShortURLInput {
+ longUrl: String!
+ customSlug: String
+ shortCodeLength: Int
+ domain: String
+ title: String
+ tags: [String!]
+ group: String
+ maxVisits: Long
+ validSince: Time
+ validUntil: Time
+ forwardQuery: Boolean
+ crawlable: Boolean
+ redirectStatus: Int
+ findIfExists: Boolean
+}
+"""
+Omitted fields stay unchanged. Null clears title, tags, group, maxVisits,
+validSince and validUntil. Null sets forwardQuery and crawlable to false;
+longUrl and redirectStatus reject null.
+"""
+input UpdateShortURLInput {
+ longUrl: String
+ title: String
+ tags: [String!]
+ group: String
+ maxVisits: Long
+ validSince: Time
+ validUntil: Time
+ forwardQuery: Boolean
+ crawlable: Boolean
+ redirectStatus: Int
+}
+input RedirectRuleInput { longUrl: String!, conditions: [RuleConditionInput!]! }
+input RuleConditionInput { type: String!, matchKey: String, matchValue: String! }
+"Replace all three redirects. Omitted or null values clear the corresponding redirect."
+input DomainRedirectsInput { domain: String!, baseUrlRedirect: String, regular404Redirect: String, invalidShortUrlRedirect: String }
+input CreateAPIKeyInput { name: String, role: String, domain: String, expiresAt: Time }
+input CreateWebhookInput { name: String!, url: String!, events: [String!]! }
+
+type ShortURL {
+ shortCode: String!
+ shortUrl: String!
+ domain: String!
+ longUrl: String!
+ title: String
+ dateCreated: Time!
+ tags: [String!]!
+ group: String
+ meta: ShortURLMeta!
+ visitsSummary: VisitsSummary!
+ forwardQuery: Boolean!
+ crawlable: Boolean!
+ redirectStatus: Int!
+ visits(filter: VisitFilter): VisitPage!
+ redirectRules: RedirectRules!
+}
+type ShortURLMeta { validSince: Time, validUntil: Time, maxVisits: Long }
+type VisitsSummary { total: Long!, nonBots: Long!, bots: Long! }
+type Pagination { currentPage: Int!, pagesCount: Int!, itemsPerPage: Int!, itemsInCurrentPage: Int!, totalItems: Long! }
+type ShortURLPage { data: [ShortURL!]!, pagination: Pagination! }
+type VisitPage { data: [Visit!]!, pagination: Pagination! }
+type TagPage { data: [Tag!]!, pagination: Pagination! }
+type Tag { tag: String!, shortUrlsCount: Long!, visitsCount: Long! }
+type TagRename { oldName: String!, newName: String! }
+type RedirectRules { defaultLongUrl: String!, redirectRules: [RedirectRule!]! }
+type RedirectRule { longUrl: String!, priority: Int!, conditions: [RuleCondition!]! }
+type RuleCondition { type: String!, matchKey: String, matchValue: String! }
+type Domain { domain: String!, isDefault: Boolean!, redirects: DomainRedirects! }
+type DomainRedirects { baseUrlRedirect: String, regular404Redirect: String, invalidShortUrlRedirect: String }
+type VisitOverview { visitsCount: Long!, orphanVisitsCount: Long!, shortUrlsCount: Long!, tagsCount: Long!, botVisitsCount: Long! }
+type DayCount { date: String!, count: Long! }
+type BreakdownCount { value: String!, count: Long! }
+type Visit {
+ date: Time!
+ referer: String
+ userAgent: String
+ browser: String
+ os: String
+ device: String
+ potentialBot: Boolean!
+ visitedUrl: String
+}
+"apiKey contains the plaintext key only after createAPIKey; queries return an empty string."
+type APIKey { id: Long!, name: String, role: String!, domain: String, enabled: Boolean!, expiresAt: Time, createdAt: Time!, apiKey: String! }
+"secret contains the signing secret only after createWebhook; queries return an empty string. Requires webhooks to be enabled."
+type Webhook { id: Long!, name: String!, url: String!, events: [String!]!, enabled: Boolean!, createdAt: Time!, secret: String! }
+type IDEnabled { id: Long!, enabled: Boolean! }

@@ -4,8 +4,8 @@ const { test, expect } = require('@playwright/test');
 test.describe.configure({ mode: 'serial' });
 
 // Admin-side link grouping (group-scoped *visibility* needs an OIDC login,
-// which the e2e stack does not run; that path is covered by the Go
-// integration tests against a fake IdP).
+// which the e2e stack does not run; integration tests cover that path
+// against a fake IdP).
 test.describe('link groups', () => {
   test('an admin can create a grouped short URL and see its badge', async ({ page, baseURL }) => {
     await page.goto('/admin/short-urls/new');

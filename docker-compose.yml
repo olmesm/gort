@@ -1,7 +1,3 @@
-# Default: single container with an embedded SQLite database in a volume.
-# For PostgreSQL, start with the "postgres" profile:
-#   docker compose --profile postgres up
-# and point GORT_DB_* at the db service as shown below.
 services:
   gort:
     build: .
@@ -10,25 +6,28 @@ services:
     environment:
       GORT_DEFAULT_DOMAIN: "localhost:8080"
       GORT_INITIAL_ADMIN_USERNAME: "admin"
-      # Set a real password before first start; otherwise one is generated
-      # and printed to the container log.
-      # GORT_INITIAL_ADMIN_PASSWORD: "change-me"
-      # GORT_WEBHOOKS_ENABLED: "true"  # opt in to webhook management and delivery
-      # GORT_GEOLITE_LICENSE_KEY: ""     # enables visit geolocation
-      # --- PostgreSQL instead of SQLite ---
-      # GORT_DB_DRIVER: "postgres"
-      # GORT_DB_CONNECTION: "host=db dbname=gort user=gort password=gort"
+      # Used only when creating the first admin account.
+      GORT_INITIAL_ADMIN_PASSWORD: "${GORT_INITIAL_ADMIN_PASSWORD:-}"
+      GORT_DB_CONNECTION: "host=db dbname=gort user=gort password=${GORT_POSTGRES_PASSWORD:?Set GORT_POSTGRES_PASSWORD}"
+      # GORT_WEBHOOKS_ENABLED: "true"
+    depends_on:
+      db:
+        condition: service_healthy
     volumes:
       - gort-data:/data
     restart: unless-stopped
 
   db:
     image: postgres:16-alpine
-    profiles: [postgres]
     environment:
       POSTGRES_DB: gort
       POSTGRES_USER: gort
-      POSTGRES_PASSWORD: gort
+      POSTGRES_PASSWORD: "${GORT_POSTGRES_PASSWORD:?Set GORT_POSTGRES_PASSWORD}"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gort"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     volumes:
       - gort-pgdata:/var/lib/postgresql/data
     restart: unless-stopped

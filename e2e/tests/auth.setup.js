@@ -7,5 +7,5 @@ setup('log in as admin and save session', async ({ page }) => {
   await page.fill('input[name="password"]', 'e2e-password-123');
   await page.click('button:has-text("Log in")');
   await expect(page.locator('h1')).toHaveText('Overview');
-  await page.context().storageState({ path: '.auth/admin.json' });
+  await page.context().storageState({ path: `.auth/admin-${process.env.E2E_PORT || '18100'}.json` });
 });

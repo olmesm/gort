@@ -1,0 +1,72 @@
+{% extends "layout.html" %}
+{% block content %}
+{% with data1=d.Data %}
+<h1>Users</h1>
+<p class="muted">Admins can manage all short URLs, tags, domains, API keys,{% if root.WebhooksEnabled %} webhooks,{% endif %} and users.</p>
+{% if data1.Error %}
+<div class="alert error">{{ data1.Error }}</div>
+{% endif %}
+{% with d=data1.Filters, root=data1.Filters %}{% include "list-filters.html" %}{% endwith %}
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Username</th><th>Role</th><th>Created (UTC)</th><th>Set new password</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for item2 in data1.Users %}
+      <tr>
+        <td>{{ item2.Username }}{% if item2.ID == root.User.ID %} <span class="badge gray">you</span>{% endif %}</td>
+        <td>
+          <form class="inline" method="post" action="/admin/users/{{ item2.ID }}/role">
+            <select name="role"{% if item2.ID == root.Data.LastAdminID %} disabled{% endif %}>
+              <option value="user"{% if item2.Role == "user" %} selected{% endif %}>user</option>
+              <option value="admin"{% if item2.Role == "admin" %} selected{% endif %}>admin</option>
+            </select>
+            {% if item2.ID != root.Data.LastAdminID %}<button class="secondary small">Save</button>{% endif %}
+          </form>
+        </td>
+        <td class="muted">{{ fmtDate(item2.CreatedAt) }}</td>
+        <td>
+          <form class="inline" method="post" action="/admin/users/{{ item2.ID }}/password">
+            <input type="password" name="password" placeholder="New password" style="width:11rem">
+            <button class="secondary small">Update</button>
+          </form>
+        </td>
+        <td class="actions">
+          {% if (item2.ID != root.User.ID) and (item2.ID != root.Data.LastAdminID) %}
+          <form class="inline" method="post" action="/admin/users/{{ item2.ID }}/delete" onsubmit="return confirm('Delete this user?')">
+            <button class="danger small">Delete</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="muted">No users match these filters.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% with d=data1.Pager, root=data1.Pager %}{% include "pager.html" %}{% endwith %}
+<h2>Create user</h2>
+<div class="card">
+  <form class="row" method="post" action="/admin/users">
+    <div>
+      <label>Username</label>
+      <input type="text" name="username" value="">
+    </div>
+    <div>
+      <label>Password</label>
+      <input type="password" name="password" required>
+    </div>
+    <div>
+      <label>Role</label>
+      <select name="role">
+        <option value="user">user</option>
+        <option value="admin">admin</option>
+      </select>
+    </div>
+    <div><button>Create user</button></div>
+  </form>
+</div>
+{% endwith %}
+{% endblock %}

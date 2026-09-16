@@ -1,0 +1,11 @@
+{% extends "layout.html" %}
+{% block content %}
+{% with data1=d.Data %}
+<h1>Visits for <span class="mono">{{ data1.Display }}</span></h1>
+<p>
+  <a href="{{ data1.EditURL }}">Edit short URL</a> ·
+  <a href="{{ data1.ShortURL }}" target="_blank" rel="noreferrer">{{ data1.LongURL }}</a>
+</p>
+{% with d=data1.Analytics, root=data1.Analytics %}{% include "analytics.html" %}{% endwith %}
+{% endwith %}
+{% endblock %}

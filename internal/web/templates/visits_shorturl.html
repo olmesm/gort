@@ -1,8 +1,0 @@
-{{define "content"}}{{with .Data}}
-<h1>Visits for <span class="mono">{{.Display}}</span></h1>
-<p>
-  <a href="{{.EditURL}}">Edit short URL</a> ·
-  <a href="{{.ShortURL}}" target="_blank" rel="noreferrer">{{.LongURL}}</a>
-</p>
-{{template "analytics" .Analytics}}
-{{end}}{{end}}

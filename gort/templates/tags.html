@@ -1,0 +1,18 @@
+{% extends "layout.html" %}
+{% block content %}
+{% with data1=d.Data %}
+<h1>Tags</h1>
+{% if data1.Error %}
+<div class="alert error">{{ data1.Error }}</div>
+{% else %}
+<div class="toolbar">
+  <form hx-get="/admin/tags" hx-push-url="true" hx-target="#tag-table" hx-swap="outerHTML" hx-trigger="submit, input delay:400ms from:input[name='search']" method="get" action="/admin/tags">
+    <input type="search" name="search" value="{{ data1.Search }}" aria-label="Search tags" placeholder="Search tags…">
+    <button class="secondary">Search</button>
+    <a href="/admin/tags">Clear filters</a>
+  </form>
+</div>
+{% endif %}
+{% with d=data1.Table, root=data1.Table %}{% include "tag-table.html" %}{% endwith %}
+{% endwith %}
+{% endblock %}

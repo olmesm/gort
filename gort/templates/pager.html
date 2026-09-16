@@ -1,0 +1,6 @@
+
+<div class="pager">
+  {% if d.PrevURL %}<a class="btn secondary small" href="{{ d.PrevURL }}">Previous</a>{% endif %}
+  <span class="info">Page {{ d.CurrentPage }} of {{ d.TotalPages }} · {{ d.TotalItems }} {% if d.TotalItems == 1 %}item{% else %}items{% endif %}</span>
+  {% if d.NextURL %}<a class="btn secondary small" href="{{ d.NextURL }}">Next</a>{% endif %}
+</div>

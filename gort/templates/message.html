@@ -1,0 +1,9 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<h1>{{ d.Title }}</h1>
+{% with data1=d.Data %}
+<div class="alert error">{{ data1.Error }}</div>
+<p><a href="{{ data1.BackURL }}">{{ data1.BackLabel }}</a></p>
+{% endwith %}
+{% endblock %}

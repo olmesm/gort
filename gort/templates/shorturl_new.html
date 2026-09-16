@@ -1,0 +1,66 @@
+{% extends "layout.html" %}
+{% block content %}
+{% with data1=d.Data %}
+<h1>New short URL</h1>
+{% if data1.Error %}
+<div class="alert error">{{ data1.Error }}</div>
+{% endif %}
+<div class="card">
+  <form class="stack" method="post" action="/admin/short-urls/new">
+    <div>
+      <label>Long URL *</label>
+      <input type="url" name="longUrl" value="{{ data1.Form.LongURL }}" required placeholder="https://example.com/some/very/long/path">
+    </div>
+    <div class="row">
+      <div>
+        <label>Custom slug (optional)</label>
+        <input type="text" name="customSlug" value="{{ data1.Form.CustomSlug }}" placeholder="my-campaign">
+      </div>
+      <div>
+        <label>Domain (optional)</label>
+        <input type="text" name="domain" value="{{ data1.Form.Domain }}" placeholder="{{ data1.DefaultDomain }}">
+      </div>
+    </div>
+    <div>
+      <label>Title (optional)</label>
+      <input type="text" name="title" value="{{ data1.Form.Title }}">
+    </div>
+    <div>
+      <label>Tags (comma separated)</label>
+      <input type="text" name="tags" value="{{ data1.Form.Tags }}" placeholder="marketing, launch">
+    </div>
+    <div>
+      <label for="group">Dashboard group (optional)</label>
+      {% with d=data1.Group, root=data1.Group %}{% include "group-picker.html" %}{% endwith %}
+    </div>
+    <div class="row">
+      <div>
+        <label>Valid since (UTC)</label>
+        <input type="datetime-local" name="validSince" value="{{ data1.Form.ValidSince }}">
+      </div>
+      <div>
+        <label>Valid until (UTC)</label>
+        <input type="datetime-local" name="validUntil" value="{{ data1.Form.ValidUntil }}">
+      </div>
+      <div>
+        <label>Maximum visits</label>
+        <input type="number" name="maxVisits" value="{{ data1.Form.MaxVisits }}" min="1">
+      </div>
+    </div>
+    <div>
+      <label>Redirect status</label>
+      {% with d=data1.StatusOptions, root=data1.StatusOptions %}{% include "status-select.html" %}{% endwith %}
+    </div>
+    <div class="checkbox">
+      <input type="checkbox" name="forwardQuery" id="forwardQuery" value="true"{% if data1.Form.ForwardQuery %} checked{% endif %}>
+      <label for="forwardQuery">Forward query parameters to the long URL</label>
+    </div>
+    <div class="checkbox">
+      <input type="checkbox" name="crawlable" id="crawlable" value="true"{% if data1.Form.Crawlable %} checked{% endif %}>
+      <label for="crawlable">Allow search engines to crawl this short URL</label>
+    </div>
+    <div><button>Create short URL</button></div>
+  </form>
+</div>
+{% endwith %}
+{% endblock %}

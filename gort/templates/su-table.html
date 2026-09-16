@@ -1,0 +1,36 @@
+
+<div id="su-table">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          {% with d=d.HeadShortCode, root=d.HeadShortCode %}{% include "sort-header.html" %}{% endwith %}
+          {% with d=d.HeadTitle, root=d.HeadTitle %}{% include "sort-header.html" %}{% endwith %}
+          {% with d=d.HeadLongURL, root=d.HeadLongURL %}{% include "sort-header.html" %}{% endwith %}
+          <th>Tags</th>
+          <th>Group</th>
+          {% with d=d.HeadVisits, root=d.HeadVisits %}{% include "sort-header.html" %}{% endwith %}
+          {% with d=d.HeadCreated, root=d.HeadCreated %}{% include "sort-header.html" %}{% endwith %}
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item1 in d.Rows %}
+        <tr>
+          <td><a class="mono" href="{{ item1.ShortURL }}" target="_blank" rel="noreferrer">{{ item1.Display }}</a></td>
+          <td><span class="truncate" style="max-width:200px">{{ item1.Title }}</span></td>
+          <td><a class="truncate" href="{{ item1.LongURL }}" target="_blank" rel="noreferrer">{{ item1.LongURL }}</a></td>
+          <td>{% for item2 in item1.Tags %}<span class="badge">{{ item2 }}</span>{% endfor %}</td>
+          <td>{% if item1.Group %}<span class="badge gray">{{ item1.Group }}</span>{% else %}—{% endif %}</td>
+          <td><a href="{{ item1.VisitsURL }}">{{ item1.VisitsLabel }}</a></td>
+          <td class="muted">{{ item1.Created }}</td>
+          <td class="actions"><a class="btn secondary small" href="{{ item1.EditURL }}">Edit</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="muted">No short URLs match these filters.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% with d=d.Pager, root=d.Pager %}{% include "pager.html" %}{% endwith %}
+</div>

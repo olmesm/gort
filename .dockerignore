@@ -1,0 +1,23 @@
+# Only send application build inputs to Docker.
+**
+!pyproject.toml
+!uv.lock
+!alembic.ini
+!alembic/
+!alembic/**
+!gort/
+!gort/**
+**/__pycache__/
+
+# Exclude local credentials even inside source directories.
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/id_rsa
+**/id_dsa
+**/id_ecdsa
+**/id_ed25519
+**/*.db

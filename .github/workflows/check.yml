@@ -8,30 +8,67 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        database: [sqlite, postgres]
     services:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_DB: gort
+          POSTGRES_DB: gort_test
           POSTGRES_USER: gort
           POSTGRES_PASSWORD: gort-test
         ports: [5432:5432]
         options: >-
-          --health-cmd "pg_isready -U gort"
+          --health-cmd "pg_isready -U gort -d gort_test"
           --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      GORT_TEST_POSTGRES_DSN: postgresql://gort:gort-test@localhost:5432/gort_test
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: astral-sh/setup-uv@v6
         with:
-          go-version: '1.26.x'
-      - run: go vet ./...
-      - name: Test with race detector
+          python-version: '3.12'
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run ruff check gort tests alembic design e2e/run_server.py
+      - run: uv run ruff format --check gort tests alembic design e2e/run_server.py
+      - name: Test Python application against PostgreSQL
+        run: uv run pytest
+      - run: uv build
+  browser:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
         env:
-          GORT_TEST_POSTGRES_DSN: ${{ matrix.database == 'postgres' && 'postgres://gort:gort-test@localhost:5432/gort?sslmode=disable' || '' }}
-        run: go test -race ./...
-      - name: Check reachable vulnerabilities
-        if: matrix.database == 'sqlite'
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+          POSTGRES_DB: gort_test
+          POSTGRES_USER: gort
+          POSTGRES_PASSWORD: gort-test
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U gort -d gort_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      GORT_TEST_POSTGRES_DSN: postgresql://gort:gort-test@localhost:5432/gort_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.12'
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - run: uv sync --frozen
+      - run: npm ci
+        working-directory: e2e
+      - run: npx playwright install --with-deps chromium
+        working-directory: e2e
+      - name: Test browser flows against PostgreSQL
+        run: npm test
+        working-directory: e2e
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t gort:test .

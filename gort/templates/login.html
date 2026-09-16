@@ -1,0 +1,36 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Log in · Gort</title>
+  <link rel="preload" href="/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="card login-card">
+      <h1>gort.</h1>
+      <p class="login-intro">Log in to Gort</p>
+      {% if d.Error %}
+      <div class="alert error">{{ d.Error }}</div>
+      {% endif %}
+      {% if d.OIDCEnabled %}
+      <a class="btn" style="display:block;text-align:center" href="/admin/oidc/login?returnUrl={{ d.ReturnURLParam }}">Continue with {{ d.ProviderName }}</a>
+      {% endif %}
+      {% if d.ShowPasswordForm %}
+      {% if d.OIDCEnabled %}
+      <p class="muted" style="text-align:center;margin:0.75rem 0 0">or log in with a local account</p>
+      {% endif %}
+      <form class="stack" method="post" action="/admin/login">
+        <input type="hidden" name="returnUrl" value="{{ d.ReturnURL }}">
+        <div><label>Username</label><input type="text" name="username" required autofocus></div>
+        <div><label>Password</label><input type="password" name="password" required></div>
+        <button>Log in</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>

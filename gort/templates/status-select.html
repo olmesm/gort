@@ -1,0 +1,6 @@
+
+<select name="redirectStatus">
+  {% for item5 in d %}
+  <option value="{{ item5.Code }}"{% if item5.Selected %} selected{% endif %}>{{ item5.Label }}</option>
+  {% endfor %}
+</select>

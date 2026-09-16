@@ -23,16 +23,28 @@ permissions:
   contents: write
 
 jobs:
-  goreleaser:
+  python:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: gort_test
+          POSTGRES_USER: gort
+          POSTGRES_PASSWORD: gort-test
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U gort -d gort_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      GORT_TEST_POSTGRES_DSN: postgresql://gort:gort-test@localhost:5432/gort_test
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       # The release notes are the CHANGELOG.md section for this version; a
-      # missing section fails the run so nothing ships undocumented. Written
-      # outside the checkout: GoReleaser refuses a dirty work tree.
+      # missing section fails the run so nothing ships undocumented.
       - name: Extract release notes
         env:
           VERSION: ${{ inputs.version || github.ref_name }}
@@ -78,20 +90,26 @@ jobs:
           git tag -a "$VERSION" -m "$VERSION"
           git push origin "refs/tags/$VERSION"
 
-      - uses: actions/setup-go@v5
+      - uses: astral-sh/setup-uv@v6
         if: inputs.notes_only != true
         with:
-          go-version-file: go.mod
+          python-version: '3.12'
 
       - name: Test
         if: inputs.notes_only != true
-        run: go test ./...
+        run: |
+          uv sync --frozen
+          make check
 
-      - uses: goreleaser/goreleaser-action@v6
+      - name: Build Python distribution
         if: inputs.notes_only != true
-        with:
-          distribution: goreleaser
-          version: "~> v2"
-          args: release --clean --release-notes=${{ runner.temp }}/release-notes.md
+        run: uv build
+
+      - name: Publish release artifacts
+        if: inputs.notes_only != true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version || github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha256sum dist/*.whl dist/*.tar.gz > dist/checksums.txt
+          gh release create "$VERSION" dist/*.whl dist/*.tar.gz dist/checksums.txt --verify-tag --title "$VERSION" --notes-file "$RUNNER_TEMP/release-notes.md"

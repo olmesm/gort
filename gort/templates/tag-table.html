@@ -1,0 +1,35 @@
+
+<div id="tag-table">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Tag</th><th>Short URLs</th><th>Visits</th><th>Rename</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for item3 in d.Tags %}
+        <tr>
+          <td><span class="badge">{{ item3.Name }}</span></td>
+          <td><a href="/admin/short-urls?tag={{ item3.Name }}">{{ item3.ShortURLCount }}</a></td>
+          <td>{{ item3.VisitCount }}</td>
+          <td>
+            <form class="inline" method="post" action="/admin/tags/rename">
+              <input type="hidden" name="oldName" value="{{ item3.Name }}">
+              <input type="text" name="newName" value="{{ item3.Name }}" style="width:10rem">
+              <button class="secondary small">Rename</button>
+            </form>
+          </td>
+          <td class="actions">
+            <form class="inline" method="post" action="/admin/tags/delete" onsubmit="return confirm('Delete this tag? Short URLs keep working.')">
+              <input type="hidden" name="name" value="{{ item3.Name }}">
+              <button class="danger small">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="muted">No tags match this search.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% with d=d.Pager, root=d.Pager %}{% include "pager.html" %}{% endwith %}
+</div>

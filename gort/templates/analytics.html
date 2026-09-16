@@ -1,0 +1,57 @@
+
+<form class="toolbar" method="get" action="{{ d.BasePath }}">
+  <div>
+    <label>From (UTC)</label>
+    <input type="datetime-local" name="startDate" value="{{ d.StartVal }}">
+  </div>
+  <div>
+    <label>To (UTC)</label>
+    <input type="datetime-local" name="endDate" value="{{ d.EndVal }}">
+  </div>
+  <button class="secondary">Apply</button>
+  <a href="{{ d.BasePath }}">Clear filters</a>
+</form>
+<div class="card chart-card">
+  <h2 style="margin-top:0">Visits per day</h2>
+  {% with d=d.Chart, root=d.Chart %}{% include "visit-chart.html" %}{% endwith %}
+</div>
+<div class="split">
+  {% for item7 in d.Breakdowns %}
+  <div class="card">
+    <h2 style="margin-top:0">{{ item7.Title }}</h2>
+    {% with d=item7.Rows, root=item7.Rows %}{% include "bar-list.html" %}{% endwith %}
+  </div>
+  {% endfor %}
+</div>
+<h2>Visits</h2>
+<div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>When (UTC)</th>
+          {% if d.ShowVisitedURL %}<th>Visited URL</th>{% endif %}
+          <th>Browser / OS</th>
+          <th>Device</th>
+          <th>Referrer</th>
+          <th>Bot</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item8 in d.Visits %}
+        <tr>
+          <td class="muted">{{ item8.When }}</td>
+          {% if root.ShowVisitedURL %}<td><span class="truncate mono" style="max-width:260px">{{ item8.VisitedURL }}</span></td>{% endif %}
+          <td>{{ item8.BrowserOS }}</td>
+          <td>{{ item8.Device }}</td>
+          <td>{% if item8.Referer %}<span class="truncate" style="max-width:220px">{{ item8.Referer }}</span>{% else %}—{% endif %}</td>
+          <td>{% if item8.IsBot %}<span class="badge red">bot</span>{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="{% if root.ShowVisitedURL %}6{% else %}5{% endif %}" class="muted">No visits match these filters.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% with d=d.Pager, root=d.Pager %}{% include "pager.html" %}{% endwith %}
+</div>

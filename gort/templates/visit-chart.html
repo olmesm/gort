@@ -1,0 +1,19 @@
+
+{% if d.Points %}
+<svg viewBox="0 0 1200 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Visits per day">
+  {% for item11 in d.Grid %}
+  <line x1="40" y1="{{ item11.Y }}" x2="1160" y2="{{ item11.Y }}" stroke="var(--border)" stroke-width="1"/>
+  <text x="34" y="{{ item11.Y }}" dy="4" font-size="11" fill="var(--muted)" text-anchor="end">{{ item11.Text }}</text>
+  {% endfor %}
+  <path d="{{ d.AreaPath }}" fill="var(--chart-fill)" stroke="none"/>
+  <path d="{{ d.LinePath }}" fill="none" stroke="var(--chart-line)" stroke-width="2"/>
+  {% for item12 in d.Points %}
+  <circle cx="{{ item12.X }}" cy="{{ item12.Y }}" r="2.5" fill="var(--chart-line)"><title>{{ item12.Date }}: {{ item12.Count }}</title></circle>
+  {% endfor %}
+  {% for item13 in d.Labels %}
+  <text class="chart-date" x="{{ item13.X }}" y="{{ item13.Y }}" font-size="10" fill="var(--muted)" text-anchor="middle">{{ item13.Text }}</text>
+  {% endfor %}
+</svg>
+{% else %}
+<div class="muted">No visits for these dates.</div>
+{% endif %}

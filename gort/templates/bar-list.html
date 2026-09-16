@@ -1,0 +1,16 @@
+
+{% if d %}
+<table>
+  <tbody>
+    {% for item6 in d %}
+    <tr>
+      <td style="width:35%">{{ item6.Label }}</td>
+      <td><div style="background:var(--chart-fill);border-radius:4px;height:1.1rem;width:{{ item6.Pct }}%;min-width:2px"></div></td>
+      <td style="width:4rem;text-align:right">{{ item6.Count }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="muted">No visits for these dates.</div>
+{% endif %}
