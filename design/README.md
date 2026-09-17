@@ -7,9 +7,10 @@ tables. Its forms and routes operate on a disposable database.
 
 ## Run the preview
 
-From the repository root, run `mise install` and `uv sync --frozen` to install
-the configured tools and dependencies. Create a disposable PostgreSQL database
-with `createdb goto_design`, then start the preview:
+Follow the [Python and PostgreSQL setup](../README.md#python-312), including
+mise activation. From the repository root, run `mise install` and
+`uv sync --frozen` to install the configured tools and dependencies. Create a
+disposable database with `createdb goto_design`, then start the preview:
 
 ```sh
 GOTO_DB_CONNECTION=postgresql://localhost/goto_design \

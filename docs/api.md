@@ -14,6 +14,11 @@ The API keys page links to the documentation and includes a curl example.
 
 Create a key in the dashboard or through the API, and copy it when shown.
 Authenticate with `X-Api-Key: <key>` or `Authorization: Bearer <key>`.
+For the curl examples on this page, set `KEY` to the copied key in your shell:
+
+```sh
+KEY=goto_...
+```
 
 | Key role | Access |
 |---|---|
@@ -33,8 +38,8 @@ Short URL, tag and visit lists support `page` and `itemsPerPage` and return a
 `pagination` envelope. Omitted or malformed page sizes default to 20 for links
 and visits, or 500 for tags. Nonpositive sizes become 20; sizes above 500 are
 capped at 500. Invalid page numbers default to 1, and out-of-range pages resolve
-to the nearest valid page. Domain,
-API-key and webhook REST lists return an unpaginated `data` envelope.
+to the nearest valid page. Domain, API-key and webhook REST lists return an
+unpaginated `data` envelope.
 Dashboard lists have separate pagination and filters.
 
 ### Short URLs
@@ -157,5 +162,7 @@ The `/graphql` path and its children are reserved for API routes.
 ### Update the GraphQL schema
 
 Edit `goto/schema.graphql` and its resolver bindings in `goto/graphql.py`, then
-run `uv run pytest tests/test_graphql.py`. The schema loads at startup without
-code generation. REST and GraphQL call the same application operations.
+run `./scripts/test.sh tests/test_graphql.py` with `GOTO_TEST_POSTGRES_DSN`
+configured as described in [development and checks](../README.md#development-and-checks).
+The schema loads at startup without code generation. REST and GraphQL call the
+same application operations.

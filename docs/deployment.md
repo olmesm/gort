@@ -2,11 +2,13 @@
 
 [Back to the README](../README.md) · [Configuration](configuration.md)
 
-Goto requires Python 3.12 and PostgreSQL. Run `mise install` to install the
-Python and uv versions configured in `.mise.toml`, then `uv sync --frozen` to
-install the pinned dependencies. Activate mise in your shell so its tools are
-on `PATH`. Set `GOTO_DB_CONNECTION` to a PostgreSQL URL or libpq
-connection string, then start the application with `uv run goto`.
+Goto requires Python 3.12 and PostgreSQL. Install and activate mise in your
+shell so its tools are on `PATH`. From the repository root, run `mise install`
+to install the Python and uv versions configured in `.mise.toml`, then
+`uv sync --frozen` to install the pinned dependencies. Set `GOTO_DB_CONNECTION`
+to a PostgreSQL URL or libpq connection string, then start the application with
+`uv run goto`. See the [quick start](../README.md#python-312) for local setup
+and commands to use without shell activation.
 
 ## Database
 
@@ -51,8 +53,8 @@ Webhook deliveries persist across restarts. A conditional database update
 claims each due delivery for five minutes. Failed requests retry with
 exponential backoff, up to six attempts. Receivers should tolerate duplicate
 events if a process stops between sending a request and saving its result.
-Deliveries that exhaust
-all attempts remain marked failed; there is no automatic replay.
+Deliveries that exhaust all attempts remain marked failed; there is no
+automatic replay.
 
 Rate limits are per process. When deploying multiple web processes, designate
 one for background work and enforce shared rate limits at the reverse proxy.
@@ -66,9 +68,10 @@ receives the same checks. Proxy environment variables cannot bypass them.
 
 ## Testing
 
-Set `GOTO_TEST_POSTGRES_DSN` to a disposable database. `./scripts/check.sh` runs Ruff
-and pytest; database tests create and drop isolated schemas. The browser suite
-uses the same setting and an isolated schema for each run:
+After installing the Python dependencies, set `GOTO_TEST_POSTGRES_DSN` to a
+disposable database. `./scripts/check.sh` runs Ruff and pytest; database tests
+create and drop isolated schemas. The browser suite also needs Node.js 22 and
+npm, and uses the same database setting with an isolated schema for each run:
 
 ```sh
 export GOTO_TEST_POSTGRES_DSN='postgresql://localhost/goto_test'

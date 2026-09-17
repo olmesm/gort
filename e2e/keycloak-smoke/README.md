@@ -12,10 +12,11 @@ the dashboard client and these users:
 | `bob` | `bob-pass-123` | `team-a` |
 
 The credentials and client secret are for this local test stack only.
-Install Docker, mise and Node. From the repository root, run `mise install`,
-`npm --prefix e2e ci` and `./e2e/node_modules/.bin/playwright install chromium`.
-Activate mise in your shell so Python and uv are on `PATH`. The setup script
-installs the locked Python dependencies.
+Install Docker with Compose, mise, Node.js 22 and npm. Start Docker and activate
+mise in your shell so Python and uv are on `PATH`. From the repository root,
+run `mise install`, `npm --prefix e2e ci` and
+`./e2e/node_modules/.bin/playwright install chromium`. The setup script installs
+the locked Python dependencies.
 
 ## Start the stack and run Python tests
 

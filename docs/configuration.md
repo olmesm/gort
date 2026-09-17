@@ -60,3 +60,12 @@ in the dashboard or through `PATCH /rest/v1/domains/redirects`.
 
 Goto accepts `X-Forwarded-For` and `X-Forwarded-Proto` only from configured
 trusted proxies.
+
+## Compose and test variables
+
+The following variables are used by tooling, rather than application settings:
+
+| Variable | Purpose |
+|---|---|
+| `GOTO_POSTGRES_PASSWORD` | Required database password for the root Compose stack; reuse the same value across starts. See [Docker setup](../README.md#docker). |
+| `GOTO_TEST_POSTGRES_DSN` | Required connection string for the Python and browser test suites. See [development and checks](../README.md#development-and-checks). |

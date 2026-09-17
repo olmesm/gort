@@ -41,8 +41,10 @@ See [deployment](docs/deployment.md), [configuration](docs/configuration.md),
 ### Python 3.12
 
 Install and activate [mise](https://mise.jdx.dev/) in your shell, then start
-PostgreSQL. From the repository root, install the configured Python and uv
-versions, create an empty application database and start Goto:
+PostgreSQL with its command-line tools on `PATH`. The commands below assume a
+local database role matching your shell username, with permission to create
+databases. From the repository root, install the configured Python and uv
+versions, create an empty database and start Goto:
 
 ```sh
 mise install
@@ -52,8 +54,10 @@ GOTO_DB_CONNECTION='postgresql://localhost/goto' uv run goto
 ```
 
 The `.mise.toml` file manages Python 3.12 and uv. `python -m goto` also works
-inside the project environment. Use `GOTO_DB_CONNECTION` for a PostgreSQL URL or libpq
-connection string when connecting to a different server or account.
+inside the project environment. Without shell activation, prefix uv and script
+commands with `mise exec --`, for example `mise exec -- uv sync --frozen`.
+Use `GOTO_DB_CONNECTION` for a PostgreSQL URL or libpq connection string when
+connecting to a different server or account.
 
 With default settings, Goto:
 
@@ -123,22 +127,32 @@ current password. Changing this variable does not change the database password.
 
 ### Development and checks
 
+Use the mise and PostgreSQL setup above. From the repository root:
+
 ```sh
 export GOTO_TEST_POSTGRES_DSN='postgresql://localhost/goto_test'
 createdb goto_test
 mise install
 uv sync --frozen
 ./scripts/check.sh
-./scripts/fmt.sh
 ```
 
-`check.sh` runs Ruff lint, format checks and pytest in parallel. `fmt.sh` applies
-Ruff formatting. Tests cover domain rules, database migrations, REST, GraphQL,
-sessions, signed OIDC login, redirects and webhook retries.
-The suite requires `GOTO_TEST_POSTGRES_DSN`. Database tests create isolated
-temporary PostgreSQL schemas and remove them afterward.
+| Command | Purpose |
+|---|---|
+| `./scripts/check.sh` | Run lint, format checks and pytest in parallel |
+| `./scripts/check-lint.sh` | Check Python code with Ruff |
+| `./scripts/check-format.sh` | Check Python formatting |
+| `./scripts/fmt.sh` | Apply Ruff lint fixes and formatting |
+| `./scripts/test.sh` | Run pytest; accepts arguments such as `tests/test_graphql.py` |
 
-The Playwright suite runs the Python application:
+Tests cover domain rules, database migrations, REST, GraphQL, sessions, signed
+OIDC login, redirects and webhook retries. The suite requires
+`GOTO_TEST_POSTGRES_DSN`. Its database role must be able to create schemas and
+drop those it owns. Tests create isolated temporary schemas and remove them
+afterward.
+
+The Playwright suite runs the Python application. Install Node.js 22 and npm,
+then install the browser dependencies and run the checks:
 
 ```sh
 npm --prefix e2e ci
