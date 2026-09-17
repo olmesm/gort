@@ -1,14 +1,14 @@
-name: gort-e2e
+name: goto-e2e
 services:
   postgres:
     image: postgres:16-alpine
     ports: ["127.0.0.1:15432:5432"]
     environment:
-      POSTGRES_DB: gort
-      POSTGRES_USER: gort
-      POSTGRES_PASSWORD: gort-local-test
+      POSTGRES_DB: goto
+      POSTGRES_USER: goto
+      POSTGRES_PASSWORD: goto-local-test
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U gort"]
+      test: ["CMD-SHELL", "pg_isready -U goto"]
       interval: 2s
       timeout: 3s
       retries: 30
@@ -21,4 +21,4 @@ services:
       KC_HOSTNAME: http://localhost:8081
     command: ["start-dev", "--import-realm"]
     volumes:
-      - ./keycloak-smoke/realm.json:/opt/keycloak/data/import/gort-realm.json:ro
+      - ./keycloak-smoke/realm.json:/opt/keycloak/data/import/goto-realm.json:ro

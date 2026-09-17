@@ -98,16 +98,16 @@ These operations require an admin key.
 | `GET/POST /rest/v1/webhooks` | create returns the signing `secret` once |
 | `PATCH /rest/v1/webhooks/{id}` · `DELETE /rest/v1/webhooks/{id}` | |
 
-Webhooks are disabled by default. Set `GORT_WEBHOOKS_ENABLED=true` and restart
+Webhooks are disabled by default. Set `GOTO_WEBHOOKS_ENABLED=true` and restart
 to enable the dashboard page, API operations and delivery workers. While disabled,
-Gort keeps existing webhook configurations and pending deliveries, but does not
+Goto keeps existing webhook configurations and pending deliveries, but does not
 queue or deliver new events. Pending deliveries resume when re-enabled; events
 that occurred while disabled are not replayed.
 
 Webhook deliveries contain JSON with `event`, `occurredAt` and `data` fields.
-The `X-Gort-Event` header identifies the event. `X-Gort-Signature: sha256=<hex>`
+The `X-Goto-Event` header identifies the event. `X-Goto-Signature: sha256=<hex>`
 contains the HMAC-SHA256 of the raw body, signed with the webhook secret.
-Gort retries failed deliveries with exponential backoff, up to 6 attempts.
+Goto retries failed deliveries with exponential backoff, up to 6 attempts.
 The delivery queue survives restarts. Receivers must tolerate duplicate deliveries;
 see [delivery guarantees](deployment.md#processes-and-background-work).
 
@@ -141,7 +141,7 @@ accessible groups.
 Queries accept GET or POST; mutations require POST. There are no subscriptions.
 Request bodies are limited to 1 MiB. Queries are limited to 10,000 parser tokens
 and 10,000 complexity points. Page sizes multiply query cost, including nested
-visit pages. POST requests count against `GORT_RATE_LIMIT_PER_MINUTE`, including
+visit pages. POST requests count against `GOTO_RATE_LIMIT_PER_MINUTE`, including
 queries. GraphQL resolves fields sequentially in a worker thread, using one
 database session per request.
 
@@ -156,6 +156,6 @@ The `/graphql` path and its children are reserved for API routes.
 
 ### Update the GraphQL schema
 
-Edit `gort/schema.graphql` and its resolver bindings in `gort/graphql.py`, then
+Edit `goto/schema.graphql` and its resolver bindings in `goto/graphql.py`, then
 run `uv run pytest tests/test_graphql.py`. The schema loads at startup without
 code generation. REST and GraphQL call the same application operations.

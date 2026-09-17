@@ -4,10 +4,13 @@ Release history follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and [Semantic Versioning](https://semver.org/). The release workflow uses each
 version's section as its GitHub release notes.
 
-## [Unreleased]
+## Unreleased
 
 ### Changed
 
+- Name the application Goto, with the `goto` Python package and command,
+  `GOTO_` environment variables and matching dashboard branding.
+- Manage Python and uv with mise and run development tasks through Bash scripts.
 - Use Python 3.12 with FastAPI, Pydantic, SQLModel, Alembic and Jinja.
 - Use PostgreSQL with explicit Alembic migrations.
 - Keep the dashboard page structure and make typography, control sizing, table
@@ -24,7 +27,7 @@ version's section as its GitHub release notes.
 - Guides for [deployment](docs/deployment.md), [configuration](docs/configuration.md)
   and the [REST and GraphQL APIs](docs/api.md).
 
-## [0.2.1] - 2026-09-15
+## 0.2.1 - 2026-09-15
 
 ### Changed
 
@@ -65,14 +68,14 @@ version's section as its GitHub release notes.
 ### Upgrade notes
 
 - No database migration is required. Existing session cookies require a new login.
-- Behind a reverse proxy, configure `GORT_TRUSTED_PROXIES` with its CIDRs so client
-  IP addresses and forwarded schemes are accepted. Set `GORT_USE_HTTPS=true` when
+- Behind a reverse proxy, configure `GOTO_TRUSTED_PROXIES` with its CIDRs so client
+  IP addresses and forwarded schemes are accepted. Set `GOTO_USE_HTTPS=true` when
   serving the dashboard over HTTPS.
 - Title resolution and webhook delivery block private destinations by default.
   Installations that intentionally use internal destinations can opt in with
-  `GORT_ALLOW_PRIVATE_OUTBOUND=true`.
+  `GOTO_ALLOW_PRIVATE_OUTBOUND=true`.
 
-## [0.2.0] - 2026-09-14
+## 0.2.0 - 2026-09-14
 
 ### Added
 
@@ -92,7 +95,7 @@ version's section as its GitHub release notes.
   and responsive layouts. Routes, filters and pagination are unchanged. Removed
   decorative copy and design-preview controls.
 - Bundle API documentation assets with the application. The editors keep keys in memory
-  and send requests directly to the current Gort instance.
+  and send requests directly to the current Goto instance.
 
 ### Fixed
 
@@ -107,13 +110,13 @@ version's section as its GitHub release notes.
 - `/graphql` and its children are reserved. Recreate any existing links under
   that prefix with another slug before upgrading.
 - No database migration is required. Webhooks remain disabled by default;
-  `GORT_WEBHOOKS_ENABLED=true` also enables their GraphQL operations.
+  `GOTO_WEBHOOKS_ENABLED=true` also enables their GraphQL operations.
 
-## [0.1.2] - 2026-09-14
+## 0.1.2 - 2026-09-14
 
 ### Changed
 
-- Disable webhooks by default. Set `GORT_WEBHOOKS_ENABLED=true` and restart to
+- Disable webhooks by default. Set `GOTO_WEBHOOKS_ENABLED=true` and restart to
   enable navigation, REST endpoints and workers. Stored configurations and pending
   deliveries are retained. Pending deliveries resume when enabled; events that
   occurred while disabled are not queued or replayed.
@@ -130,7 +133,7 @@ version's section as its GitHub release notes.
 - Wrapped mobile navigation reserves space above page headings and filters.
 - Dashboard font loading no longer shifts navigation text between pages.
 
-## [0.1.1] - 2026-09-09
+## 0.1.1 - 2026-09-09
 
 ### Fixed
 
@@ -147,7 +150,7 @@ version's section as its GitHub release notes.
 - Route handler errors through one adapter. Represent RFC 7807 problems as errors.
 - Render dashboard data rows directly where no conversion is needed.
 
-## [0.1.0] - 2026-09-09
+## 0.1.0 - 2026-09-09
 
 ### Added
 
@@ -156,10 +159,3 @@ version's section as its GitHub release notes.
   an htmx dashboard, QR codes, signed webhooks and robots.txt.
 - PostgreSQL persistence.
 - OIDC login with group-scoped links and a configurable admin group.
-
-[Unreleased]: https://github.com/olmesm/gort/compare/v0.2.1...HEAD
-[0.2.1]: https://github.com/olmesm/gort/compare/v0.2.0...v0.2.1
-[0.2.0]: https://github.com/olmesm/gort/compare/v0.1.2...v0.2.0
-[0.1.2]: https://github.com/olmesm/gort/compare/v0.1.1...v0.1.2
-[0.1.1]: https://github.com/olmesm/gort/compare/v0.1.0...v0.1.1
-[0.1.0]: https://github.com/olmesm/gort/releases/tag/v0.1.0

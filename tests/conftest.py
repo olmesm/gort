@@ -8,17 +8,17 @@ import pytest
 from psycopg import sql
 from psycopg.conninfo import make_conninfo
 
-from gort.config import Settings
-from gort.db import create_engine_and_migrate
+from goto.config import Settings
+from goto.db import create_engine_and_migrate
 
 
 @pytest.fixture(scope="session")
 def postgres_admin_dsn():
-	dsn = os.environ.get("GORT_TEST_POSTGRES_DSN", "")
+	dsn = os.environ.get("GOTO_TEST_POSTGRES_DSN", "")
 	if not dsn:
 		raise pytest.UsageError(
 			"Database tests require PostgreSQL. Start a test server and set "
-			"GORT_TEST_POSTGRES_DSN=postgresql://user:password@localhost:5432/gort_test. "
+			"GOTO_TEST_POSTGRES_DSN=postgresql://user:password@localhost:5432/goto_test. "
 			"The account must be able to create and drop schemas."
 		)
 	dsn = dsn.replace("postgresql+psycopg://", "postgresql://", 1)
@@ -27,7 +27,7 @@ def postgres_admin_dsn():
 			connection.execute("SELECT 1")
 	except psycopg.Error as error:
 		raise pytest.UsageError(
-			"Cannot connect to the PostgreSQL test server. Check GORT_TEST_POSTGRES_DSN "
+			"Cannot connect to the PostgreSQL test server. Check GOTO_TEST_POSTGRES_DSN "
 			"and ensure the server is running."
 		) from error
 	return dsn
@@ -35,7 +35,7 @@ def postgres_admin_dsn():
 
 @pytest.fixture
 def postgres_dsn(postgres_admin_dsn):
-	schema = "gort_test_" + uuid.uuid4().hex
+	schema = "goto_test_" + uuid.uuid4().hex
 	with psycopg.connect(postgres_admin_dsn, autocommit=True) as connection:
 		connection.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema)))
 	try:

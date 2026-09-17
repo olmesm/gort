@@ -19,7 +19,7 @@ test('API docs load locally and GraphQL runs with an API key', async ({ page, ba
   const key = await page.locator('.alert.success .mono').innerText();
 
   await page.getByRole('link', { name: 'REST docs', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Gort API', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Goto API', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Ask AI', exact: true })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Short URLs', exact: true })).toBeVisible();
   // Opening a request verifies Scalar's bundled client, including lazy UI code.

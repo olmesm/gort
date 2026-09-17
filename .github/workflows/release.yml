@@ -29,15 +29,15 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_DB: gort_test
-          POSTGRES_USER: gort
-          POSTGRES_PASSWORD: gort-test
-        ports: [5432:5432]
+          POSTGRES_DB: goto_test
+          POSTGRES_USER: goto
+          POSTGRES_PASSWORD: goto-test
+        ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U gort -d gort_test"
+          --health-cmd "pg_isready -U goto -d goto_test"
           --health-interval 5s --health-timeout 5s --health-retries 10
     env:
-      GORT_TEST_POSTGRES_DSN: postgresql://gort:gort-test@localhost:5432/gort_test
+      GOTO_TEST_POSTGRES_DSN: postgresql://goto:goto-test@localhost:5432/goto_test
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,58 +48,30 @@ jobs:
       - name: Extract release notes
         env:
           VERSION: ${{ inputs.version || github.ref_name }}
-        run: |
-          NOTES="$RUNNER_TEMP/release-notes.md"
-          awk -v v="${VERSION#v}" '$0 ~ "^## \\[" v "\\]" {f=1; next} /^## / {f=0} f' CHANGELOG.md > "$NOTES"
-          if ! grep -q '[^[:space:]]' "$NOTES"; then
-            echo "CHANGELOG.md has no section for $VERSION" >&2
-            exit 1
-          fi
-          cat "$NOTES"
+        run: ./scripts/release.sh notes
 
       - name: Refresh the notes of the existing release
         if: inputs.notes_only == true
         env:
           VERSION: ${{ inputs.version }}
           GH_TOKEN: ${{ github.token }}
-        run: gh release edit "$VERSION" --notes-file "$RUNNER_TEMP/release-notes.md"
+        run: ./scripts/release.sh refresh-notes
 
       - name: Tag the release (manual dispatch only)
         if: github.event_name == 'workflow_dispatch' && inputs.notes_only != true
         env:
           VERSION: ${{ inputs.version }}
           GH_TOKEN: ${{ github.token }}
-        run: |
-          if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "version must look like v1.2.3 (got '$VERSION')" >&2
-            exit 1
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # A tag left behind by a failed attempt (no release published for
-          # it) is moved to this commit; a tag that has a release is final.
-          if git ls-remote --exit-code --tags origin "refs/tags/$VERSION" >/dev/null; then
-            if gh release view "$VERSION" >/dev/null 2>&1; then
-              echo "$VERSION already has a published release" >&2
-              exit 1
-            fi
-            echo "tag $VERSION exists from an unpublished attempt; re-tagging HEAD"
-            git push --delete origin "refs/tags/$VERSION"
-          fi
-          git tag -d "$VERSION" 2>/dev/null || true   # the checkout fetched it too
-          git tag -a "$VERSION" -m "$VERSION"
-          git push origin "refs/tags/$VERSION"
+        run: ./scripts/release.sh tag
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: jdx/mise-action@v4
         if: inputs.notes_only != true
-        with:
-          python-version: '3.12'
 
       - name: Test
         if: inputs.notes_only != true
         run: |
           uv sync --frozen
-          make check
+          ./scripts/check.sh
 
       - name: Build Python distribution
         if: inputs.notes_only != true
@@ -110,6 +82,4 @@ jobs:
         env:
           VERSION: ${{ inputs.version || github.ref_name }}
           GH_TOKEN: ${{ github.token }}
-        run: |
-          sha256sum dist/*.whl dist/*.tar.gz > dist/checksums.txt
-          gh release create "$VERSION" dist/*.whl dist/*.tar.gz dist/checksums.txt --verify-tag --title "$VERSION" --notes-file "$RUNNER_TEMP/release-notes.md"
+        run: ./scripts/release.sh publish

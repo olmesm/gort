@@ -5,10 +5,10 @@ from unittest.mock import Mock
 import pytest
 from sqlmodel import Session
 
-from gort import outbound
-from gort.config import Settings
-from gort.models import Domain, ShortURL, Webhook, WebhookDelivery, utcnow
-from gort.workers import Workers
+from goto import outbound
+from goto.config import Settings
+from goto.models import Domain, ShortURL, Webhook, WebhookDelivery, utcnow
+from goto.workers import Workers
 
 
 @pytest.mark.parametrize(
@@ -82,8 +82,9 @@ def test_persistent_webhook_retry_and_signature(tmp_path, monkeypatch, pg_engine
 	with Session(engine) as session:
 		assert session.get(WebhookDelivery, delivery_id).status == "delivered"
 	kwargs = request.call_args.kwargs
+	assert kwargs["headers"]["X-Goto-Event"] == "url.created"
 	assert (
-		kwargs["headers"]["X-Gort-Signature"]
+		kwargs["headers"]["X-Goto-Signature"]
 		== "sha256=" + hmac.new(b"secret", kwargs["body"], hashlib.sha256).hexdigest()
 	)
 	engine.dispose()

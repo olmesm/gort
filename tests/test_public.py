@@ -4,10 +4,11 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
-from gort.app import create_app
-from gort.auth import hash_api_key
-from gort.config import Settings
-from gort.models import APIKey, Domain, Visit
+from goto import __version__
+from goto.app import create_app
+from goto.auth import hash_api_key
+from goto.config import Settings
+from goto.models import APIKey, Domain, Visit
 
 
 @pytest.fixture
@@ -95,6 +96,10 @@ def test_qr_and_robots(client):
 
 
 def test_browser_security_and_head(client):
+	assert client.get("/rest/health").json() == {"status": "pass", "version": __version__}
+	info = client.get("/rest/openapi.json").json()["info"]
+	assert info["title"] == "Goto API"
+	assert info["version"] == __version__
 	assert (
 		client.post(
 			"/admin/login",

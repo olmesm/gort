@@ -5,8 +5,8 @@
 !alembic.ini
 !alembic/
 !alembic/**
-!gort/
-!gort/**
+!goto/
+!goto/**
 **/__pycache__/
 
 # Exclude local credentials even inside source directories.

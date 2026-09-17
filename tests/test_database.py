@@ -12,11 +12,11 @@ from sqlmodel import Session, SQLModel, select
 
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
-from gort.config import Settings
-from gort.db import create_engine_and_migrate
-from gort.domain import ServiceError
-from gort.models import Domain, ShortURL, ShortURLTag, Visit, Webhook, WebhookDelivery
-from gort.services import create_short_url, delete_short_url, list_short_urls, update_short_url
+from goto.config import Settings
+from goto.db import create_engine_and_migrate
+from goto.domain import ServiceError
+from goto.models import Domain, ShortURL, ShortURLTag, Visit, Webhook, WebhookDelivery
+from goto.services import create_short_url, delete_short_url, list_short_urls, update_short_url
 
 
 def settings(tmp_path, postgres_dsn):
@@ -145,7 +145,7 @@ def test_alembic_metadata_matches_database(pg_engine):
 
 def test_alembic_cli_uses_configured_database_and_detects_no_changes(tmp_path, postgres_dsn):
 	root = Path(__file__).parent.parent
-	env = {**os.environ, "GORT_DB_CONNECTION": postgres_dsn, "PYTHONPATH": str(root)}
+	env = {**os.environ, "GOTO_DB_CONNECTION": postgres_dsn, "PYTHONPATH": str(root)}
 	for command in (["upgrade", "head"], ["check"]):
 		result = subprocess.run(
 			[sys.executable, "-m", "alembic", "-c", str(root / "alembic.ini"), *command],

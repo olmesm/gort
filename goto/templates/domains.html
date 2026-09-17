@@ -1,0 +1,54 @@
+{% extends "layout.html" %}
+{% block content %}
+{% with data1=d.Data %}
+<h1>Domains</h1>
+<p class="muted">Point a domain at this server, then add it here. Goto also registers domains when you first use them to create a short URL.</p>
+{% with d=data1.Filters, root=data1.Filters %}{% include "list-filters.html" %}{% endwith %}
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Domain</th><th>Short URLs</th><th>Visits</th><th>Fallback redirects (base / 404 / invalid)</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for item2 in data1.Domains %}
+      <tr>
+        <td><span class="mono">{{ item2.Authority }}</span>{% if item2.IsDefault %} <span class="badge green">default</span>{% endif %}</td>
+        <td>{{ item2.ShortURLCount }}</td>
+        <td>{{ item2.VisitCount }}</td>
+        <td>
+          <form method="post" action="/admin/domains/{{ item2.ID }}/redirects" class="stack" style="max-width:100%">
+            <div class="row">
+              <input type="url" name="baseUrlRedirect" placeholder="Base URL redirect" value="{{ deref(item2.BaseURLRedirect) }}">
+              <input type="url" name="regular404Redirect" placeholder="Regular 404 redirect" value="{{ deref(item2.Regular404Redirect) }}">
+              <input type="url" name="invalidShortUrlRedirect" placeholder="Invalid short URL redirect" value="{{ deref(item2.InvalidShortURLRedirect) }}">
+              <button class="secondary small">Save</button>
+            </div>
+          </form>
+        </td>
+        <td class="actions">
+          {% if not item2.IsDefault %}
+          <form class="inline" method="post" action="/admin/domains/{{ item2.ID }}/delete" onsubmit="return confirm('Delete this domain and all its short URLs?')">
+            <button class="danger small">Delete</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="muted">No domains match these filters.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% with d=data1.Pager, root=data1.Pager %}{% include "pager.html" %}{% endwith %}
+<h2>Add domain</h2>
+<div class="card">
+  <form class="row" method="post" action="/admin/domains">
+    <div>
+      <label>Domain, with optional port</label>
+      <input type="text" name="authority" value="" placeholder="links.example.com">
+    </div>
+    <div><button>Add domain</button></div>
+  </form>
+</div>
+{% endwith %}
+{% endblock %}

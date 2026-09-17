@@ -1,9 +1,9 @@
 from sqlmodel import SQLModel
 
 from alembic import context
-from gort import models  # noqa: F401
-from gort.config import Settings
-from gort.db import create_engine
+from goto import models  # noqa: F401
+from goto.config import Settings
+from goto.db import create_engine
 
 config = context.config
 target_metadata = SQLModel.metadata

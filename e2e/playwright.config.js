@@ -33,7 +33,9 @@ module.exports = defineConfig({
   ],
   webServer: {
     // The helper creates and drops an isolated PostgreSQL schema for this run.
-    command: `E2E_PORT=${PORT} uv run --project .. python run_server.py`,
+    command: '../scripts/run-browser-server.sh',
+    cwd: __dirname,
+    env: { ...process.env, E2E_PORT: PORT },
     url: `${BASE_URL}/rest/health`,
     reuseExistingServer: false,
     gracefulShutdown: { signal: 'SIGTERM', timeout: 15000 },

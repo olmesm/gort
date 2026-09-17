@@ -1,37 +1,37 @@
 services:
-  gort:
+  goto:
     build: .
     ports:
       - "8080:8080"
     environment:
-      GORT_DEFAULT_DOMAIN: "localhost:8080"
-      GORT_INITIAL_ADMIN_USERNAME: "admin"
+      GOTO_DEFAULT_DOMAIN: "localhost:8080"
+      GOTO_INITIAL_ADMIN_USERNAME: "admin"
       # Used only when creating the first admin account.
-      GORT_INITIAL_ADMIN_PASSWORD: "${GORT_INITIAL_ADMIN_PASSWORD:-}"
-      GORT_DB_CONNECTION: "host=db dbname=gort user=gort password=${GORT_POSTGRES_PASSWORD:?Set GORT_POSTGRES_PASSWORD}"
-      # GORT_WEBHOOKS_ENABLED: "true"
+      GOTO_INITIAL_ADMIN_PASSWORD: "${GOTO_INITIAL_ADMIN_PASSWORD:-}"
+      GOTO_DB_CONNECTION: "host=db dbname=goto user=goto password=${GOTO_POSTGRES_PASSWORD:?Set GOTO_POSTGRES_PASSWORD}"
+      # GOTO_WEBHOOKS_ENABLED: "true"
     depends_on:
       db:
         condition: service_healthy
     volumes:
-      - gort-data:/data
+      - goto-data:/data
     restart: unless-stopped
 
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: gort
-      POSTGRES_USER: gort
-      POSTGRES_PASSWORD: "${GORT_POSTGRES_PASSWORD:?Set GORT_POSTGRES_PASSWORD}"
+      POSTGRES_DB: goto
+      POSTGRES_USER: goto
+      POSTGRES_PASSWORD: "${GOTO_POSTGRES_PASSWORD:?Set GOTO_POSTGRES_PASSWORD}"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U gort"]
+      test: ["CMD-SHELL", "pg_isready -U goto"]
       interval: 5s
       timeout: 5s
       retries: 10
     volumes:
-      - gort-pgdata:/var/lib/postgresql/data
+      - goto-pgdata:/var/lib/postgresql/data
     restart: unless-stopped
 
 volumes:
-  gort-data:
-  gort-pgdata:
+  goto-data:
+  goto-pgdata:

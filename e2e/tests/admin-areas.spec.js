@@ -12,7 +12,7 @@ test.describe('admin-only areas', () => {
 
     const banner = page.locator('.alert.success');
     await expect(banner).toContainText('Copy it before leaving this page. It is shown only once.');
-    await expect(banner.locator('.mono')).toContainText(/^gort_/);
+    await expect(banner.locator('.mono')).toContainText(/^goto_/);
     const plaintext = await banner.locator('.mono').textContent();
 
     const row = page.locator('tr', { hasText: 'e2e-key' });

@@ -7,9 +7,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
-from gort import api, graphql
-from gort.config import Settings
-from gort.models import APIKey, Domain, ShortURL, Visit, WebhookDelivery
+from goto import api, graphql
+from goto.config import Settings
+from goto.models import APIKey, Domain, ShortURL, Visit, WebhookDelivery
 
 
 @pytest.fixture
@@ -61,7 +61,7 @@ def test_authentication_and_problem_envelopes(api_client):
 	api_client.headers.pop("X-Api-Key")
 	response = api_client.get("/rest/v1/short-urls")
 	assert response.status_code == 401
-	assert response.json()["type"] == "https://gort.dev/errors/missing-authentication"
+	assert response.json()["type"] == "https://goto.dev/errors/missing-authentication"
 	api_client.headers["Authorization"] = "Bearer admin"
 	assert api_client.get("/rest/v1/short-urls").status_code == 200
 	response = api_client.post("/rest/v1/short-urls", json={})
@@ -179,7 +179,11 @@ def test_domain_tag_and_key_administration(api_client):
 	assert api_client.get("/rest/v1/tags?withStats=true").json()["data"][0]["shortUrlsCount"] == 1
 	assert api_client.delete("/rest/v1/tags?tags[]=new").json()["deletedTags"] == 1
 	key = api_client.post("/rest/v1/api-keys", json={"role": "author"}).json()
-	assert "apiKey" in key
+	assert key["apiKey"].startswith("goto_")
+	assert (
+		api_client.get("/rest/v1/short-urls", headers={"X-Api-Key": key["apiKey"]}).status_code
+		== 200
+	)
 	assert all("apiKey" not in row for row in api_client.get("/rest/v1/api-keys").json()["data"])
 	assert (
 		api_client.patch(f"/rest/v1/api-keys/{key['id']}", json={"enabled": False}).status_code
@@ -309,7 +313,7 @@ def test_rest_rejects_invalid_json_field_types(api_client, payload):
 		"/rest/v1/short-urls", json={"longUrl": "https://example.com", **payload}
 	)
 	assert response.status_code == 400
-	assert response.json()["type"] == "https://gort.dev/errors/invalid-data"
+	assert response.json()["type"] == "https://goto.dev/errors/invalid-data"
 	assert set(response.json()) == {"type", "title", "detail", "status"}
 	assert api_client.get("/rest/v1/short-urls").json()["data"] == []
 

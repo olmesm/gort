@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
 
-from gort.domain import (
+from goto.domain import (
 	ShortURLSpec,
 	anonymize_ip,
 	check_active,
@@ -109,7 +109,7 @@ def test_group_authority_slug_normalization():
 
 @pytest.mark.parametrize("raw", [" 3", "3 ", "1_0", "１２", "9223372036854775808"])
 def test_paging_rejects_invalid_integer_syntax_and_overflow(raw):
-	from gort.services import integer
+	from goto.services import integer
 
 	assert integer(raw, 20) == 20
 
@@ -118,6 +118,6 @@ def test_paging_rejects_invalid_integer_syntax_and_overflow(raw):
 	"raw", ["20260101", "2026-W01-1", "2026-01-01X12:00:00", "2026-01-01T12:00Z"]
 )
 def test_filter_dates_reject_python_only_iso_formats(raw):
-	from gort.services import _filter_date
+	from goto.services import _filter_date
 
 	assert _filter_date(raw) is None

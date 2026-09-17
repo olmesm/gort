@@ -1,18 +1,18 @@
 """Populate a disposable PostgreSQL database for the design preview.
-Run Gort once to create the schema, then pass its connection string here.
+Run Goto once to create the schema, then pass its connection string here.
 Never use this against a production database.
 """
 
+import argparse
 import hashlib
 import random
-import sys
 from datetime import datetime, timedelta, timezone
 
 import psycopg
 
-if len(sys.argv) != 2:
-	raise SystemExit("Usage: uv run python design/seed.py POSTGRES_CONNECTION")
-connection = sys.argv[1]
+parser = argparse.ArgumentParser(prog="./scripts/seed-preview.sh", description=__doc__)
+parser.add_argument("connection", metavar="POSTGRES_CONNECTION")
+connection = parser.parse_args().connection
 conn = psycopg.connect(connection)
 if conn.execute("SELECT COUNT(*) FROM short_urls").fetchone()[0]:
 	raise SystemExit("Database already contains links; refusing to overwrite it.")
@@ -153,7 +153,7 @@ for day in range(30):
 			(
 				"invalid_short_url",
 				now - timedelta(days=29 - day),
-				"https://go.gort.test/archived-" + str(j),
+				"https://go.goto.test/archived-" + str(j),
 				j % 4 == 0,
 			),
 		)
@@ -173,7 +173,7 @@ for name, events in [
 ]:
 	conn.execute(
 		"INSERT INTO webhooks (name, url, secret, events, enabled, created_at) VALUES (%s, %s, %s, %s, FALSE, %s)",
-		(name, "https://receiver.example/hooks/gort", "demo-only", events, now),
+		(name, "https://receiver.example/hooks/goto", "demo-only", events, now),
 	)
 password_hash = conn.execute("SELECT password_hash FROM users LIMIT 1").fetchone()[0]
 for name, role in [("alex", "user"), ("jules", "user"), ("morgan", "admin")]:

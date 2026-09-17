@@ -12,26 +12,21 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_DB: gort_test
-          POSTGRES_USER: gort
-          POSTGRES_PASSWORD: gort-test
-        ports: [5432:5432]
+          POSTGRES_DB: goto_test
+          POSTGRES_USER: goto
+          POSTGRES_PASSWORD: goto-test
+        ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U gort -d gort_test"
+          --health-cmd "pg_isready -U goto -d goto_test"
           --health-interval 5s --health-timeout 5s --health-retries 10
     env:
-      GORT_TEST_POSTGRES_DSN: postgresql://gort:gort-test@localhost:5432/gort_test
+      GOTO_TEST_POSTGRES_DSN: postgresql://goto:goto-test@localhost:5432/goto_test
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with:
-          python-version: '3.12'
-          enable-cache: true
+      - uses: jdx/mise-action@v4
       - run: uv sync --frozen
-      - run: uv run ruff check gort tests alembic design e2e/run_server.py
-      - run: uv run ruff format --check gort tests alembic design e2e/run_server.py
-      - name: Test Python application against PostgreSQL
-        run: uv run pytest
+      - name: Check Python application against PostgreSQL
+        run: ./scripts/check.sh
       - run: uv build
   browser:
     runs-on: ubuntu-latest
@@ -39,21 +34,18 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_DB: gort_test
-          POSTGRES_USER: gort
-          POSTGRES_PASSWORD: gort-test
-        ports: [5432:5432]
+          POSTGRES_DB: goto_test
+          POSTGRES_USER: goto
+          POSTGRES_PASSWORD: goto-test
+        ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U gort -d gort_test"
+          --health-cmd "pg_isready -U goto -d goto_test"
           --health-interval 5s --health-timeout 5s --health-retries 10
     env:
-      GORT_TEST_POSTGRES_DSN: postgresql://gort:gort-test@localhost:5432/gort_test
+      GOTO_TEST_POSTGRES_DSN: postgresql://goto:goto-test@localhost:5432/goto_test
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with:
-          python-version: '3.12'
-          enable-cache: true
+      - uses: jdx/mise-action@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -65,10 +57,9 @@ jobs:
       - run: npx playwright install --with-deps chromium
         working-directory: e2e
       - name: Test browser flows against PostgreSQL
-        run: npm test
-        working-directory: e2e
+        run: ./scripts/test-browser.sh
   container:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t gort:test .
+      - run: docker build -t goto:test .

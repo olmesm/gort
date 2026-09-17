@@ -1,9 +1,9 @@
 {
-  "realm": "gort",
+  "realm": "goto",
   "enabled": true,
   "groups": [
     {
-      "name": "gort-admins"
+      "name": "goto-admins"
     },
     {
       "name": "team-a"
@@ -14,10 +14,10 @@
   ],
   "clients": [
     {
-      "clientId": "gort-dashboard",
+      "clientId": "goto-dashboard",
       "enabled": true,
       "publicClient": false,
-      "secret": "gort-secret",
+      "secret": "goto-secret",
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
       "redirectUris": [
@@ -55,7 +55,7 @@
         }
       ],
       "groups": [
-        "gort-admins",
+        "goto-admins",
         "team-a"
       ]
     },

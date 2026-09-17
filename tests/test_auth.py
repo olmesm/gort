@@ -9,9 +9,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
-from gort import auth, ui
-from gort.config import Settings
-from gort.models import APIKey, Domain, ShortURL, User
+from goto import auth, ui
+from goto.config import Settings
+from goto.models import APIKey, Domain, ShortURL, User
 
 
 @pytest.fixture
@@ -62,6 +62,7 @@ def test_login_returns_safe_location_and_rejects_wrong_password(client):
 		follow_redirects=False,
 	)
 	assert response.headers["location"] == "/admin"
+	assert response.cookies.get("goto_session")
 	assert "HttpOnly" in response.headers["set-cookie"]
 	assert client.get("/admin/users").status_code == 200
 
@@ -80,9 +81,9 @@ def test_password_change_revokes_session(client):
 
 def test_unknown_role_and_tampered_cookie_fail_closed(client):
 	sign_in(client)
-	cookie = client.cookies.get("gort_session")
+	cookie = client.cookies.get("goto_session")
 	client.cookies.clear()
-	client.cookies.set("gort_session", cookie + "a")
+	client.cookies.set("goto_session", cookie + "a")
 	assert (
 		client.get("/admin", follow_redirects=False).headers["location"].startswith("/admin/login")
 	)
@@ -189,12 +190,12 @@ def test_oidc_session_expiry_and_normalized_group_scope(client):
 		"oidc_exp": int(time.time()) - 1,
 		"g": ["/Team", "Team"],
 	}
-	client.cookies.set("gort_session", auth.sign_payload(client.app.state.session_key, payload))
+	client.cookies.set("goto_session", auth.sign_payload(client.app.state.session_key, payload))
 	assert (
 		client.get("/admin", follow_redirects=False).headers["location"].startswith("/admin/login")
 	)
 	payload["oidc_exp"] = int(time.time()) + 500
-	client.cookies.set("gort_session", auth.sign_payload(client.app.state.session_key, payload))
+	client.cookies.set("goto_session", auth.sign_payload(client.app.state.session_key, payload))
 	assert client.get("/admin/short-urls").status_code == 200
 	assert auth.normalize_groups(["/Team", "Team", " /nested/team ", ""]) == ["Team", "nested/team"]
 
@@ -231,7 +232,7 @@ def test_all_templates_compile_and_escape_user_content():
 
 def test_oidc_invalid_state_clears_cookie(client):
 	client.app.state.settings.oidc_issuer = "https://issuer.example"
-	client.app.state.settings.oidc_client_id = "gort"
+	client.app.state.settings.oidc_client_id = "goto"
 	response = client.get("/admin/oidc/callback?state=attacker&code=test")
 	assert response.status_code == 401
 	assert "Max-Age=0" in response.headers["set-cookie"]
@@ -247,7 +248,7 @@ def test_oidc_pkce_signature_nonce_and_account_provisioning(client, monkeypatch)
 
 	cfg = client.app.state.settings
 	cfg.oidc_issuer = "https://issuer.example"
-	cfg.oidc_client_id = "gort"
+	cfg.oidc_client_id = "goto"
 	private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 	pem = private.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption())
 	key = JsonWebKey.import_key(pem, {"kid": "test-key"})
@@ -278,7 +279,7 @@ def test_oidc_pkce_signature_nonce_and_account_provisioning(client, monkeypatch)
 				"exp": int(time.time()) + 300,
 				"nonce": issued["nonce"],
 				"preferred_username": "admin",
-				"groups": ["/gort-admins", "/Team"],
+				"groups": ["/goto-admins", "/Team"],
 			}
 			token = JsonWebToken(["RS256"]).encode({"alg": "RS256", "kid": "test-key"}, claims, key)
 			return httpx.Response(
@@ -296,7 +297,7 @@ def test_oidc_pkce_signature_nonce_and_account_provisioning(client, monkeypatch)
 	response = client.get("/admin/oidc/login?returnUrl=/admin/users", follow_redirects=False)
 	assert response.status_code == 302
 	params = parse_qs(urlsplit(response.headers["location"]).query)
-	transient = auth.verify_payload(client.app.state.session_key, client.cookies.get("gort_oidc"))
+	transient = auth.verify_payload(client.app.state.session_key, client.cookies.get("goto_oidc"))
 	issued.update(verifier=transient["v"], nonce=params["nonce"][0])
 	assert params["code_challenge_method"] == ["S256"]
 	assert params["code_challenge"] == [
@@ -308,9 +309,9 @@ def test_oidc_pkce_signature_nonce_and_account_provisioning(client, monkeypatch)
 	)
 	assert response.status_code == 302, response.text
 	assert response.headers["location"] == "/admin/users"
-	cookie = auth.verify_payload(client.app.state.session_key, client.cookies.get("gort_session"))
+	cookie = auth.verify_payload(client.app.state.session_key, client.cookies.get("goto_session"))
 	assert cookie["oidc_exp"] <= int(time.time()) + 300
-	assert cookie["g"] == ["gort-admins", "Team"]
+	assert cookie["g"] == ["goto-admins", "Team"]
 	assert client.get("/admin/users").status_code == 200
 	with Session(client.app.state.engine) as session:
 		user = session.exec(select(User).where(User.oidc_subject == "idp-user")).one()
@@ -327,7 +328,7 @@ def test_analytics_and_overview_aggregate_without_loading_visit_history(client, 
 	from sqlalchemy import event
 	from starlette.datastructures import QueryParams
 
-	from gort.models import Visit
+	from goto.models import Visit
 
 	engine = client.app.state.engine
 	today = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
